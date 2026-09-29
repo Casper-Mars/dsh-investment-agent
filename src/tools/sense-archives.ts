@@ -14,7 +14,7 @@
  *
  * 变更类型与 parent 校验（验收点 4）：
  *   - `keep`：不产生新版本（返回沿用 current），无 current 时报错；
- *   - `patch` / `replace`：缺 parent 报错（patch 强制；replace 建议并强制本层校验）；
+ *   - `patch`：缺 parent 报错（强制）；`replace`：parent 可选（给出则校验存在，可作首版引导）；
  *   - parent 给出但不存在时报错。
  *   上述规则 domain 已实现，tools 层兜底信号取消检查，并在返回中带 `is_current`
  *   （commit 后新版本即 current）。
@@ -75,7 +75,7 @@ export function createSenseArchiveCommitTool(ctx: ToolContext): ToolDefinition {
     name: 'sense_archive_commit',
     description:
       '归档感知脚本的一个新版本。change_type：keep（不产生新版本，沿用 current）/' +
-      'patch（补丁，必须带 parent）/ replace（整体替换，需带 parent）。写操作。',
+      'patch（补丁，必须带 parent）/ replace（整体替换，parent 可选）。写操作。',
     parameters: {
       change_type: {
         type: 'string',
@@ -85,7 +85,7 @@ export function createSenseArchiveCommitTool(ctx: ToolContext): ToolDefinition {
       },
       rationale: { type: 'string', required: true, description: '推理理由（写入 rationale.md）' },
       code: { type: 'string', required: true, description: '感知脚本本体（写入 sensor.ts）' },
-      parent_version: { type: 'string', description: 'patch/replace 时的父版本号（必填）' },
+      parent_version: { type: 'string', description: '父版本号：patch 必填；replace 可选' },
       trigger: { type: 'string', description: '触发本次调整的前因（可选）' },
     },
     output: {

@@ -1,7 +1,7 @@
 /**
  * Agent 工具层：ToolContext 工厂 —— dataRoot 统一注入点。
  *
- * 15 个工具需共享同一份数据根目录。本工厂在构造时：
+ * 16 个工具需共享同一份数据根目录。本工厂在构造时：
  *   1. 解析 dataRoot（构造注入优先，缺省回退到环境变量
  *      `DSH_FINANCE_DATA_DIR`，再回退到 `<cwd>/.dsh-finance/data`）；
  *   2. 用该 dataRoot 实例化四个 domain 类（Ledger / Predicts / Reviews /
@@ -35,7 +35,7 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
   missStreakMax: 3,
 }
 
-/** 领域类实例容器：15 个工具闭包共享。 */
+/** 领域类实例容器：16 个工具闭包共享。 */
 export interface ToolContext {
   /** 数据根目录（绝对路径）。 */
   readonly dataRoot: string
