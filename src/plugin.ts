@@ -1,11 +1,15 @@
 /**
  * dsh-finance 插件契约层 —— 金融投资专家 Agent。
  *
- * 本文件仅负责声明 Cordis 插件三要素（`name` / `apply` / `inject`），
- * 作为骨架任务（飞书任务 t100354）的交付主体：
+ * 本文件负责声明 Cordis 插件三要素（`name` / `apply` / `inject`）并在
+ * `apply(ctx)` 内装配运行时贡献：
  *   - `name`：插件唯一标识 `investment-advisor`
- *   - `inject`：依赖服务 `['tools', 'skills', 'ptcRuntime', 'fs']`
- *   - `apply(ctx)`：占位实现，保证 dsh 加载后调用不抛异常
+ *   - `inject`：依赖服务 `['tools', 'skills', 'ptcRuntime', 'fs']`（**契约固定，不变**）
+ *   - `apply(ctx)`：
+ *       1. 经 `ctx.skills.register` 注册 4 个技术面 SKILL
+ *          （trend-analysis / grid-strategy / stop-rule / sense-authorship）；
+ *       2. 经 `ctx.inject(['systemPrompt'], cb)` **动态注入** advisor.md 人设
+ *          （详见 `src/prompts/index.ts`）。
  *
  * 依赖服务说明（已在 harness 源码核实）：
  *   - `tools`      —— dsh 工具注册表（`ctx.tools`，defineTool 注册面向模型的工具）
@@ -13,11 +17,13 @@
  *   - `ptcRuntime` —— dsh 进程间/任务控制运行时（`ctx.ptcRuntime`，感知脚本执行）
  *   - `fs`         —— cordis 标准服务（`node:fs` 的文件系统访问）
  *
- * 当前阶段（骨架）：apply 仅做最小占位，不实现任何业务逻辑
- * （ledger / predicts / reviews / sense_archive 工具、prompt 人设正文、
- *   skill 正文、scheduler 等均属后续任务）。下方 `TODO` 标注即为后续扩展点。
+ * 注意：`systemPrompt` **不**加入顶层 `inject`，而是在 `apply` 内以
+ *   `ctx.inject(['systemPrompt'], cb)` 动态声明依赖 —— 保证顶层契约
+ *   `['tools','skills','ptcRuntime','fs']` 与 `cordis.patch.yml` 保持一致。
  */
 import type { Context } from '@deepseek-ai/cordis'
+import { registerAllSkills } from './skills/index.js'
+import { applyAdvisorPrompt } from './prompts/index.js'
 
 /** Cordis 函数式插件标识。 */
 export const name = 'investment-advisor'
@@ -34,11 +40,12 @@ export const inject: string[] = ['tools', 'skills', 'ptcRuntime', 'fs']
 /**
  * 安装金融投资专家 Agent 能力。
  *
- * 当前为骨架占位：仅打印加载日志，不注册任何工具 / 技能 / 资源。
- * 后续任务将在 `ctx.effect` 内逐步接入：
- *   - `ctx.tools.register(defineTool({...}))`  注册记账 / 预测 / 复盘等工具
- *   - `ctx.skills.register({...})`             注册投资 SKILL 操作指南
- *   - 经 `ctx.ptcRuntime` 安排 scheduled/sensor-runner 感知脚本
+ * 步骤：
+ *   1. 在 `ctx.effect` 内注册 4 个技术面 SKILL；注销器绑定到 effect，
+ *      插件 fiber 卸载（含 HMR 重载）时自动注销。`skills` 经顶层 `inject`
+ *      保证就绪，但此处仍以 `ctx.get('skills')` 软取，使插件在「未提供 skills
+ *      服务的最小上下文」（如装载测试）下安全降级，不中断插件装载。
+ *   2. 经 `applyAdvisorPrompt(ctx)` 动态注入 advisor.md 人设到 system-prompt。
  *
  * @param ctx 插件上下文（已注入上述四项服务）。
  */
@@ -47,7 +54,24 @@ export function apply(ctx: Context): void {
     `[dsh-finance] 插件加载：name=${name} inject=[${inject.join(', ')}]`,
   )
 
-  // TODO(后续任务)：在此注册面向模型的金融工具、SKILL 指南与感知脚本调度。
-  // 当前占位：不做任何破坏性操作，保证 dsh 加载后 apply 调用不抛异常。
-  void ctx
+  // ---- 技术面 SKILL（同步注册，注销器绑定 ctx.effect） ----
+  ctx.effect(() => {
+    let disposeSkills: (() => void) | undefined
+    const skills = typeof ctx.get === 'function' ? ctx.get('skills') : undefined
+    if (!skills) {
+      console.warn('[dsh-finance] skills 服务不可用，跳过 SKILL 注册')
+    } else {
+      try {
+        disposeSkills = registerAllSkills(ctx)
+      } catch (err: unknown) {
+        console.error('[dsh-finance] SKILL 注册失败：', err)
+      }
+    }
+    return () => {
+      disposeSkills?.()
+    }
+  }, 'dsh-finance skills')
+
+  // ---- advisor.md 人设（动态 inject systemPrompt，不改顶层 inject） ----
+  applyAdvisorPrompt(ctx)
 }
