@@ -10,9 +10,26 @@
  *
  * 实现：自 `src/` 递归收集全部 `.md`，按原相对路径复制到 `dist-server/`。
  *
+ * 并发安全：本脚本可能被多个测试文件（vitest 默认文件级并行）或构建流程
+ * 并发调用，且写入同一 `dist-server/**`。`fs.cpSync` 内部「先 stat 再拷贝」
+ * 在并发下会对同一目标文件抛 `EEXIST`。故改为「读源内容 → 写唯一临时文件 →
+ * 原子 rename 覆盖目标」的幂等写入：rename 在同一文件系统上是原子操作，
+ * 后写者覆盖先写者，且不会出现半写/EEXIST。只触碰本脚本负责的 `.md` 资源，
+ * 不删除 tsc 产出的 `.js` / `.d.ts` 等编译产物。
+ *
  * 用法：`node scripts/copy-assets.mjs`（由 `package.json` 的 `build` / `build:server` 调用）。
  */
-import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -39,12 +56,33 @@ function collectAssets(dir) {
   return results
 }
 
+/**
+ * 幂等写入单文件：读源 → 写唯一临时文件 → 原子 rename 覆盖目标。
+ * 并发调用同一目标时，rename 原子生效，后写者覆盖先写者，不会 EEXIST。
+ */
+function copyAssetIdempotent(from, to) {
+  mkdirSync(path.dirname(to), { recursive: true })
+  const content = readFileSync(from)
+  const tmp = `${to}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`
+  try {
+    writeFileSync(tmp, content)
+    renameSync(tmp, to)
+  } catch (err) {
+    // 失败时清理临时文件，避免残留。
+    try {
+      rmSync(tmp, { force: true })
+    } catch {
+      /* ignore cleanup failure */
+    }
+    throw err
+  }
+}
+
 const assets = collectAssets(srcDir)
 for (const rel of assets) {
   const from = path.join(srcDir, rel)
   const to = path.join(outDir, rel)
-  mkdirSync(path.dirname(to), { recursive: true })
-  cpSync(from, to)
+  copyAssetIdempotent(from, to)
   console.log(`[dsh-finance-assets] ${path.relative(root, from)} -> ${path.relative(root, to)}`)
 }
 
