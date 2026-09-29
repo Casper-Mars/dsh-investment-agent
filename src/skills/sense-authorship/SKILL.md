@@ -34,8 +34,10 @@ whenToUse: "需生成、修改或整体替换感知脚本时。"
 | `symbols.list()` | 返回当前跟踪的标的清单（标的无关遍历的入口） |
 | `quote.realtime(symbol)` | 该标的实时行情（最新价 / 涨跌幅 / 量等） |
 | `quote.intraday(symbol)` | 该标的分时序列（分时形态、均价线） |
-| `quote.history(symbol, days)` | 该标的近 `days` 日历史 K 线（用于均线 / 区间 / 量价） |
+| `quote.history({ symbol, days })` | 该标的近 `days` 日历史 K 线（用于均线 / 区间 / 量价） |
 | `ledger.get(symbol)` | 该标的的台账（持仓、成本、历史操作） |
+
+> **binding 成员均为单参数函数**（签名等价 `(args) => Promise<...>`）：运行时**只取第 1 个实参**，多实参写法（如 `quote.history(symbol, days)`）中后续实参会被静默丢弃。需要传多个值时，请打包为**单个对象**（或数组），例如 `quote.history({ symbol, days })`。
 
 脚本体内遍历标的、采集、判断，最后返回：
 
@@ -62,7 +64,7 @@ async function sense() {
     const config = getSymbolConfig(s) // 该标的策略配置（维度 / 阈值，均从数据读取，不写死）
     const [rt, hist, book] = await Promise.all([
       quote.realtime(s),
-      quote.history(s, config.historyDays),
+      quote.history({ symbol: s, days: config.historyDays }),
       ledger.get(s),
     ])
     // 依据该标的 config 中的阈值判断是否唤醒（阈值不在此写死）
