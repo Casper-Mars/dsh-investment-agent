@@ -30,6 +30,7 @@ import type {
   MetricSnapshotView,
 } from './types.js'
 import { assertNotAborted, throwToolError } from './error.js'
+import { withDisclaimer } from './constants.js'
 import {
   reviewCheckResultSchema,
   reviewGetResultSchema,
@@ -72,7 +73,7 @@ export function createReviewCheckTool(ctx: ToolContext): ToolDefinition {
     },
     output: {
       schema: reviewCheckResultSchema,
-      render: (_args, value) => [{ type: 'text', text: value.notes }],
+      render: (_args, value) => [{ type: 'text', text: withDisclaimer(value.notes) }],
     },
     async execute(args) {
       const res = ctx.reviews.review_check(args.symbol, args.date, {
@@ -109,7 +110,7 @@ export function createReviewReportTool(ctx: ToolContext): ToolDefinition {
     output: {
       schema: reviewReportResultSchema,
       render: (_args, value) => [
-        { type: 'text', text: `✅ 已落复盘（id=${value.report_id}）` },
+        { type: 'text', text: withDisclaimer(`✅ 已落复盘（id=${value.report_id}）`) },
       ],
     },
     async execute(args, exec) {
@@ -181,9 +182,10 @@ export function createReviewMetricsTool(ctx: ToolContext): ToolDefinition {
       render: (_args, value) => [
         {
           type: 'text',
-          text:
+          text: withDisclaimer(
             `方向命中率：${value.dir_hit_rate}  区间命中率：${value.range_hit_rate}  ` +
-            `累计收益率：${value.cum_return}`,
+              `累计收益率：${value.cum_return}`,
+          ),
         },
       ],
     },
@@ -214,11 +216,12 @@ export function createReviewRetrospectTool(ctx: ToolContext): ToolDefinition {
       render: (_args, value) => [
         {
           type: 'text',
-          text:
+          text: withDisclaimer(
             `${value.root_cause}` +
-            (value.improvements.length > 0
-              ? `\n改进：${value.improvements.join('、')}`
-              : ''),
+              (value.improvements.length > 0
+                ? `\n改进：${value.improvements.join('、')}`
+                : ''),
+          ),
         },
       ],
     },

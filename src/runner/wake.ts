@@ -27,6 +27,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import type { PtcJsonValue, SensorRunReason, SensorWakePayload, SensorWaker } from './types.js'
+import { RISK_DISCLAIMER } from '../tools/constants.js'
 
 /** 投递消息的插件源标识。 */
 export const PLUGIN_SOURCE_NAME = 'dsh-finance'
@@ -100,6 +101,7 @@ export function buildWakeText(payload: SensorWakePayload): string {
   if (payload.version) {
     lines.push('', `（感知脚本版本：${payload.version}）`)
   }
+  lines.push('', `> ${RISK_DISCLAIMER}`)
   return lines.join('\n')
 }
 

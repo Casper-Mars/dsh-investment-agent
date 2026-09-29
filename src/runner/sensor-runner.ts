@@ -41,6 +41,12 @@ export const DEFAULT_SENSOR_TIMEOUT_MS = 60_000
 /** 默认唤醒冷却（ms）：同一标的在此窗口内不重复唤醒（NFR 幂等）。 */
 export const DEFAULT_WAKE_COOLDOWN_MS = 5 * 60_000
 
+/** 默认单次批处理标的数量上界（超出本轮留待后续轮次）。 */
+export const DEFAULT_BATCH_LIMIT = 20
+
+/** 默认单次唤醒文本预算（字符数）；超限截断 metrics/summary 避免 token 失控。 */
+export const DEFAULT_WAKE_TEXT_BUDGET = 2000
+
 /** `sensor-runner` 依赖。 */
 export interface SensorRunnerDeps {
   /** 感知版本注册表（current / read）。 */
@@ -57,6 +63,10 @@ export interface SensorRunnerDeps {
   timeoutMs?: number | null
   /** 唤醒冷却（ms）；默认 {@link DEFAULT_WAKE_COOLDOWN_MS}；`0` 关闭。 */
   wakeCooldownMs?: number
+  /** 单次批处理标的数量上界；默认 {@link DEFAULT_BATCH_LIMIT}；`0` 关闭。 */
+  batchLimit?: number
+  /** 单次唤醒文本预算（字符）；默认 {@link DEFAULT_WAKE_TEXT_BUDGET}。 */
+  wakeTextBudget?: number
   /** 日志（默认 `console.log`）。 */
   logger?: (message: string) => void
   /** 时钟（默认 `Date.now`）。 */
@@ -75,6 +85,15 @@ export interface SensorRunner {
   runPrep(): Promise<SensorRunOutcome>
   /** 注入 / 替换唤醒通道（`agents` 服务就绪后调用；`undefined` 表示降级为跳过）。 */
   setWaker(waker: SensorWaker | undefined): void
+}
+
+/**
+ * 截断文本到预算内（超限则保留前 `max-1` 字符并追加省略号）。
+ * 与 wake.ts 的 `boundSummary` 同源；此处独立实现避免 runner↔wake 循环依赖。
+ */
+export function boundText(text: string, max: number): string {
+  if (max <= 0) return ''
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`
 }
 
 /** 解析脚本返回值（非法时返回 null）。 */
@@ -101,6 +120,8 @@ export function createSensorRunner(deps: SensorRunnerDeps): SensorRunner {
   const timeoutMs =
     deps.timeoutMs === undefined ? DEFAULT_SENSOR_TIMEOUT_MS : deps.timeoutMs
   const cooldownMs = deps.wakeCooldownMs ?? DEFAULT_WAKE_COOLDOWN_MS
+  const batchLimit = deps.batchLimit ?? DEFAULT_BATCH_LIMIT
+  const wakeTextBudget = deps.wakeTextBudget ?? DEFAULT_WAKE_TEXT_BUDGET
   let waker = deps.waker
 
   /** 各唤醒键（reason:symbol）的最近一次成功投递时刻。 */
@@ -137,6 +158,51 @@ export function createSensorRunner(deps: SensorRunnerDeps): SensorRunner {
     }
   }
 
+  /**
+   * 应用单次批处理上界：超限则仅取前 `batchLimit` 个，其余留待后续轮次。
+   * 返回 `{ symbols, truncated }`（truncated 表示是否发生截断）。
+   */
+  const applyBatchLimit = (
+    symbols: string[],
+  ): { symbols: string[]; truncated: boolean } => {
+    if (batchLimit > 0 && symbols.length > batchLimit) {
+      return { symbols: symbols.slice(0, batchLimit), truncated: true }
+    }
+    return { symbols, truncated: false }
+  }
+
+  /**
+   * 截断唤醒载荷到单次文本预算内：优先缩短 summary，再裁 metrics JSON。
+   * 返回裁剪后的载荷（不改动入参；据此判断是否发生截断）。
+   */
+  const boundPayload = (
+    payload: SensorWakePayload,
+  ): { payload: SensorWakePayload; truncated: boolean } => {
+    if (wakeTextBudget <= 0) return { payload, truncated: false }
+    // 先预算 summary 与 metrics 的 JSON 总长。
+    const metricsJson = payload.metrics === undefined ? '' : JSON.stringify(payload.metrics)
+    const total = payload.summary.length + (metricsJson.length > 0 ? metricsJson.length + 1 : 0)
+    if (total <= wakeTextBudget) return { payload, truncated: false }
+
+    let summary = payload.summary
+    // summary 至少保留预算的 1/4，其余让渡给 metrics；若超预算则先裁 summary。
+    const summaryBudget = Math.max(0, Math.floor(wakeTextBudget / 2))
+    if (summary.length > summaryBudget) {
+      summary = boundText(summary, summaryBudget)
+    }
+    // metrics 占剩余预算。
+    let metrics = payload.metrics
+    const remaining = wakeTextBudget - summary.length
+    if (metrics !== undefined && metricsJson.length > remaining) {
+      const trimmed = boundText(metricsJson, Math.max(1, remaining - 1))
+      metrics = JSON.parse(trimmed)
+    }
+    return {
+      payload: { ...payload, summary, ...(metrics === undefined ? {} : { metrics }) },
+      truncated: true,
+    }
+  }
+
   /** 复盘 / 盘前固定唤醒。 */
   const runNotice = async (
     reason: 'review' | 'prep',
@@ -148,18 +214,27 @@ export function createSensorRunner(deps: SensorRunnerDeps): SensorRunner {
     } catch {
       version = undefined
     }
-    const symbols = symbolCodes()
+    const allSymbols = symbolCodes()
+    const bounded = applyBatchLimit(allSymbols)
+    const symbols = bounded.symbols
     const key = `${reason}:*`
     if (inCooldown(key)) {
       return { kind: 'skipped', reason, detail: '唤醒冷却中', symbol: '*', version }
     }
-    const payload: SensorWakePayload = {
+    if (bounded.truncated) {
+      log(
+        `[dsh-finance/runner] 批处理标的超上界（${batchLimit}），本轮仅处理前 ${symbols.length} 个，其余 ${allSymbols.length - symbols.length} 个留待后续轮次`,
+      )
+    }
+    let payload: SensorWakePayload = {
       reason,
       symbol: '*',
       summary: buildSummary(symbols),
-      metrics: { symbols },
+      metrics: { symbols, ...(bounded.truncated ? { truncated: true } : {}) },
       ...(version === undefined ? {} : { version }),
     }
+    const bound = boundPayload(payload)
+    payload = bound.payload
     const delivered = deliver(payload)
     if (delivered <= 0) {
       return { kind: 'skipped', reason, detail: '无可用 agent，跳过唤醒', symbol: '*', version }
@@ -240,13 +315,15 @@ export function createSensorRunner(deps: SensorRunnerDeps): SensorRunner {
       return { kind: 'skipped', reason, detail: '唤醒冷却中', symbol, version }
     }
 
-    const payload: SensorWakePayload = {
+    let payload: SensorWakePayload = {
       reason,
       symbol,
       summary,
       ...(parsed.metrics === undefined ? {} : { metrics: parsed.metrics }),
       version,
     }
+    const bound = boundPayload(payload)
+    payload = bound.payload
     const delivered = deliver(payload)
     if (delivered <= 0) {
       return { kind: 'skipped', reason, detail: '无可用 agent，跳过唤醒', symbol, version }

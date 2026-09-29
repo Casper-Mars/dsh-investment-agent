@@ -22,6 +22,7 @@ import type { AssetType, PositionSnapshot, Side, SymbolSnapshot } from '../domai
 import type { ToolContext } from './context.js'
 import type { LedgerPosition, LedgerSymbol } from './types.js'
 import { assertNotAborted, throwIfFailed, throwToolError } from './error.js'
+import { withDisclaimer } from './constants.js'
 import {
   ledgerInitResultSchema,
   ledgerListResultSchema,
@@ -178,9 +179,10 @@ export function createLedgerTradeTool(ctx: ToolContext): ToolDefinition {
       render: (_args, value) => [
         {
           type: 'text',
-          text:
+          text: withDisclaimer(
             `✅ 成交（id=${value.trade_id}）\n` +
-            `新持仓：${value.new_qty}  平均成本：${value.avg_cost}`,
+              `新持仓：${value.new_qty}  平均成本：${value.avg_cost}`,
+          ),
         },
       ],
     },

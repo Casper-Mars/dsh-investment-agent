@@ -49,8 +49,11 @@ export {
 export {
   createSensorRunner,
   parseSensorResult,
+  boundText,
   DEFAULT_SENSOR_TIMEOUT_MS,
   DEFAULT_WAKE_COOLDOWN_MS,
+  DEFAULT_BATCH_LIMIT,
+  DEFAULT_WAKE_TEXT_BUDGET,
   type SensorRunner,
   type SensorRunnerDeps,
 } from './sensor-runner.js'
@@ -79,6 +82,10 @@ export interface RunnerOptions {
   timeoutMs?: number | null
   /** 唤醒冷却（ms）；默认 {@link DEFAULT_WAKE_COOLDOWN_MS}。 */
   wakeCooldownMs?: number
+  /** 单次批处理标的数量上界；默认 {@link DEFAULT_BATCH_LIMIT}。 */
+  batchLimit?: number
+  /** 单次唤醒文本预算（字符）；默认 {@link DEFAULT_WAKE_TEXT_BUDGET}。 */
+  wakeTextBudget?: number
   /** 是否启用盘前准备（9:25）；默认启用。 */
   enablePrep?: boolean
   /** 交易日判定覆盖（测试注入；默认实时 HTTP 节假日源 + 周末降级）。 */
@@ -120,6 +127,8 @@ export function applyRunner(ctx: Context, options: RunnerOptions = {}): void {
     dataRoot: toolCtx.dataRoot,
     timeoutMs: options.timeoutMs,
     wakeCooldownMs: options.wakeCooldownMs,
+    batchLimit: options.batchLimit,
+    wakeTextBudget: options.wakeTextBudget,
     logger: log,
   }
   const runner = createSensorRunner(runnerDeps)

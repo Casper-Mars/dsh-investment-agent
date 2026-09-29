@@ -99,6 +99,23 @@ export interface MetricRecordInput {
   history?: MetricSnapshot[]
 }
 
+/** `review_metrics.history` 保留的最近交易日数（§ task 验收「最近 30 个交易日」）。 */
+export const REVIEW_METRICS_HISTORY_LIMIT = 30
+
+/**
+ * 截取最近的若干条逐日统计（按日期降序取前 `limit` 条，再升序返回）。
+ * 日期为 `YYYY-MM-DD` 字符串，可直接字典序比较。输入可能无序，故先排序。
+ */
+export function takeRecentHistory<T extends { date: string }>(
+  history: readonly T[],
+  limit: number = REVIEW_METRICS_HISTORY_LIMIT,
+): T[] {
+  return [...history]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, limit)
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
 /** 生成复盘 id。 */
 function newReviewId(): string {
   return `rv_${randomSuffix()}`
@@ -254,7 +271,7 @@ export class Reviews {
         dirHitRate: cached.dirHitRate,
         rangeHitRate: cached.rangeHitRate,
         cumReturn: cached.cumReturn,
-        history: cached.history ?? [],
+        history: takeRecentHistory(cached.history ?? []),
       }
     }
 
@@ -262,27 +279,20 @@ export class Reviews {
     const dirHitRate = rate(recs.map((r) => r.hitDir))
     const rangeHitRate = rate(recs.map((r) => r.hitRange))
 
-    const snapshot: MetricSnapshot = {
+    const fullHistory: MetricSnapshot[] = recs.map((r) => ({
       symbol,
-      date: recs.length > 0 ? recs[recs.length - 1].date : '',
-      dirHitRate,
-      rangeHitRate,
+      date: r.date,
+      dirHitRate: r.hitDir ? 1 : 0,
+      rangeHitRate: r.hitRange ? 1 : 0,
       cumReturn: 0,
-      history: recs.map((r) => ({
-        symbol,
-        date: r.date,
-        dirHitRate: r.hitDir ? 1 : 0,
-        rangeHitRate: r.hitRange ? 1 : 0,
-        cumReturn: 0,
-        history: [],
-      })),
-    }
+      history: [],
+    }))
 
     return {
       dirHitRate,
       rangeHitRate,
-      cumReturn: snapshot.cumReturn,
-      history: snapshot.history,
+      cumReturn: 0,
+      history: takeRecentHistory(fullHistory),
     }
   }
 
@@ -297,7 +307,7 @@ export class Reviews {
       dirHitRate: m.dirHitRate,
       rangeHitRate: m.rangeHitRate,
       cumReturn: m.cumReturn,
-      history: m.history ?? [],
+      history: takeRecentHistory(m.history ?? []),
     }
     this.saveMetrics(symbol, snapshot)
   }
