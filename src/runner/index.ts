@@ -62,7 +62,7 @@ export {
   nextPulseInstant,
   nextDailyInstant,
   SHANGHAI_TIME_ZONE,
-  PULSE_STEP_MINUTES,
+  PULSE_STEP_SECONDS,
   PULSE_WINDOWS,
   REVIEW_MINUTE,
   PREP_MINUTE,

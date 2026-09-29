@@ -46,7 +46,7 @@ import {
   nextDailyInstant,
   createScheduler,
   SHANGHAI_TIME_ZONE,
-  PULSE_STEP_MINUTES,
+  PULSE_STEP_SECONDS,
   PULSE_WINDOWS,
   REVIEW_MINUTE,
   PREP_MINUTE,
@@ -189,17 +189,17 @@ describe('[AC5·1] 时间窗边界（09:29/09:30/11:30/11:31/12:59/13:00/15:00/1
     })
   }
 
-  it('PULSE_WINDOWS 恰为 [570,690] 与 [780,900]，步长 5 分钟，时区锁定 Asia/Shanghai', () => {
+  it('PULSE_WINDOWS 恰为 [570,690] 与 [780,900]，步长 30 秒，时区锁定 Asia/Shanghai', () => {
     expect(PULSE_WINDOWS).toEqual([
       [570, 690],
       [780, 900],
     ])
-    expect(PULSE_STEP_MINUTES).toBe(5)
+    expect(PULSE_STEP_SECONDS).toBe(30)
     expect(SHANGHAI_TIME_ZONE).toBe('Asia/Shanghai')
     // 窗口端点即 09:30-11:30 / 13:00-15:00
     expect(PULSE_WINDOWS[0]).toEqual([9 * 60 + 30, 11 * 60 + 30])
     expect(PULSE_WINDOWS[1]).toEqual([13 * 60, 15 * 60])
-    expect(REVIEW_MINUTE).toBe(15 * 60 + 5)
+    expect(REVIEW_MINUTE).toBe(18 * 60 + 30)
     expect(PREP_MINUTE).toBe(9 * 60 + 25)
   })
 
@@ -210,16 +210,32 @@ describe('[AC5·1] 时间窗边界（09:29/09:30/11:30/11:31/12:59/13:00/15:00/1
     expect(p.minuteOfDay).toBe(9 * 60 + 29)
   })
 
-  it('nextPulseInstant 严格未来 + 5 分钟对齐（窗口内）', () => {
-    // 09:29:00 → 09:30
-    expect(shanghaiMinuteOfDay('2026-09-29T01:29:00Z' )).toBe(569)
-    expect(shanghaiParts(nextPulseInstant(utc('2026-09-29T01:29:00Z'))).minuteOfDay).toBe(9 * 60 + 30)
-    // 09:31 → 09:35
-    expect(shanghaiParts(nextPulseInstant(utc('2026-09-29T01:31:00Z'))).minuteOfDay).toBe(9 * 60 + 35)
-    // 09:30 整 → 09:35（不含自身）
-    expect(shanghaiParts(nextPulseInstant(utc('2026-09-29T01:30:00Z'))).minuteOfDay).toBe(9 * 60 + 35)
-    // 13:00 → 13:05
-    expect(shanghaiParts(nextPulseInstant(utc('2026-09-29T05:00:00Z'))).minuteOfDay).toBe(13 * 60 + 5)
+  it('nextPulseInstant 严格未来 + 30 秒对齐（窗口内）', () => {
+    // 09:29:00（窗口外）→ 09:30:00
+    expect(shanghaiMinuteOfDay('2026-09-29T01:29:00Z')).toBe(569)
+    let p = shanghaiParts(nextPulseInstant(utc('2026-09-29T01:29:00Z')))
+    expect(p.minuteOfDay).toBe(9 * 60 + 30)
+    expect(p.second).toBe(0)
+    // 09:30:00 整 → 09:30:30（不含自身）
+    p = shanghaiParts(nextPulseInstant(utc('2026-09-29T01:30:00Z')))
+    expect(p.minuteOfDay).toBe(9 * 60 + 30)
+    expect(p.second).toBe(30)
+    // 09:30:30.000 整 → 09:31:00
+    p = shanghaiParts(nextPulseInstant(utc('2026-09-29T01:30:30Z')))
+    expect(p.minuteOfDay).toBe(9 * 60 + 31)
+    expect(p.second).toBe(0)
+    // 09:31:07 → 09:31:30
+    p = shanghaiParts(nextPulseInstant(utc('2026-09-29T01:31:07Z')))
+    expect(p.minuteOfDay).toBe(9 * 60 + 31)
+    expect(p.second).toBe(30)
+    // 11:30:00 整 → 13:00:00（11:30:30 越界）
+    p = shanghaiParts(nextPulseInstant(utc('2026-09-29T03:30:00Z')))
+    expect(p.minuteOfDay).toBe(13 * 60)
+    expect(p.second).toBe(0)
+    // 13:00:00 → 13:00:30
+    p = shanghaiParts(nextPulseInstant(utc('2026-09-29T05:00:00Z')))
+    expect(p.minuteOfDay).toBe(13 * 60)
+    expect(p.second).toBe(30)
   })
 
   it('nextPulseInstant 跨午休顺延：11:30 → 13:00', () => {
@@ -245,7 +261,7 @@ describe('[AC5·1] 时间窗边界（09:29/09:30/11:30/11:31/12:59/13:00/15:00/1
 
   it('nextDailyInstant：当日未到即当日，已过即次日', () => {
     expect(shanghaiParts(nextDailyInstant(utc('2026-09-29T01:00:00Z'), REVIEW_MINUTE)).minuteOfDay).toBe(REVIEW_MINUTE)
-    const past = nextDailyInstant(utc('2026-09-29T08:00:00Z'), REVIEW_MINUTE) // 16:00
+    const past = nextDailyInstant(utc('2026-09-29T12:00:00Z'), REVIEW_MINUTE) // 20:00（已过 18:30）
     expect(shanghaiParts(past).day).toBe(30)
     expect(shanghaiParts(past).minuteOfDay).toBe(REVIEW_MINUTE)
     expect(shanghaiParts(nextDailyInstant(utc('2026-09-29T01:00:00Z'), PREP_MINUTE)).minuteOfDay).toBe(PREP_MINUTE)
@@ -282,14 +298,16 @@ describe('[AC5·2] isTradingDay 挡板', () => {
     const onPulse = vi.fn()
     const sched = createScheduler({ onPulse, onReview: vi.fn(), isTradingDay: () => true, logger: () => {} })
     sched.start()
-    await vi.advanceTimersByTimeAsync(4 * 60_000) // → 09:35
+    await vi.advanceTimersByTimeAsync(30_000) // → 09:31:30
     expect(onPulse).toHaveBeenCalledTimes(1)
-    expect(shanghaiParts(onPulse.mock.calls[0][0] as Date).minuteOfDay).toBe(9 * 60 + 35)
+    const p = shanghaiParts(onPulse.mock.calls[0][0] as Date)
+    expect(p.minuteOfDay).toBe(9 * 60 + 31)
+    expect(p.second).toBe(30)
     sched.stop()
   })
 
-  it('盘后复盘 / 盘前准备同样受交易日挡板约束（review 15:05）', async () => {
-    vi.setSystemTime(utc('2026-09-29T06:55:00Z')) // 14:55
+  it('盘后复盘 / 盘前准备同样受交易日挡板约束（review 18:30）', async () => {
+    vi.setSystemTime(utc('2026-09-29T10:20:00Z')) // 18:20
     const onReview = vi.fn()
     const sched = createScheduler({
       onPulse: vi.fn(),
@@ -298,7 +316,7 @@ describe('[AC5·2] isTradingDay 挡板', () => {
       logger: () => {},
     })
     sched.start()
-    await vi.advanceTimersByTimeAsync(10 * 60_000) // → 15:05
+    await vi.advanceTimersByTimeAsync(10 * 60_000) // → 18:30
     expect(onReview).toHaveBeenCalledTimes(0)
     sched.stop()
   })
@@ -400,19 +418,22 @@ describe('[AC5·3] 调度层：午休/收盘后不触发，进入窗口才触发
     sched.stop()
   })
 
-  it('盘中连续脉冲：9:31 起每 5 分钟触发', async () => {
-    vi.setSystemTime(utc('2026-09-29T01:31:00Z')) // 09:31
+  it('盘中连续脉冲：9:30:00 起每 30 秒触发', async () => {
+    vi.setSystemTime(utc('2026-09-29T01:30:00Z')) // 09:30:00
     const onPulse = vi.fn()
     const sched = createScheduler({ onPulse, onReview: vi.fn(), isTradingDay: () => true, logger: () => {} })
     sched.start()
-    await vi.advanceTimersByTimeAsync(30 * 60_000) // → 10:01，覆盖 09:35/40/45/50/55/10:00
-    expect(onPulse).toHaveBeenCalledTimes(6)
-    const minutes = onPulse.mock.calls.map((c) => shanghaiParts(c[0] as Date).minuteOfDay)
-    expect(minutes).toEqual([575, 580, 585, 590, 595, 600])
+    await vi.advanceTimersByTimeAsync(90_000) // → 09:31:30，覆盖 09:30:30 / 09:31:00 / 09:31:30
+    expect(onPulse).toHaveBeenCalledTimes(3)
+    const stamps = onPulse.mock.calls.map((c) => {
+      const p = shanghaiParts(c[0] as Date)
+      return p.minuteOfDay * 60 + p.second
+    })
+    expect(stamps).toEqual([9 * 3600 + 30 * 60 + 30, 9 * 3600 + 31 * 60, 9 * 3600 + 31 * 60 + 30])
     sched.stop()
   })
 
-  it('复盘 15:05 / 盘前 9:25（可选）在窗口外按时刻触发', async () => {
+  it('复盘 / 盘前 9:25（可选）在窗口外按时刻触发', async () => {
     vi.setSystemTime(utc('2026-09-29T01:20:00Z')) // 09:20
     const onPrep = vi.fn()
     const onReview = vi.fn()

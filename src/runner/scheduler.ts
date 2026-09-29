@@ -6,22 +6,22 @@
  *   - **时区锁定 `Asia/Shanghai`**：经 `Intl.DateTimeFormat('en-CA', { timeZone })`
  *     读取当地年月日时分，绝不使用本机时区；
  *   - **交易日挡板**：经 `isTradingDay` 跳过非交易日；
- *   - **盘中脉冲**：每 5 分钟，**仅** 9:30–11:30 / 13:00–15:00 窗口内触发；
- *   - **盘后复盘**：15:05；**盘前准备**（可选）：9:25；
+ *   - **盘中脉冲**：每 30 秒，**仅** 9:30–11:30 / 13:00–15:00 窗口内触发；
+ *   - **盘后复盘**：18:30；**盘前准备**（可选）：9:25；
  *   - `start()` 启动、`stop()` 清空所有 timer（进程退出无泄漏）；
  *   - 任何回调异常都不得中断链条。
  *
  * 实现要点：单调「单定时器链」。每次 arm 计算「下一个候选时刻」
  * （脉冲 / 复盘 / 盘前三者取最早），只保留一个在飞的 timer；到点后
  * 记录结局 → 重新 arm。Asia/Shanghai 无夏令时（恒定 UTC+8），故「墙钟时刻差」
- * 与「真实毫秒差」一致，可直接按分钟差换算延迟。
+ * 与「真实毫秒差」一致，可直接按秒差换算延迟。
  */
 
 /** 时区锁（不可用本机时区）。 */
 export const SHANGHAI_TIME_ZONE = 'Asia/Shanghai'
 
-/** 盘中脉冲步长（分钟）。 */
-export const PULSE_STEP_MINUTES = 5
+/** 盘中脉冲步长（秒）。 */
+export const PULSE_STEP_SECONDS = 30
 
 /**
  * 盘中脉冲窗口（以「当日分钟数」表示，含端点）：
@@ -32,8 +32,8 @@ export const PULSE_WINDOWS: ReadonlyArray<readonly [number, number]> = [
   [13 * 60, 15 * 60],
 ]
 
-/** 盘后复盘时刻：15:05。 */
-export const REVIEW_MINUTE = 15 * 60 + 5
+/** 盘后复盘时刻：18:30。 */
+export const REVIEW_MINUTE = 18 * 60 + 30
 
 /** 盘前准备时刻：9:25。 */
 export const PREP_MINUTE = 9 * 60 + 25
@@ -98,22 +98,39 @@ function fractionalMinute(parts: ShanghaiParts): number {
   return parts.minuteOfDay + parts.second / 60
 }
 
+/** 一日秒数。 */
+const DAY_SECONDS = 24 * 60 * 60
+
+/** 墙钟「当日秒数」的浮点表示（含毫秒）。 */
+function fractionalSecond(now: Date, parts: ShanghaiParts): number {
+  return parts.minuteOfDay * 60 + parts.second + now.getUTCMilliseconds() / 1000
+}
+
 /**
- * 下一个盘中脉冲时刻（严格在未来）：下一个 5 分钟对齐、且落在脉冲窗口内的时刻；
- * 若当日窗口已过，则顺延到次日 9:30。
+ * 某「当日秒数」是否落在盘中脉冲窗口内（含端点，秒粒度）：
+ * 由 {@link PULSE_WINDOWS} 的分钟区间换算而来 —— 11:30:00 / 13:00:00 / 15:00:00 有效，
+ * 而 11:30:30 / 15:00:30 越界。
+ */
+function isPulseSecond(secondOfDay: number): boolean {
+  const s = ((secondOfDay % DAY_SECONDS) + DAY_SECONDS) % DAY_SECONDS
+  return PULSE_WINDOWS.some(([start, end]) => s >= start * 60 && s <= end * 60)
+}
+
+/**
+ * 下一个盘中脉冲时刻（严格在未来）：下一个 30 秒对齐、且落在脉冲窗口内的时刻；
+ * 窗口内自 9:30:00 起每 30 秒一个脉冲，含端点；若当日窗口已过，则顺延到次日 9:30。
  */
 export function nextPulseInstant(now: Date): Date {
   const parts = shanghaiParts(now)
-  const cur = fractionalMinute(parts)
-  const step = PULSE_STEP_MINUTES
-  const dayMinutes = 24 * 60
-  // 严格未来的 5 分钟对齐分钟（可能 > 当日 1440，用 mod 回落到日内窗口判定）。
-  let candidate = Math.ceil((cur + 1e-9) / step) * step
-  const limit = candidate + dayMinutes + step
-  while (candidate < limit && !isPulseMinute(candidate % dayMinutes)) {
+  const cur = fractionalSecond(now, parts)
+  const step = PULSE_STEP_SECONDS
+  // 严格未来的 30 秒对齐秒（可能 > 当日 86400，用 mod 回落到日内窗口判定）。
+  let candidate = Math.floor(cur / step) * step + step
+  const limit = candidate + DAY_SECONDS + step
+  while (candidate < limit && !isPulseSecond(candidate)) {
     candidate += step
   }
-  const delayMs = Math.max(0, Math.round((candidate - cur) * 60_000))
+  const delayMs = Math.max(0, Math.round((candidate - cur) * 1000))
   return new Date(now.getTime() + delayMs)
 }
 
@@ -135,7 +152,7 @@ type TimerHandle = ReturnType<typeof setTimeout>
 export interface SchedulerOptions {
   /** 盘中脉冲回调（到点且为交易日时调用）。 */
   onPulse: (at: Date) => void | Promise<unknown>
-  /** 盘后复盘回调（15:05，交易日）。 */
+  /** 盘后复盘回调（18:30，交易日）。 */
   onReview: (at: Date) => void | Promise<unknown>
   /** 盘前准备回调（9:25，可选）。 */
   onPrep?: (at: Date) => void | Promise<unknown>
@@ -254,7 +271,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
       if (running) return
       running = true
       log(
-        `[dsh-finance/scheduler] 启动（${SHANGHAI_TIME_ZONE}）：脉冲每 ${PULSE_STEP_MINUTES} 分钟 @ 9:30-11:30/13:00-15:00，复盘 15:05${options.onPrep ? '，盘前 9:25' : ''}`,
+        `[dsh-finance/scheduler] 启动（${SHANGHAI_TIME_ZONE}）：脉冲每 ${PULSE_STEP_SECONDS} 秒 @ 9:30-11:30/13:00-15:00，复盘 18:30${options.onPrep ? '，盘前 9:25' : ''}`,
       )
       arm()
     },

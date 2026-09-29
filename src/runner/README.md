@@ -17,7 +17,7 @@
 ## 执行链路（§6.2）
 
 ```
-scheduler（盘中脉冲 5min / 复盘 15:05 / 盘前 9:25，Asia/Shanghai，交易日挡板）
+scheduler（盘中脉冲 30s / 复盘 18:30 / 盘前 9:25，Asia/Shanghai，交易日挡板）
   → sensor-runner: senseRegistry.current() → read(version).code
   → createSensorBindings（只读）
   → ptcRuntime.resolve(request) → ptcRuntime.run(spec)   // 先 resolve 再 run
