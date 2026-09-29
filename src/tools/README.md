@@ -1,6 +1,46 @@
 # tools
 
-模型工具目录（骨架就位，defineTool 实现属后续任务）。
+模型工具层（已完成，t100353）：以 `@deepseek-ai/dsh-tools` 的 `defineTool` 定义 16 个金融工具，
+经 `ctx.tools.register` 注册。
 
-规划用途：以 `@deepseek-ai/dsh-tools` 的 `defineTool` 定义金融工具
-（记账 / 预测 / 复盘 / 感知归档等），经 `ctx.tools.register` 注册。
+## 目录结构
+
+```
+src/tools/
+├── context.ts          # ToolContext 工厂：dataRoot 统一注入 + 四大 domain 类实例化
+├── error.ts            # 统一错误归一化（throw + 取消检查）
+├── schemas.ts          # output.schema 值 schema DSL（蛇形字段，§4 契约）
+├── types.ts            # 工具层蛇形实体类型（镜像 schema）
+├── ledgers.ts          # 台账域 4 工具
+├── predicts.ts         # 预测域 3 工具
+├── reviews.ts          # 复盘域 5 工具
+├── sense-archives.ts   # 感知归档域 4 工具
+└── index.ts            # createAllTools / registerAllTools 统一入口
+```
+
+## 工具清单（16 个，§4 契约表）
+
+| 组 | 工具 | 类别 |
+|----|------|------|
+| ledgers | ledger_init / ledger_list / ledger_query / ledger_trade | 2 写 + 2 读 |
+| predicts | predict_make / predict_verify / predict_get | 1 写 + 2 读 |
+| reviews | review_check / review_report / review_get / review_metrics / review_retrospect | 1 写 + 4 读 |
+| sense_archives | sense_archive_commit / sense_archive_list / sense_archive_rollback / sense_archive_get | 2 写 + 2 读 |
+
+> 注：任务标题写「15 个」，但 §4 契约表实为 4+3+5+4 = 16 个，以契约表为准。
+
+## 关键设计
+
+- **dataRoot 统一注入**：`createToolContext({ dataRoot })` 构造时实例化 Ledger / Predicts /
+  Reviews / SenseRegistry 各一次，15+ 工具闭包共享同一数据源。dataRoot 缺省取
+  `DSH_FINANCE_DATA_DIR` 环境变量，再回退 `.dsh-finance/data`。
+- **字段映射**：domain 返回驼峰，output.schema 用蛇形（§4 契约），execute 内做显式蛇形映射，
+  二者逐字段对齐（lossless JSON）。
+- **错误处理**：错误通过 throw 表达（registry 归一为 isError、跳过 schema 校验），
+  不返回 `{ ok:false }`；写类成功返回 `{ ok, ... }`，读类返回无 ok 字段的数据对象。
+- **exec.signal 可中断**：写操作前 `assertNotAborted(exec.signal)`，中断即 throw，不产生半写。
+
+## 接入方式
+
+plugin.ts 在 `apply(ctx)` 内惰性 `import('./tools/index.js')` 并调用
+`registerAllTools(ctx, { dataRoot })`（参照 dsh-tasks 的加载策略，属插件契约层后续任务）。
