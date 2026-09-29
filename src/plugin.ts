@@ -9,7 +9,10 @@
  *       1. 经 `ctx.skills.register` 注册 4 个技术面 SKILL
  *          （trend-analysis / grid-strategy / stop-rule / sense-authorship）；
  *       2. 经 `ctx.inject(['systemPrompt'], cb)` **动态注入** advisor.md 人设
- *          （详见 `src/prompts/index.ts`）。
+ *          （详见 `src/prompts/index.ts`）；
+ *       3. 经 `applyRunner(ctx)` 装配**感知脚本执行 + 自持调度**
+ *          （`src/runner/`）：读 current 感知脚本、只读 bindings 沙箱执行、
+ *          应唤醒时投递 agent；调度随 `ctx.effect` 自持启停。
  *
  * 依赖服务说明（已在 harness 源码核实）：
  *   - `tools`      —— dsh 工具注册表（`ctx.tools`，defineTool 注册面向模型的工具）
@@ -24,6 +27,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { registerAllSkills } from './skills/index.js'
 import { applyAdvisorPrompt } from './prompts/index.js'
+import { applyRunner } from './runner/index.js'
 
 /** Cordis 函数式插件标识。 */
 export const name = 'investment-advisor'
@@ -74,4 +78,11 @@ export function apply(ctx: Context): void {
 
   // ---- advisor.md 人设（动态 inject systemPrompt，不改顶层 inject） ----
   applyAdvisorPrompt(ctx)
+
+  // ---- 感知脚本执行 + 自持调度（apply 即启动，随 effect 卸载 stop） ----
+  try {
+    applyRunner(ctx)
+  } catch (err: unknown) {
+    console.error('[dsh-finance] runner 装配失败：', err)
+  }
 }
