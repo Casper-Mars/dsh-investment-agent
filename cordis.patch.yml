@@ -1,0 +1,21 @@
+# dsh-finance bundle patch —— 单插件（investment-advisor）
+#
+# 一个 npm 包（dsh-finance）包含一个 Cordis 插件：
+#   - dsh-finance  金融投资专家 Agent（inject tools + skills + ptcRuntime + fs）
+#
+# 通过 `dsh plugin --profile <name> add .` 安装后自动加载。
+#
+# ⚠️ name 解析的是「包 exports 子路径」对应的入口，而非插件自身的 name 标识：
+#    - 多插件包（如 dsh-tasks）写成 `dsh-tasks/web`、`dsh-tasks/agent`，
+#      对应 exports["./web"] / exports["./agent"]；
+#    - 单插件包（如 dsh-cron、dsh-hello-plugin）直接写「包名本身」，
+#      由 Node 解析到 exports["."]（主入口 dist-server/index.js）。
+#    dsh-finance 只有一个主入口 exports["."]，因此 name 写裸包名 `dsh-finance`。
+#
+# ⚠️ id 为 patch 层的行定位符（可自定，用于后续层按 id 覆盖）；inject 必须与
+#    src/plugin.ts 的 inject 完全一致：['tools', 'skills', 'ptcRuntime', 'fs']。
+
+- insert:
+    - id: dsh-finance
+      name: dsh-finance
+      inject: ['tools', 'skills', 'ptcRuntime', 'fs']

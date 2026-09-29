@@ -1,0 +1,59 @@
+{
+  "name": "dsh-finance",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "金融投资专家 Agent 插件（dsh）：投资建议、持仓记账、行情/交易日历与市场感知",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22.19.0",
+    "pnpm": ">=11.7.0"
+  },
+  "main": "dist-server/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist-server/types/index.d.ts",
+      "default": "./dist-server/index.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist-server/**/*.js",
+    "dist-server/types/**/*.d.ts",
+    "dist-server/**/*.md",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json && node scripts/copy-assets.mjs",
+    "build:server": "tsc -p tsconfig.server.json && node scripts/copy-assets.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf dist dist-server"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0",
+    "@deepseek-ai/dsh-skill": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-tools": "0.1.6-alpha.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-skill": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0",
+    "@deepseek-ai/dsh-skill": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-tools": "0.1.6-alpha.1",
+    "@types/node": "^22.13.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
