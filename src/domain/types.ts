@@ -111,3 +111,122 @@ export interface SenseVersionFull {
   rationale: string
   code: string
 }
+
+// ---------------------------------------------------------------------------
+// predicts 域（预判）与 reviews 域（复盘）类型。
+// 对应详细设计 §7.1 的 predictions / reviews / metrics 三张表。
+// ---------------------------------------------------------------------------
+
+/** 预判方向。 */
+export type PredictDir = 'up' | 'down' | 'flat'
+
+/**
+ * 预判记录（predictions 表，§7.1）。
+ * 字段：symbol, date, dir, range, confidence, watch_points。
+ *
+ * `range`（预判区间）在 §7.1 以标量 `range` 出现，但工具契约（§4.2）拆为
+ * `range_low` / `range_high`（下沿/上沿）。实现上以 `rangeLow` / `rangeHigh`
+ * 两个显式字段落库，同时保留 `range` 作为冗余视图（兼容 §7.1 标量口径）——
+ * 二者等价：`range = [rangeLow, rangeHigh]`。
+ */
+export interface PredictionRecord {
+  id: string
+  symbol: string
+  /** 预判对应的交易日，`YYYY-MM-DD`。 */
+  date: string
+  /** 方向：up（看涨）/ down（看跌）/ flat（震荡）。 */
+  dir: PredictDir
+  /** 区间下沿（预测最低价，隐含阈值）。 */
+  rangeLow: number
+  /** 区间上沿（预测最高价，隐含阈值）。 */
+  rangeHigh: number
+  /** 置信度（0-1）。 */
+  confidence: number
+  /** 观察点（触发关注的事件/点位，`YYYY-MM-DD` 或点位描述）。 */
+  watchPoints: string[]
+  /** 创建时间（毫秒时间戳）。 */
+  ts: number
+}
+
+/** 预测区间（冗余视图，兼容 §7.1 标量 `range`）。 */
+export interface PredictRange {
+  low: number
+  high: number
+}
+
+/**
+ * 预判命中校验的「实际走势快照」，由调用方注入（domain 层不依赖 lib/quotes）。
+ * 这是 predicts/reviews 与行情解耦的关键注入点。
+ */
+export interface ActualitySnapshot {
+  /** 实际收盘价。 */
+  close: number
+  /** 实际最高价。 */
+  high: number
+  /** 实际最低价。 */
+  low: number
+  /** 前一交易日收盘价（用于方向判定基线）。 */
+  prevClose: number
+}
+
+/** 预判命中结果（predict_verify 返回，§4.2）。 */
+export interface HitResult {
+  /** 方向是否命中。 */
+  hitDir: boolean
+  /** 区间是否命中。 */
+  hitRange: boolean
+  /** 偏差：close 相对预测区间中点的偏离（区间命中时为 0；否则为越界距离）。 */
+  deviation: number
+}
+
+/**
+ * 复盘记录（reviews 表，§7.1）。
+ * 字段：symbol, date, hit_dir, hit_range, decision_triggered, decision_executed。
+ */
+export interface ReviewRecord {
+  id: string
+  symbol: string
+  /** 复盘对应的交易日，`YYYY-MM-DD`。 */
+  date: string
+  /** 方向命中。 */
+  hitDir: boolean
+  /** 区间命中。 */
+  hitRange: boolean
+  /** 决策是否触发。 */
+  decisionTriggered: boolean
+  /** 决策是否执行。 */
+  decisionExecuted: boolean
+  /** 复盘备注。 */
+  notes: string
+  /** 复盘摘要（review_report 生成，供 review_get 汇总）。 */
+  summary?: string
+  /** 复盘正文（markdown，供 review_get 读取）。 */
+  report?: string
+  /** 创建时间（毫秒时间戳）。 */
+  ts: number
+}
+
+/** 复盘校验结果（review_check 返回，§4.3）。 */
+export interface ReviewCheckResult {
+  decisionTriggered: boolean
+  decisionExecuted: boolean
+  notes: string
+}
+
+/**
+ * 累计统计（metrics 表，§7.1 + review_metrics 返回，§4.3）。
+ * 字段：symbol, date, dir_hit_rate, range_hit_rate, cum_return。
+ */
+export interface MetricSnapshot {
+  symbol: string
+  /** 统计截止交易日，`YYYY-MM-DD`。 */
+  date: string
+  /** 方向命中率（0-1）。 */
+  dirHitRate: number
+  /** 区间命中率（0-1）。 */
+  rangeHitRate: number
+  /** 累计收益率。 */
+  cumReturn: number
+  /** 历史逐日统计（review_metrics 的 history[]）。 */
+  history: MetricSnapshot[]
+}
