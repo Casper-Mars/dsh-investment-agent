@@ -21,6 +21,7 @@
 import type { Ledger } from '../domain/ledger.js'
 import type { SenseRegistry } from '../domain/sense-registry.js'
 import type { QuoteClient } from '../lib/quotes.js'
+import type { SessionPersistenceLike } from '../session.js'
 import { createSensorBindings } from './bindings.js'
 import type {
   PtcJsonValue,
@@ -85,6 +86,14 @@ export interface SensorRunner {
   runPrep(): Promise<SensorRunOutcome>
   /** 注入 / 替换唤醒通道（`agents` 服务就绪后调用；`undefined` 表示降级为跳过）。 */
   setWaker(waker: SensorWaker | undefined): void
+  /** 设定固定会话标识（`PINNED_SESSION_ID`；Task-10/11 定点投递的稳定锚点）。 */
+  setPinnedSessionId(id: string | undefined): void
+  /** 读取当前固定会话标识（未注入时 `undefined`）。 */
+  getPinnedSessionId(): string | undefined
+  /** 注入会话持久化服务（`sessionPersistence` 就绪后调用；基础层仅观察）。 */
+  setSessionPersistence(persistence: SessionPersistenceLike | undefined): void
+  /** 读取当前会话持久化服务（未注入时 `undefined`）。 */
+  getSessionPersistence(): SessionPersistenceLike | undefined
 }
 
 /**
@@ -123,6 +132,10 @@ export function createSensorRunner(deps: SensorRunnerDeps): SensorRunner {
   const batchLimit = deps.batchLimit ?? DEFAULT_BATCH_LIMIT
   const wakeTextBudget = deps.wakeTextBudget ?? DEFAULT_WAKE_TEXT_BUDGET
   let waker = deps.waker
+  /** 固定会话标识（由装配阶段注入 `PINNED_SESSION_ID`）。 */
+  let pinnedSessionId: string | undefined
+  /** 会话持久化服务（由装配阶段注入；基础层仅观察，不 ensure/创建）。 */
+  let sessionPersistence: SessionPersistenceLike | undefined
 
   /** 各唤醒键（reason:symbol）的最近一次成功投递时刻。 */
   const lastWakeAt = new Map<string, number>()
@@ -344,6 +357,18 @@ export function createSensorRunner(deps: SensorRunnerDeps): SensorRunner {
       ),
     setWaker(next: SensorWaker | undefined): void {
       waker = next
+    },
+    setPinnedSessionId(id: string | undefined): void {
+      pinnedSessionId = id
+    },
+    getPinnedSessionId(): string | undefined {
+      return pinnedSessionId
+    },
+    setSessionPersistence(persistence: SessionPersistenceLike | undefined): void {
+      sessionPersistence = persistence
+    },
+    getSessionPersistence(): SessionPersistenceLike | undefined {
+      return sessionPersistence
     },
   }
 }

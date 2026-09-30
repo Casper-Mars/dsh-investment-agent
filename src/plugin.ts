@@ -34,6 +34,8 @@ import { registerAllSkills } from './skills/index.js'
 import { applyAdvisorPrompt } from './prompts/index.js'
 import { applyRunner } from './runner/index.js'
 
+export { PINNED_SESSION_ID, type SessionPersistenceLike, type PinnedSessionId } from './session.js'
+
 /** Cordis 函数式插件标识。 */
 export const name = 'investment-advisor'
 

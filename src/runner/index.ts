@@ -21,6 +21,7 @@ import { TradingCalendar } from '../lib/trading-calendar.js'
 import { createSensorRunner, type SensorRunnerDeps } from './sensor-runner.js'
 import { createScheduler, type Scheduler } from './scheduler.js'
 import { createAgentWaker, type AgentRegistryLike } from './wake.js'
+import { PINNED_SESSION_ID, type SessionPersistenceLike } from '../session.js'
 import type { PtcRuntimeLike, SensorWaker } from './types.js'
 
 export * from './types.js'
@@ -144,6 +145,24 @@ export function applyRunner(ctx: Context, options: RunnerOptions = {}): void {
     const waker: SensorWaker = createAgentWaker(agents, log)
     runner.setWaker(waker)
     log('[dsh-finance/runner] 唤醒通道已就绪（agents 服务）')
+  })
+
+  // ---- 4b) 动态注入 sessionPersistence 作为会话持久化通道（拿不到则降级） ----
+  // 基础层：仅声明依赖并接入固定会话标识，不在此做 ensure/创建（Task-10 才做）。
+  // `agents` 与 `sessionPersistence` 分开注入，保证任一服务缺失时另一服务不受影响。
+  ctx.inject(['sessionPersistence'], (persistCtx) => {
+    const sessionPersistence = persistCtx.get('sessionPersistence') as
+      | SessionPersistenceLike
+      | undefined
+    if (!sessionPersistence || typeof sessionPersistence !== 'object') {
+      log('[dsh-finance/runner] 警告 sessionPersistence 服务不可用，会话持久化将降级')
+      return
+    }
+    runner.setPinnedSessionId(PINNED_SESSION_ID)
+    runner.setSessionPersistence(sessionPersistence)
+    log(
+      `[dsh-finance/runner] 会话持久化通道已就绪（pinned session = ${PINNED_SESSION_ID}）`,
+    )
   })
 
   // ---- 5) 交易日判定（默认实时节假日源，失败降级为纯周末判定） ----
