@@ -33,8 +33,20 @@ import type { Context } from '@deepseek-ai/cordis'
 import { registerAllSkills } from './skills/index.js'
 import { applyAdvisorPrompt } from './prompts/index.js'
 import { applyRunner } from './runner/index.js'
+import { applySessionEnsure } from './session-ensure.js'
 
 export { PINNED_SESSION_ID, type SessionPersistenceLike, type PinnedSessionId } from './session.js'
+export {
+  ensurePinnedSession,
+  resolveAgentOptions,
+  applySessionEnsure,
+  type SessionEnsureDeps,
+  type EnsureAgent,
+  type EnsureAgentOptions,
+  type EnsureAgentHandle,
+  type EnsureOutcome,
+  type AgentDefaultModelLike,
+} from './session-ensure.js'
 
 /** Cordis 函数式插件标识。 */
 export const name = 'investment-advisor'
@@ -123,6 +135,13 @@ export function apply(ctx: Context): void {
 
   // ---- advisor.md 人设（动态 inject systemPrompt，不改顶层 inject） ----
   applyAdvisorPrompt(ctx)
+
+  // ---- 固定会话确保（Task-10：检查 → 恢复 → 新建，§9.5） ----
+  try {
+    applySessionEnsure(ctx)
+  } catch (err: unknown) {
+    console.error('[dsh-finance] 会话确保装配失败：', err)
+  }
 
   // ---- 感知脚本执行 + 自持调度（apply 即启动，随 effect 卸载 stop） ----
   try {
