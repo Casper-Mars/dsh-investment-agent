@@ -12,6 +12,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Reviews } from '../src/domain/reviews.js'
+import { Ledger } from '../src/domain/ledger.js'
 import type { HitResult, Thresholds } from '../src/domain/types.js'
 
 let dir: string
@@ -219,5 +220,59 @@ describe('reviews 按 symbol 隔离', () => {
     })
     reviews.review_report('588000', '2026-09-29', c, { hit: HIT })
     expect(reviews.review_get('000001').reports).toEqual([])
+  })
+})
+
+describe('reviews.review_metrics cum_return 接线（验收口径 t100357 AC2）', () => {
+  it('无 ledger 注入时 cum_return 回落 0（向后兼容）', () => {
+    // reviews 未接 ledger，应保持 cum_return=0。
+    const solo = new Reviews(dir)
+    const m = solo.review_metrics('588000')
+    expect(m.cumReturn).toBe(0)
+  })
+
+  it('接 ledger 后，基于流水+持仓+现价计算非零 cum_return', () => {
+    const ledger = new Ledger(dir)
+    ledger.init('588000', { type: 'etf', name: 'T', qty: 1000, cost: 2.0, cash: 50000 })
+    const wired = new Reviews(dir, ledger)
+
+    // 现价 3.0：期末市值 = 1000×3.0 = 3000；期初资金 = 50000 + 1000×2.0 = 52000；
+    // realized = 0 → cum_return = (3000 + 0 - 52000) / 52000 = -49000/52000
+    const m = wired.review_metrics('588000', 3.0)
+    expect(m.cumReturn).toBeCloseTo(-49000 / 52000, 4)
+  })
+
+  it('买入后被评估：缺省现价用最近一笔成交价', () => {
+    const ledger = new Ledger(dir)
+    ledger.init('588000', { type: 'etf', name: 'T', qty: 1000, cost: 2.0, cash: 50000 })
+    ledger.trade('588000', { side: 'buy', qty: 500, price: 2.5 })
+    const wired = new Reviews(dir, ledger)
+
+    // 最近一笔成交价 = 2.5，期末持仓 1500；
+    // 期初资金 = 50000 + 1000×2.0 = 52000；期末市值 = 1500×2.5 = 3750；
+    // realized = 0 → (3750 - 52000) / 52000 = -48250/52000
+    const m = wired.review_metrics('588000')
+    expect(m.cumReturn).toBeCloseTo(-48250 / 52000, 4)
+  })
+
+  it('已实现盈亏计入：卖出后 realized 参与分子', () => {
+    const ledger = new Ledger(dir)
+    ledger.init('588000', { type: 'etf', name: 'T', qty: 1000, cost: 2.0, cash: 50000 })
+    // 卖出 500 @ 3.0，realized = (3.0-2.0)*500 = 500
+    ledger.trade('588000', { side: 'sell', qty: 500, price: 3.0 })
+    const wired = new Reviews(dir, ledger)
+
+    // 现价 3.0，期末持仓 500，期末市值 = 1500；
+    // 期初资金 = 52000；realized = 500
+    // cum_return = (1500 + 500 - 52000) / 52000 = -50000/52000
+    const m = wired.review_metrics('588000', 3.0)
+    expect(m.cumReturn).toBeCloseTo(-50000 / 52000, 4)
+  })
+
+  it('标的未初始化时不会抛错，cum_return 回落 0', () => {
+    const ledger = new Ledger(dir)
+    const wired = new Reviews(dir, ledger)
+    const m = wired.review_metrics('999999')
+    expect(m.cumReturn).toBe(0)
   })
 })

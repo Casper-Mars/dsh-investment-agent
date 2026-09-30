@@ -3,7 +3,7 @@
  * 覆盖验收点 5：hitRate 口径、cumReturn 基于流水累计。
  */
 import { describe, it, expect } from 'vitest'
-import { hitRate, cumReturn, isBelowThreshold } from '../src/domain/metrics.js'
+import { hitRate, cumReturn, cumReturnOnCapital, isBelowThreshold } from '../src/domain/metrics.js'
 import type { Trade } from '../src/domain/types.js'
 
 describe('metrics.hitRate', () => {
@@ -50,6 +50,60 @@ describe('metrics.cumReturn', () => {
     ]
     // 已实现收益 = 1000*(2.0-3.0) = -1000；成本 3000 → -0.3333
     expect(cumReturn(trades)).toBeCloseTo(-0.3333, 4)
+  })
+})
+
+describe('metrics.cumReturnOnCapital（验收口径 t100357 AC2）', () => {
+  it('期初资金为 0 → 返回 0（防除零）', () => {
+    expect(
+      cumReturnOnCapital({ finalQty: 0, finalPrice: 0, realizedPnl: 0, initialCapital: 0 }),
+    ).toBe(0)
+  })
+
+  it('盈利：期末市值 + realized > 期初资金 → 正收益', () => {
+    // 期初资金 50000 + 5000（初始持仓成本） = 55000
+    // 期末市值 6000，realized 1000 → (6000+1000-55000)/55000 = -48000/55000
+    // 用更直观的规模：期初资金 10000，期末市值 11000，realized 500
+    //   → (11000+500-10000)/10000 = 0.15
+    const r = cumReturnOnCapital({
+      finalQty: 1000,
+      finalPrice: 11,
+      realizedPnl: 500,
+      initialCapital: 10000,
+    })
+    expect(r).toBeCloseTo(0.15, 4)
+  })
+
+  it('亏损：期末市值 + realized < 期初资金 → 负收益', () => {
+    // 期初资金 10000，期末市值 8000，realized -500
+    //   → (8000 + (-500) - 10000)/10000 = -2500/10000 = -0.25
+    const r = cumReturnOnCapital({
+      finalQty: 1000,
+      finalPrice: 8,
+      realizedPnl: -500,
+      initialCapital: 10000,
+    })
+    expect(r).toBeCloseTo(-0.25, 4)
+  })
+
+  it('期末市值 = 持仓 qty × 现价（持仓价值计入分子）', () => {
+    // 空仓（qty=0）时分子仅 realized - 期初资金。
+    const r = cumReturnOnCapital({
+      finalQty: 0,
+      finalPrice: 0,
+      realizedPnl: 1200,
+      initialCapital: 10000,
+    })
+    expect(r).toBeCloseTo((1200 - 10000) / 10000, 4)
+  })
+
+  it('非法期初资金（NaN/Infinity）→ 返回 0', () => {
+    expect(
+      cumReturnOnCapital({ finalQty: 1, finalPrice: 1, realizedPnl: 0, initialCapital: NaN }),
+    ).toBe(0)
+    expect(
+      cumReturnOnCapital({ finalQty: 1, finalPrice: 1, realizedPnl: 0, initialCapital: Infinity }),
+    ).toBe(0)
   })
 })
 

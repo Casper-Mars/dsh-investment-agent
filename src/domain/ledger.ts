@@ -32,6 +32,7 @@ import type {
   Trade,
   TradeResult,
 } from './types.js'
+import type { CumReturnState } from './metrics.js'
 import { JsonStore, LedgerStore, newTradeId } from './store.js'
 
 /** 初始化入参。 */
@@ -153,6 +154,56 @@ export class Ledger {
       realizedPnl: acc?.realizedPnl ?? 0,
       floatPnl: acc?.floatPnl ?? 0,
     }
+  }
+
+  /** 某标的的全部交易流水（供 review_metrics 计算累计收益率）。 */
+  getTrades(symbol: string): Trade[] {
+    return this.store.getTrades(symbol)
+  }
+
+  /**
+   * 计算累计收益率所需的状态快照（验收口径 t100357 AC2）。
+   *
+   * - finalQty：当前持仓数量（positions.qty）；
+   * - realizedPnl：已实现盈亏（accounts.realized_pnl）；
+   * - initialCapital：期初资金 = 初始 cash + 初始持仓成本。
+   *   初始 cash 未单独落库，故由「当前 cash + Σ买入 − Σ卖出」反推；
+   *   初始持仓成本取 init 流水（reason='init'）的 qty×price。
+   * - finalPrice：由调用方注入（现价）。
+   *
+   * 标的不存在/无流水时返回 undefined（调用方降级为 cum_return=0）。
+   */
+  cumReturnState(symbol: string, finalPrice: number): CumReturnState | undefined {
+    const sym = this.store.getSymbol(symbol)
+    if (!sym) return undefined
+    const pos = this.store.getPosition(symbol)
+    const acc = this.store.getAccount(symbol)
+    const trades = this.store.getTrades(symbol)
+
+    const finalQty = pos?.qty ?? 0
+    const realizedPnl = acc?.realizedPnl ?? 0
+    const cash = acc?.cash ?? 0
+
+    // 初始持仓成本：init 建仓流水（reason='init'）的 qty×price；无 init 流水则为 0。
+    const initTrade = trades.find((t) => t.reason === 'init')
+    const initCost = initTrade ? initTrade.qty * initTrade.price : 0
+
+    // 反推初始 cash：
+    //   init 时 accounts.cash 直接置为 init_cash，未扣减建仓成本（init 流水为账面
+    //   流水而非现金流出），故初始 cash = 当前 cash + Σ其他买入 − Σ卖出。
+    //   其中 Σ其他买入 = Σ买入 − init 成本。
+    let totalBuy = 0
+    let totalSell = 0
+    for (const t of trades) {
+      if (t.side === 'buy') totalBuy += t.qty * t.price
+      else totalSell += t.qty * t.price
+    }
+    const otherBuy = totalBuy - initCost
+    const initialCash = cash + otherBuy - totalSell
+    // 期初资金 = 初始 cash + 初始持仓成本。
+    const initialCapital = initialCash + initCost
+
+    return { finalQty, finalPrice, realizedPnl, initialCapital }
   }
 
   /** 模拟成交：写流水，重算持仓成本 / 结算盈亏。 */

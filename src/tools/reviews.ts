@@ -190,7 +190,8 @@ export function createReviewMetricsTool(ctx: ToolContext): ToolDefinition {
       ],
     },
     async execute(args) {
-      const m = ctx.reviews.review_metrics(args.symbol)
+      const price = await ctx.resolvePrice(args.symbol)
+      const m = ctx.reviews.review_metrics(args.symbol, price)
       const result: ReviewMetricsResult = {
         dir_hit_rate: m.dirHitRate,
         range_hit_rate: m.rangeHitRate,
@@ -227,7 +228,8 @@ export function createReviewRetrospectTool(ctx: ToolContext): ToolDefinition {
     },
     async execute(args) {
       const thresholds = ctx.getThresholds(args.symbol)
-      const m = ctx.reviews.review_metrics(args.symbol)
+      const price = await ctx.resolvePrice(args.symbol)
+      const m = ctx.reviews.review_metrics(args.symbol, price)
       const r = ctx.reviews.review_retrospect(args.symbol, thresholds, {
         dirHitRate: m.dirHitRate,
         rangeHitRate: m.rangeHitRate,

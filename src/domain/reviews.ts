@@ -41,9 +41,11 @@ import type {
   ReviewCheckResult,
   ReviewRecord,
   Thresholds,
+  Trade,
 } from './types.js'
 import { JsonStore } from './store.js'
-import { isBelowThreshold } from './metrics.js'
+import { isBelowThreshold, cumReturnOnCapital } from './metrics.js'
+import type { Ledger } from './ledger.js'
 
 /** 复盘校验入参（决策触发/执行与命中结果的注入，调用方提供）。 */
 export interface ReviewCheckInput {
@@ -131,9 +133,12 @@ function randomSuffix(): string {
  */
 export class Reviews {
   private readonly store: JsonStore
+  /** 台账域（计算 cum_return 用；可选，缺省时 cum_return 回落 0）。 */
+  private readonly ledger?: Ledger
 
-  constructor(dataRoot: string) {
+  constructor(dataRoot: string, ledger?: Ledger) {
     this.store = new JsonStore(dataRoot)
+    this.ledger = ledger
   }
 
   // ---- reviews 表读写 ----
@@ -262,9 +267,13 @@ export class Reviews {
   /**
    * 读累计统计（§4.3 review_metrics）。
    * 优先返回 metrics 表已落快照；无记录则基于 reviews 表即时计算命中率，
-   * cum_return 缺省 0（累计收益需 ledger 流水，domain 层不主动算）。
+   * 并据 ledger 流水 + 现价计算 cum_return（验收口径 t100357 AC2）。
+   *
+   * @param symbol 标的。
+   * @param price 现价（可选）。缺省时用最近一笔成交价作为现价代理；
+   *   无台账/无流水时 cum_return 回落 0。
    */
-  review_metrics(symbol: string): ReviewMetricsResult {
+  review_metrics(symbol: string, price?: number): ReviewMetricsResult {
     const cached = this.getMetrics(symbol)
     if (cached) {
       return {
@@ -279,6 +288,8 @@ export class Reviews {
     const dirHitRate = rate(recs.map((r) => r.hitDir))
     const rangeHitRate = rate(recs.map((r) => r.hitRange))
 
+    const cumReturn = this.computeCumReturn(symbol, price)
+
     const fullHistory: MetricSnapshot[] = recs.map((r) => ({
       symbol,
       date: r.date,
@@ -291,9 +302,38 @@ export class Reviews {
     return {
       dirHitRate,
       rangeHitRate,
-      cumReturn: 0,
+      cumReturn,
       history: takeRecentHistory(fullHistory),
     }
+  }
+
+  /**
+   * 计算当前累计收益率（验收口径）。
+   * 从台账流水+持仓+账户计算 cum_return，现价优先取入参 price，
+   * 缺省用最近一笔成交价；无台账/无流水时回落 0。
+   */
+  private computeCumReturn(symbol: string, price?: number): number {
+    if (!this.ledger) return 0
+    let finalPrice = price
+    // 未注入现价时，取最近一笔成交价作为代理。
+    if (finalPrice === undefined) {
+      let trades: Trade[]
+      try {
+        trades = this.ledger.getTrades(symbol)
+      } catch {
+        return 0
+      }
+      const last = trades[trades.length - 1]
+      finalPrice = last ? last.price : 0
+    }
+    let state
+    try {
+      state = this.ledger.cumReturnState(symbol, finalPrice)
+    } catch {
+      return 0
+    }
+    if (!state) return 0
+    return cumReturnOnCapital(state)
   }
 
   /**

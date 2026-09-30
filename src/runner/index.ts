@@ -113,10 +113,11 @@ export function applyRunner(ctx: Context, options: RunnerOptions = {}): void {
   }
 
   // ---- 2) 复用 tools 层 dataRoot 解析 + 共享 Ledger / SenseRegistry ----
-  const toolCtx = createToolContext(options.toolContextOptions ?? {})
   const quotes =
     options.quotes ??
     new QuoteClient({ onAlert: (msg: string) => log(`[dsh-finance/runner] 警告 [quote] ${msg}`) })
+  // 注入行情源，供工具上下文 review_metrics 计算 cum_return 的「现价」。
+  const toolCtx = createToolContext({ quotes, ...(options.toolContextOptions ?? {}) })
 
   // ---- 3) 组装 sensor-runner ----
   const runnerDeps: SensorRunnerDeps = {

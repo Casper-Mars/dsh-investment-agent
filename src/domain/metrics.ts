@@ -14,11 +14,45 @@
  *
  * 关键口径（验收点 5）：
  * - `hitRate`：dir_hit_rate = 方向命中数 / 已校验数（range 同理）。
- * - `cumReturn`：基于 trades 流水累计（未含初始现金，见实现说明）。
+ * - `cumReturn`：基于 trades 流水累计（§5.2 旧口径 realized/totalBuyCost，见实现说明）。
+ * - `cumReturnOnCapital`：验收口径 t100357 AC2，
+ *   `(期末市值 + 累计 realized - 期初资金) / 期初资金`。
  *
  * 纯函数逻辑，不接触 dsh/cordis API、不落库（落库由 ledger 层负责）。
  */
 import type { Side, Thresholds, Trade } from './types.js'
+
+/**
+ * 累计收益率计算所需的状态快照（验收口径 t100357 AC2）。
+ *
+ * 口径：`cum_return = (期末市值 + 累计 realized - 期初资金) / 期初资金`。
+ */
+export interface CumReturnState {
+  /** 期末持仓数量（当前持仓 qty）。 */
+  finalQty: number
+  /** 期末现价（当前价格）。 */
+  finalPrice: number
+  /** 已实现盈亏（累计 realized）。 */
+  realizedPnl: number
+  /** 期初资金 = 初始 cash + 初始持仓成本。 */
+  initialCapital: number
+}
+
+/**
+ * 累计收益率（验收口径 t100357 AC2，与 §5.2 旧 `cumReturn(trades)` 互补）。
+ *
+ * 公式：`(期末市值 + 累计 realized - 期初资金) / 期初资金`。
+ *   期末市值 = finalQty × finalPrice；
+ *   累计 realized = realizedPnl；
+ *   期初资金 = initialCapital。
+ * 期初资金为 0 或非法即返回 0（防除零）。
+ */
+export function cumReturnOnCapital(state: CumReturnState): number {
+  const ic = state.initialCapital
+  if (!Number.isFinite(ic) || ic === 0) return 0
+  const marketValue = state.finalQty * state.finalPrice
+  return round4((marketValue + state.realizedPnl - ic) / ic)
+}
 
 /**
  * 命中率。
