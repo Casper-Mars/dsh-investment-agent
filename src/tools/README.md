@@ -42,5 +42,7 @@ src/tools/
 
 ## 接入方式
 
-plugin.ts 在 `apply(ctx)` 内惰性 `import('./tools/index.js')` 并调用
-`registerAllTools(ctx, { dataRoot })`（参照 dsh-tasks 的加载策略，属插件契约层后续任务）。
+plugin.ts 已在 `apply(ctx)` 内惰性 `import('./tools/index.js')` 并调用
+`registerAllTools(ctx)`（参照 dsh-tasks 的加载策略）：模块图较重，惰性加载避免拖慢
+插件 fiber 激活时序；注销器绑定 `ctx.effect`，fiber 卸载（含 HMR 重载）时自动注销。
+`ctx.tools` 服务不可用时（最小上下文 / 装载测试）安全跳过，不中断插件装载。

@@ -7,8 +7,9 @@
  * 注册形态：`ctx.tools.register(defineTool({...}))`。
  *
  * 加载时机：本模块及其依赖（context → domain → `@deepseek-ai/dsh-tools`）构成较重
- *   模块图，参照 dsh-tasks 的 plugin 加载策略，应由 plugin.ts 在 `apply` 内**惰性**
- *   `import('./tools/index.js')`，避免拖慢插件 fiber 激活时序（详见 plugin.ts 后续接入）。
+ *   模块图，参照 dsh-tasks 的 plugin 加载策略，已由 plugin.ts 在 `apply` 内**惰性**
+ *   `import('./tools/index.js')` 后调用 `registerAllTools(ctx)` 完成注册，避免拖慢插件
+ *   fiber 激活时序；注销器绑定 `ctx.effect`，fiber 卸载（含 HMR 重载）时自动注销。
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
