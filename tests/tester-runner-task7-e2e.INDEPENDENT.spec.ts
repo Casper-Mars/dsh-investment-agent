@@ -20,6 +20,7 @@ import { join } from 'node:path'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import { applyRunner } from '../src/runner/index.js'
+import { PINNED_SESSION_ID } from '../src/session.js'
 import { SenseRegistry } from '../src/domain/sense-registry.js'
 import type {
   PtcRunRequest,
@@ -155,7 +156,7 @@ describe('Task7 端到端闭环：调度 → 感知 → 研判唤醒', () => {
     const followup = vi.fn()
     const h = assembleHarness({
       wakeScript: buildSensorScript('588000'),
-      agents: [{ id: 'agent-1', followup }],
+      agents: [{ id: PINNED_SESSION_ID, followup }],
       // mock ptcRuntime 不真实执行脚本沙箱，此处回脚本遍历后的 shouldWake 结局
       runBehavior: () => ({ logs: [], value: { shouldWake: true, symbol: '588000', summary: '触发标的 588000' } }),
     })
@@ -193,7 +194,7 @@ describe('Task7 端到端闭环：调度 → 感知 → 研判唤醒', () => {
     vi.setSystemTime(utc('2026-09-29T01:30:00Z'))
     // 让脚本每次静默，避免冷却干扰，直接数 run 调用次数
     const followup = vi.fn()
-    const h = assembleHarness({ wakeScript: NEVER_WAKE_SCRIPT, agents: [{ id: 'a', followup }] })
+    const h = assembleHarness({ wakeScript: NEVER_WAKE_SCRIPT, agents: [{ id: PINNED_SESSION_ID, followup }] })
     await vi.advanceTimersByTimeAsync(90_000) // → 09:31:30，覆盖 09:30:30 / 09:31:00 / 09:31:30
     expect(h.requests.length).toBe(3)
     expect(h.specs.length).toBe(3)
@@ -207,7 +208,7 @@ describe('Task7 端到端闭环：调度 → 感知 → 研判唤醒', () => {
     const followup = vi.fn()
     const h = assembleHarness({
       wakeScript: NEVER_WAKE_SCRIPT,
-      agents: [{ id: 'a', followup }],
+      agents: [{ id: PINNED_SESSION_ID, followup }],
     })
     await vi.advanceTimersByTimeAsync(10 * 60_000) // → 18:30
     // 复盘不执行 current 脚本（固定唤醒全部标的），不产生 resolve/run（脉冲窗口外）
@@ -225,7 +226,7 @@ describe('Task7 端到端闭环：调度 → 感知 → 研判唤醒', () => {
     const followup = vi.fn()
     const h = assembleHarness({
       wakeScript: NEVER_WAKE_SCRIPT,
-      agents: [{ id: 'a', followup }],
+      agents: [{ id: PINNED_SESSION_ID, followup }],
       enablePrep: true,
     })
     await vi.advanceTimersByTimeAsync(5 * 60_000) // → 09:25
@@ -243,7 +244,7 @@ describe('Task7 端到端闭环：调度 → 感知 → 研判唤醒', () => {
     // 模拟脚本内部遍历 A/B/C，仅 B 命中（在沙箱内完成，这里由 run 行为回 B 的结局）
     const h = assembleHarness({
       wakeScript: buildSensorScript('000002'),
-      agents: [{ id: 'a', followup }],
+      agents: [{ id: PINNED_SESSION_ID, followup }],
       runBehavior: () => ({ logs: [], value: { shouldWake: true, symbol: '000002', summary: '触发标的 000002' } }),
     })
     await vi.advanceTimersByTimeAsync(30_000)
@@ -260,7 +261,7 @@ describe('Task7 端到端闭环：调度 → 感知 → 研判唤醒', () => {
     const followup = vi.fn()
     const h = assembleHarness({
       wakeScript: NEVER_WAKE_SCRIPT,
-      agents: [{ id: 'a', followup }],
+      agents: [{ id: PINNED_SESSION_ID, followup }],
       runBehavior: () => ({ logs: [], value: { shouldWake: false } }),
     })
     await vi.advanceTimersByTimeAsync(90_000)
@@ -275,7 +276,7 @@ describe('Task7 端到端闭环：调度 → 感知 → 研判唤醒', () => {
     const followup = vi.fn()
     const h = assembleHarness({
       wakeScript: buildSensorScript('588000'),
-      agents: [{ id: 'a', followup }],
+      agents: [{ id: PINNED_SESSION_ID, followup }],
       isTradingDay: () => false,
     })
     await vi.advanceTimersByTimeAsync(10 * 60_000) // 覆盖多个脉冲点
@@ -287,14 +288,14 @@ describe('Task7 端到端闭环：调度 → 感知 → 研判唤醒', () => {
 
   it('E2E·stop/重新 apply：effect 注销器后 timer 归 0；再次 applyRunner 又能 start（1 个 timer）', () => {
     vi.setSystemTime(utc('2026-09-29T01:30:00Z'))
-    const h1 = assembleHarness({ wakeScript: NEVER_WAKE_SCRIPT, agents: [{ id: 'a', followup: vi.fn() }] })
+    const h1 = assembleHarness({ wakeScript: NEVER_WAKE_SCRIPT, agents: [{ id: PINNED_SESSION_ID, followup: vi.fn() }] })
     expect(vi.getTimerCount()).toBe(1)
     // 触发生命周期注销
     for (const d of h1.disposers) d()
     expect(vi.getTimerCount()).toBe(0)
 
     // 再次 applyRunner（同一程序重载）= 第二次装配
-    const h2 = assembleHarness({ wakeScript: NEVER_WAKE_SCRIPT, agents: [{ id: 'a', followup: vi.fn() }] })
+    const h2 = assembleHarness({ wakeScript: NEVER_WAKE_SCRIPT, agents: [{ id: PINNED_SESSION_ID, followup: vi.fn() }] })
     expect(vi.getTimerCount()).toBe(1)
 
     for (const d of h2.disposers) d()

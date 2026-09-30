@@ -31,7 +31,7 @@ import {
 import { createSensorRunner, parseSensorResult } from '../src/runner/sensor-runner.js'
 import {
   createAgentWaker,
-  resolveWakeTargets,
+  resolveWakeTarget,
   buildWakeMessage,
   boundSummary,
   PLUGIN_SOURCE_NAME,
@@ -53,6 +53,7 @@ import {
   type SchedulerOptions,
 } from '../src/runner/scheduler.js'
 import { inject as topLevelInject } from '../src/plugin.js'
+import { PINNED_SESSION_ID } from '../src/session.js'
 import type {
   PtcBindingNamespace,
   PtcRunRequest,
@@ -843,34 +844,31 @@ describe('[#10] 唤醒冷却（同一 symbol 连续两次 → 第二次 skipped�
 })
 
 describe('[#11] 唤醒降级：无当前会话 → waker 返回 0、告警、不抛', () => {
-  it('createAgentWaker 在空 registry 下返回 0 且记录告警', () => {
+  it('createAgentWaker 在固定会话不可达下返回 0 且记录告警', () => {
     const logs: string[] = []
-    const waker = createAgentWaker({ list: () => [], get: () => undefined }, (m) => logs.push(m))
+    const waker = createAgentWaker({ get: () => undefined }, PINNED_SESSION_ID, (m) => logs.push(m))
     const n = waker({ reason: 'pulse', symbol: '588000', summary: 's' })
     expect(n).toBe(0)
-    expect(logs.join('\n')).toMatch(/无活跃 agent|跳过唤醒/)
+    expect(logs.join('\n')).toMatch(/固定会话不可达|跳过唤醒/)
   })
 
   it('registry 抛错时 waker 返回 0（不抛异常）', () => {
     const logs: string[] = []
     const waker = createAgentWaker(
       {
-        list: () => {
-          throw new Error('registry down')
-        },
-        get: () => undefined,
-        roots: () => {
+        get: () => {
           throw new Error('registry down')
         },
       },
+      PINNED_SESSION_ID,
       (m) => logs.push(m),
     )
     expect(() => waker({ reason: 'pulse', symbol: 'x', summary: 's' })).not.toThrow()
     expect(waker({ reason: 'pulse', symbol: 'x', summary: 's' })).toBe(0)
   })
 
-  it('runner 层：有通道但无 agent → outcome=skipped，不抛异常', async () => {
-    const waker = createAgentWaker({ list: () => [], get: () => undefined }, () => {})
+  it('runner 层：有通道但固定会话不可达 → outcome=skipped，不抛异常', async () => {
+    const waker = createAgentWaker({ get: () => undefined }, PINNED_SESSION_ID, () => {})
     const { runner } = makeRunner({ waker })
     const outcome = await runner.run('pulse')
     expect(outcome.kind).toBe('skipped')
@@ -878,16 +876,18 @@ describe('[#11] 唤醒降级：无当前会话 → waker 返回 0、告警、不
     expect(outcome.detail).toContain('跳过唤醒')
   })
 
-  it('resolveWakeTargets：initiator 优先 > roots > list，过滤无 followup 的 agent', () => {
-    const a = { id: 'a', followup: vi.fn() }
-    const b = { id: 'b', followup: vi.fn() }
-    const bad = { id: 'bad' } // 无 followup
+  it('resolveWakeTarget：定点解析固定会话，过滤无 followup / 未命中的 agent', () => {
+    const pinned = { id: PINNED_SESSION_ID, followup: vi.fn() }
+    const other = { id: 'other', followup: vi.fn() }
+    const bad = { id: PINNED_SESSION_ID } // 无 followup
     expect(
-      resolveWakeTargets({ list: () => [a, b], get: () => undefined, roots: () => [b], currentInitiator: () => a }).map(
-        (x) => x.id,
-      ),
-    ).toEqual(['a'])
-    expect(resolveWakeTargets({ list: () => [a, b, bad], get: () => undefined }).map((x) => x.id)).toEqual(['a', 'b'])
+      resolveWakeTarget(
+        { get: (id: string) => (id === PINNED_SESSION_ID ? pinned : other) },
+        PINNED_SESSION_ID,
+      )?.id,
+    ).toBe(PINNED_SESSION_ID)
+    expect(resolveWakeTarget({ get: () => bad }, PINNED_SESSION_ID)).toBeUndefined()
+    expect(resolveWakeTarget({ get: () => undefined }, PINNED_SESSION_ID)).toBeUndefined()
   })
 })
 

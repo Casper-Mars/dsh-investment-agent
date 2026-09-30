@@ -42,6 +42,7 @@ import { registerAllTools } from '../src/tools/index.js'
 import { applyRunner } from '../src/runner/index.js'
 import { createSensorRunner } from '../src/runner/sensor-runner.js'
 import { createAgentWaker } from '../src/runner/wake.js'
+import { PINNED_SESSION_ID } from '../src/session.js'
 import { SenseRegistry } from '../src/domain/sense-registry.js'
 import { Ledger } from '../src/domain/ledger.js'
 import { Predicts } from '../src/domain/predicts.js'
@@ -520,7 +521,7 @@ describe('Task8 端到端验收：决策闭环全链路（t100357，6 条验收�
     ledger.init('588000', { type: 'etf', name: 'T', qty: 1000, cost: 1.5, cash: 100000 })
 
     const followup = vi.fn()
-    const agents = { list: () => [{ id: 'a', followup }], get: (id: string) => [{ id, followup }].find((x) => x.id === id) }
+    const agents = { list: () => [{ id: PINNED_SESSION_ID, followup }], get: (id: string) => [{ id, followup }].find((x) => x.id === id) }
 
     const runner = createSensorRunner({
       senseRegistry: reg,
@@ -532,7 +533,7 @@ describe('Task8 端到端验收：决策闭环全链路（t100357，6 条验收�
       },
       dataRoot: tmp,
       logger: () => {},
-      waker: createAgentWaker(agents),
+      waker: createAgentWaker(agents, PINNED_SESSION_ID),
       now: () => Date.now(),
     })
 

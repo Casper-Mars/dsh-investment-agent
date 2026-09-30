@@ -7,11 +7,12 @@
  *   - run 不 reject、失败以 outcome.failed 表达（error 字段）；
  *   - 唤醒降级：无通道 / 无 agent → skipped，不抛异常；
  *   - 唤醒冷却；
- *   - 唤醒消息结构（plugin/notice/摘要）与目标解析（initiator > roots > list）。
+ *   - 唤醒消息结构（plugin/notice/摘要）与定点目标解析（固定会话）。
  */
 import { describe, it, expect, vi } from 'vitest'
 import { createSensorRunner, parseSensorResult } from '../src/runner/sensor-runner.js'
-import { createAgentWaker, buildWakeMessage, resolveWakeTargets, PLUGIN_SOURCE_NAME } from '../src/runner/wake.js'
+import { createAgentWaker, resolveWakeTarget, buildWakeMessage, PLUGIN_SOURCE_NAME } from '../src/runner/wake.js'
+import { PINNED_SESSION_ID } from '../src/session.js'
 import type {
   PtcRunRequest,
   PtcRunResult,
@@ -197,12 +198,11 @@ describe('唤醒降级与冷却', () => {
     expect(waker).not.toHaveBeenCalled()
   })
 
-  it('有通道但无活跃 agent → 返回 0 → skipped（降级）', async () => {
+  it('有通道但固定会话不可达（未命中）→ 返回 0 → skipped（降级）', async () => {
     const emptyRegistry = {
-      list: () => [],
       get: () => undefined,
     }
-    const waker = createAgentWaker(emptyRegistry, () => {})
+    const waker = createAgentWaker(emptyRegistry, PINNED_SESSION_ID, () => {})
     const { runner } = makeRunner({ waker })
     const outcome = await runner.run('pulse')
     expect(outcome.kind).toBe('skipped')
@@ -253,7 +253,7 @@ describe('复盘 / 盘前固定唤醒', () => {
   })
 })
 
-describe('唤醒消息与目标解析', () => {
+describe('唤醒消息与定点目标解析', () => {
   it('消息结构：plugin/notice + 文本正文 + 摘要上限', () => {
     const longSummary = 'x'.repeat(200)
     const msg = buildWakeMessage({ reason: 'pulse', symbol: '588000', summary: longSummary })
@@ -268,32 +268,67 @@ describe('唤醒消息与目标解析', () => {
     expect(msg.id.length).toBeGreaterThan(0)
   })
 
-  it('目标解析：initiator 优先，其次 roots，再 list', () => {
-    const a = { id: 'a', followup: vi.fn(), inject: vi.fn() }
-    const b = { id: 'b', followup: vi.fn(), inject: vi.fn() }
-    const c = { id: 'c', followup: vi.fn(), inject: vi.fn() }
-    const withInitiator = {
-      list: () => [a, b],
-      get: () => undefined,
-      roots: () => [b],
-      currentInitiator: () => a,
-    }
-    expect(resolveWakeTargets(withInitiator).map((x) => x.id)).toEqual(['a'])
-
-    const withRoots = { list: () => [a, b], get: () => undefined, roots: () => [b] }
-    expect(resolveWakeTargets(withRoots).map((x) => x.id)).toEqual(['b'])
-
-    const listOnly = { list: () => [a, b, c], get: () => undefined }
-    expect(resolveWakeTargets(listOnly).map((x) => x.id)).toEqual(['a', 'b', 'c'])
+  it('定点解析：仅命中固定会话，过滤无 followup / 未命中的 agent', () => {
+    const pinned = { id: PINNED_SESSION_ID, followup: vi.fn(), inject: vi.fn() }
+    const other = { id: 'other-session', followup: vi.fn(), inject: vi.fn() }
+    const bad = { id: PINNED_SESSION_ID } // 无 followup
+    // 命中固定会话 → 返回固定会话 agent
+    expect(
+      resolveWakeTarget(
+        { get: (id: string) => (id === PINNED_SESSION_ID ? pinned : other) },
+        PINNED_SESSION_ID,
+      )?.id,
+    ).toBe(PINNED_SESSION_ID)
+    // 未命中 → undefined
+    expect(
+      resolveWakeTarget({ get: () => undefined }, PINNED_SESSION_ID),
+    ).toBeUndefined()
+    // 命中但无 followup → undefined
+    expect(
+      resolveWakeTarget({ get: () => bad }, PINNED_SESSION_ID),
+    ).toBeUndefined()
   })
 
-  it('waker 对个别 agent 抛错容错，返回成功数', () => {
-    const ok = { id: 'ok', followup: vi.fn(), inject: vi.fn() }
-    const bad = { id: 'bad', followup: vi.fn(() => { throw new Error('closed') }), inject: vi.fn() }
-    const waker = createAgentWaker({ list: () => [ok, bad], get: () => undefined }, () => {})
+  it('多会话不误投：仅固定会话收到 followup，其它 agent 零调用', () => {
+    const pinned = { id: PINNED_SESSION_ID, followup: vi.fn(), inject: vi.fn() }
+    const otherA = { id: 'session-a', followup: vi.fn(), inject: vi.fn() }
+    const otherB = { id: 'session-b', followup: vi.fn(), inject: vi.fn() }
+    const registry = {
+      get: (id: string) =>
+        ({ [PINNED_SESSION_ID]: pinned, 'session-a': otherA, 'session-b': otherB } as Record<string, unknown>)[id] as
+          | { followup: (m: unknown) => void }
+          | undefined,
+    }
+    const waker = createAgentWaker(registry, PINNED_SESSION_ID, () => {})
     const n = waker({ reason: 'pulse', symbol: '588000', summary: 's' })
     expect(n).toBe(1)
-    expect(ok.followup).toHaveBeenCalledTimes(1)
+    expect(pinned.followup).toHaveBeenCalledTimes(1)
+    expect(otherA.followup).not.toHaveBeenCalled()
+    expect(otherB.followup).not.toHaveBeenCalled()
+  })
+
+  it('固定会话不可达（undefined / get 抛错）→ 返回 0，不抛异常', () => {
+    const logs: string[] = []
+    const wakerUndefined = createAgentWaker({ get: () => undefined }, PINNED_SESSION_ID, (m) => logs.push(m))
+    expect(() => wakerUndefined({ reason: 'pulse', symbol: '588000', summary: 's' })).not.toThrow()
+    expect(wakerUndefined({ reason: 'pulse', symbol: '588000', summary: 's' })).toBe(0)
+
+    const wakerThrow = createAgentWaker(
+      { get: () => { throw new Error('registry down') } },
+      PINNED_SESSION_ID,
+      (m) => logs.push(m),
+    )
+    expect(() => wakerThrow({ reason: 'pulse', symbol: 'x', summary: 's' })).not.toThrow()
+    expect(wakerThrow({ reason: 'pulse', symbol: 'x', summary: 's' })).toBe(0)
+    expect(logs.join('\n')).toMatch(/固定会话不可达|解析唤醒目标失败/)
+  })
+
+  it('waker 对固定会话 followup 抛错容错，返回 0', () => {
+    const bad = { id: PINNED_SESSION_ID, followup: vi.fn(() => { throw new Error('closed') }), inject: vi.fn() }
+    const waker = createAgentWaker({ get: () => bad }, PINNED_SESSION_ID, () => {})
+    const n = waker({ reason: 'pulse', symbol: '588000', summary: 's' })
+    expect(n).toBe(0)
+    expect(bad.followup).toHaveBeenCalledTimes(1)
   })
 })
 

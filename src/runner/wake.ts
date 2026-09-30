@@ -1,15 +1,17 @@
 /**
  * runner 层：唤醒 agent（shouldWake=true 时投递）。
  *
+ * 定点投递（Task-11，§9.3）：唤醒**只**投递到固定会话
+ * `PINNED_SESSION_ID` 对应的 agent，不再做 `currentInitiator → roots → list`
+ * 的动态解析。原因：多会话环境下动态解析的投递目标不确定，且「定时唤醒的
+ * 会话」与「用户对话的会话」可能不是同一个，导致上下文割裂。
+ *
  * 已核对的 harness 契约：
  *   - 唤醒模式：`agent.followup(createUserMessage({ content, source }))`
  *     （见 `packages/subagent/subagent-in-process-driver/src/index.ts`、
  *      `packages/jobs/tool-jobs/src/index.ts` 的 `owner.followup(...)`）；
- *   - `createUserMessage` 来自 `@deepseek-ai/dsh-llm`，产物是
- *     `{ id, role:'user', content: ContentBlock[], source: MessageSource }`
- *     （冻结的不可变消息）；
- *   - `source` 取 `{ kind:'plugin', plugin, form:'notice', summary }`
- *     （notice 形态：一行摘要 + 正文）；
+ *   - `ctx.agents.get(id: SessionId): Agent | undefined`
+ *     （`packages/core/agent/src/index.ts` L566，服务名 `agents`）；
  *   - `agent` 运行时面（`@deepseek-ai/dsh-agent` 声明合并）提供
  *     `.followup(msg)`（排队 follow-up turn 并唤醒）/ `.inject(msg)`（不唤醒）/ `.status`。
  *
@@ -17,17 +19,14 @@
  *   1. 用**结构等价的**最小类型描述 agent / registry / message；
  *   2. 本地构造 UserMessage（`id` 取 `randomUUID()`；`MessageId` 是编译期 brand，
  *      运行时即普通字符串，故结构等价）；
- *   3. **降级**：拿不到 agent（无活跃会话 / registry 不可用）时记日志并返回 0，
- *      **不抛异常、不中断调度**。
- *
- * 目标 agent 解析策略（`ctx.agents`，已核对 `packages/core/agent/src/index.ts`）：
- *   1. 若存在 initiator 上下文 → 用 `currentInitiator()`（同进程因果归属）；
- *   2. 否则用 `roots()`（无 owner 的顶层 agent，排除子 agent）；
- *   3. 再否则退回 `list()`；仍为空 → 降级跳过。
+ *   3. **降级固定为 skip**（NFR-03）：固定会话不可达（`get` 未命中 / registry
+ *      不可用 / 投递抛错）时记日志并返回 0，**不抛异常、不中断调度链**，
+ *      **不提供配置开关**。
  */
 import { randomUUID } from 'node:crypto'
 import type { PtcJsonValue, SensorRunReason, SensorWakePayload, SensorWaker } from './types.js'
 import { RISK_DISCLAIMER } from '../tools/constants.js'
+import { PINNED_SESSION_ID } from '../session.js'
 
 /** 投递消息的插件源标识。 */
 export const PLUGIN_SOURCE_NAME = 'dsh-finance'
@@ -66,10 +65,14 @@ export interface AgentLike {
   readonly status?: 'idle' | 'running'
 }
 
-/** `ctx.agents`（AgentRegistry）的最小结构契约。 */
+/** `ctx.agents`（AgentRegistry）的最小结构契约。
+ *
+ * 定点投递只需要 `get(id)`；`list` / `roots` / `currentInitiator` 保留为可选
+ * 以维持与 harness `AgentRegistry` 的结构兼容（本模块不再使用它们做目标解析）。
+ */
 export interface AgentRegistryLike {
-  list(): AgentLike[]
   get(id: string): AgentLike | undefined
+  list?(): AgentLike[]
   roots?(): AgentLike[]
   currentInitiator?(): AgentLike | undefined
 }
@@ -129,69 +132,69 @@ export function buildWakeMessage(
 }
 
 /**
- * 解析唤醒目标 agent（不抛异常，返回可能为空的数组）。
+ * 定点解析：取固定会话对应的 agent（不抛异常，未命中返回 `undefined`）。
+ *
+ * 仅当 `agents.get(pinnedId)` 命中且 `followup` 可调用时才返回该 agent；
+ * `get` 抛错（registry 不可用）时视为未命中。
  *
  * @param agents `ctx.agents` 结构替身。
- * @returns 目标 agent 列表（去重）。
+ * @param pinnedId 固定会话 id（`PINNED_SESSION_ID`）。
+ * @returns 命中且可投递的目标 agent，否则 `undefined`。
  */
-export function resolveWakeTargets(agents: AgentRegistryLike): AgentLike[] {
-  const initiator = agents.currentInitiator?.()
-  if (initiator) return [initiator]
-
-  const roots = agents.roots?.() ?? []
-  const primary = roots.length > 0 ? roots : agents.list()
-
-  const seen = new Set<string>()
-  const out: AgentLike[] = []
-  for (const agent of primary) {
-    if (!agent || typeof agent.followup !== 'function') continue
-    if (seen.has(agent.id)) continue
-    seen.add(agent.id)
-    out.push(agent)
+export function resolveWakeTarget(
+  agents: AgentRegistryLike,
+  pinnedId: string,
+): AgentLike | undefined {
+  let agent: AgentLike | undefined
+  try {
+    agent = agents.get(pinnedId)
+  } catch {
+    agent = undefined
   }
-  return out
+  if (agent && typeof agent.followup === 'function') return agent
+  return undefined
 }
 
 /**
- * 基于 `ctx.agents` 构造唤醒通道。
+ * 基于 `ctx.agents` 构造**定点**唤醒通道（固定会话）。
  *
- * 返回的 waker **绝不抛异常**：无可用 agent 时返回 0（调度不受影响）。
+ * 返回的 waker **绝不抛异常**：固定会话不可达时返回 0（调度不受影响）。
+ * 盘中脉冲 / 盘后复盘 / 盘前准备三条路径共用本 waker（同此一路径）。
  *
  * @param agents `ctx.agents` 结构替身。
+ * @param pinnedId 固定会话 id（`PINNED_SESSION_ID`）。
  * @param logger 日志（默认 `console.log`）。
- * @returns 唤醒通道函数（返回实际投递的会话数）。
+ * @returns 唤醒通道函数（返回实际投递的会话数：0 或 1）。
  */
 export function createAgentWaker(
   agents: AgentRegistryLike,
+  pinnedId: string = PINNED_SESSION_ID,
   logger: (message: string) => void = (message) => console.log(message),
 ): SensorWaker {
   return (payload: SensorWakePayload): number => {
-    let targets: AgentLike[]
+    let agent: AgentLike | undefined
     try {
-      targets = resolveWakeTargets(agents)
+      agent = resolveWakeTarget(agents, pinnedId)
     } catch (err: unknown) {
       logger(`[dsh-finance/runner] 警告 解析唤醒目标失败，跳过唤醒：${String(err)}`)
       return 0
     }
-    if (targets.length === 0) {
-      logger('[dsh-finance/runner] 警告 无活跃 agent 会话，跳过唤醒（降级）')
+    if (!agent) {
+      logger(
+        `[dsh-finance/runner] 警告 固定会话不可达（${pinnedId}），跳过唤醒（降级）`,
+      )
       return 0
     }
-    let delivered = 0
-    for (const agent of targets) {
-      try {
-        agent.followup(buildWakeMessage(payload))
-        delivered += 1
-      } catch (err: unknown) {
-        logger(`[dsh-finance/runner] 警告 唤醒 agent(${agent.id}) 失败：${String(err)}`)
-      }
-    }
-    if (delivered > 0) {
+    try {
+      agent.followup(buildWakeMessage(payload))
       logger(
-        `[dsh-finance/runner] 已投递唤醒（${delivered} 个会话）：${payload.symbol}`,
+        `[dsh-finance/runner] 已投递唤醒（固定会话 ${pinnedId}）：${payload.symbol}`,
       )
+      return 1
+    } catch (err: unknown) {
+      logger(`[dsh-finance/runner] 警告 唤醒 agent(${agent.id}) 失败：${String(err)}`)
+      return 0
     }
-    return delivered
   }
 }
 

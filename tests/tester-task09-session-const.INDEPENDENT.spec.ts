@@ -133,7 +133,7 @@ describe('Task-09 独立复验 ② 动态注入与安全降级（真实 cordis�
 
     await loadPluginWith({
       ...coreServices(),
-      agents: { list: () => [] },
+      agents: { list: () => [], get: () => undefined },
       sessionPersistence: {
         stat: async () => undefined,
         list: async () => [],
@@ -143,8 +143,8 @@ describe('Task-09 独立复验 ② 动态注入与安全降级（真实 cordis�
     const text = loggedText(logSpy)
     // 插件本体成功装载（apply 已执行）。
     expect(text).toContain('插件加载：name=investment-advisor')
-    // agents 就绪回调触发。
-    expect(text).toContain('唤醒通道已就绪（agents 服务）')
+    // agents 就绪回调触发（定点投递到固定会话）。
+    expect(text).toContain('唤醒通道已就绪（定点投递：investment-advisor）')
     // sessionPersistence 就绪回调触发，且固定会话标识被注入。
     expect(text).toContain('会话持久化通道已就绪（pinned session = investment-advisor）')
   })
@@ -167,11 +167,11 @@ describe('Task-09 独立复验 ② 动态注入与安全降级（真实 cordis�
     const logSpy = vi.mocked(console.log)
 
     await expect(
-      loadPluginWith({ ...coreServices(), agents: { list: () => [] } }),
+      loadPluginWith({ ...coreServices(), agents: { list: () => [], get: () => undefined } }),
     ).resolves.toBeDefined()
 
     const text = loggedText(logSpy)
-    expect(text).toContain('唤醒通道已就绪（agents 服务）')
+    expect(text).toContain('唤醒通道已就绪（定点投递：investment-advisor）')
     expect(text).not.toContain('会话持久化通道已就绪')
   })
 

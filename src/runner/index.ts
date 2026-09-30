@@ -6,10 +6,12 @@
  *      不新增依赖**；软取使最小上下文下安全降级）；
  *   2. 复用 `createToolContext()` 解析 dataRoot，并共享 Ledger / SenseRegistry；
  *   3. 组装 sensor-runner（只读 bindings + read-only 沙箱策略）；
- *   4. 经 `ctx.inject(['agents'], cb)` **动态注入** agents，作为唤醒通道
- *      （拿不到则降级：仅告警，不中断调度）；
- *   5. `ctx.effect(() => { scheduler.start(); return () => scheduler.stop() })`
- *      —— `apply` 即启动，fiber 卸载（含 HMR）自动 `stop()` 清空 timer。
+ *   4. 经 `ctx.inject(['agents'], cb)` **动态注入** agents，构造**定点** waker
+ *      （`createAgentWaker(agents, PINNED_SESSION_ID, log)`，只投递到固定会话；
+ *      拿不到则降级：waker 置 undefined → 唤醒走 skip，不中断调度）；
+ *   5. `ctx.effect(() => { if (!started) { scheduler.start(); started = true } ... })`
+ *      —— **调度只装配一次**（幂等守卫 `started`），不因多会话 / 多次触发重复
+ *      `scheduler.start()`；fiber 卸载（含 HMR）自动 `stop()` 清空 timer。
  *
  * 顶层 `inject = ['tools','skills','ptcRuntime','fs']` **保持不变**。
  */
@@ -40,7 +42,7 @@ export {
   buildWakeText,
   boundSummary,
   createAgentWaker,
-  resolveWakeTargets,
+  resolveWakeTarget,
   PLUGIN_SOURCE_NAME,
   WAKE_SUMMARY_MAX_CHARS,
   type AgentLike,
@@ -135,16 +137,21 @@ export function applyRunner(ctx: Context, options: RunnerOptions = {}): void {
   }
   const runner = createSensorRunner(runnerDeps)
 
-  // ---- 4) 动态注入 agents 作为唤醒通道（拿不到则降级） ----
+  // ---- 4) 动态注入 agents 作为定点唤醒通道（拿不到则降级为 skip） ----
   ctx.inject(['agents'], (agentCtx) => {
     const agents = agentCtx.get('agents') as AgentRegistryLike | undefined
-    if (!agents || typeof agents.list !== 'function') {
+    if (!agents || typeof agents.get !== 'function') {
+      // 降级：waker 置 undefined，唤醒走 skip（不抛、不中断）。
       log('[dsh-finance/runner] 警告 agents 服务不可用，唤醒将降级为跳过')
+      runner.setWaker(undefined)
       return
     }
-    const waker: SensorWaker = createAgentWaker(agents, log)
+    // 定点投递：只投递到固定会话 PINNED_SESSION_ID（详见 §9.3）。
+    const waker: SensorWaker = createAgentWaker(agents, PINNED_SESSION_ID, log)
     runner.setWaker(waker)
-    log('[dsh-finance/runner] 唤醒通道已就绪（agents 服务）')
+    log(
+      `[dsh-finance/runner] 唤醒通道已就绪（定点投递：${PINNED_SESSION_ID}）`,
+    )
   })
 
   // ---- 4b) 动态注入 sessionPersistence 作为会话持久化通道（拿不到则降级） ----
@@ -171,6 +178,7 @@ export function applyRunner(ctx: Context, options: RunnerOptions = {}): void {
     options.isTradingDay ?? ((date: Date) => calendar.isTradingDay(date))
 
   // ---- 6) 自持调度：apply 即启动，随 effect 卸载 stop() ----
+  // 调度只装配一次：`started` 幂等守卫保证多会话 / 多次触发不会重复 start()。
   const scheduler: Scheduler = createScheduler({
     isTradingDay,
     onPulse: () => runner.run('pulse'),
@@ -179,8 +187,17 @@ export function applyRunner(ctx: Context, options: RunnerOptions = {}): void {
     logger: log,
   })
 
+  let started = false
   ctx.effect(() => {
-    scheduler.start()
-    return () => scheduler.stop()
+    if (!started) {
+      scheduler.start()
+      started = true
+    }
+    return () => {
+      if (started) {
+        scheduler.stop()
+        started = false
+      }
+    }
   }, 'dsh-finance runner')
 }
