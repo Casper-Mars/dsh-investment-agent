@@ -61,7 +61,7 @@ whenToUse: "需生成、修改或整体替换感知脚本时。"
 async function sense() {
   const list = await symbols.list()
   for (const s of list) {
-    const config = getSymbolConfig(s) // 该标的配置（维度 / 阈值，均从数据读取，不写死）
+    const config = getSymbolConfig(s) // 该标的参数（维度 / 阈值，均从数据读取，不写死）
     const [rt, hist, book] = await Promise.all([
       quote.realtime(s),
       quote.history({ symbol: s, days: config.historyDays }),
