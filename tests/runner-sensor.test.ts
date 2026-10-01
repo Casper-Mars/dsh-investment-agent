@@ -254,12 +254,12 @@ describe('复盘 / 盘前固定唤醒', () => {
 })
 
 describe('唤醒消息与定点目标解析', () => {
-  it('消息结构：plugin/notice + 文本正文 + 摘要上限', () => {
+  it('消息结构：producer-owned kind（dsh-finance，非 plugin）+ 文本正文 + 摘要上限', () => {
     const longSummary = 'x'.repeat(200)
     const msg = buildWakeMessage({ reason: 'pulse', symbol: '588000', summary: longSummary })
     expect(msg.role).toBe('user')
-    expect(msg.source.kind).toBe('plugin')
-    expect(msg.source.plugin).toBe(PLUGIN_SOURCE_NAME)
+    expect(msg.source.kind).toBe(PLUGIN_SOURCE_NAME)
+    expect(msg.source.kind).not.toBe('plugin')
     expect(msg.source.form).toBe('notice')
     expect(msg.source.summary.length).toBeLessThanOrEqual(120)
     expect(msg.content[0].type).toBe('text')

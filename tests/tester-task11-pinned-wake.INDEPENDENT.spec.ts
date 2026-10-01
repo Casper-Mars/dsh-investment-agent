@@ -96,7 +96,7 @@ describe('Task-11 独立复验 ② 定点投递 createAgentWaker', () => {
     expect(pinned.followup).toHaveBeenCalledTimes(1)
   })
 
-  it('投递 payload 全字段结构：plugin/notice 形态 + 摘要上限 + 单一 text 块 + 非空 id', () => {
+  it('投递 payload 全字段结构：kind=dsh-finance（非 plugin）+ notice 形态 + 摘要上限 + 单一 text 块 + 非空 id', () => {
     const pinned = makeAgent(PINNED_SESSION_ID)
     const waker = createAgentWaker(makeRegistry([pinned]), PINNED_SESSION_ID, () => {})
     waker(PAYLOAD)
@@ -104,15 +104,16 @@ describe('Task-11 独立复验 ② 定点投递 createAgentWaker', () => {
     const msg = pinned.followup.mock.calls[0]![0] as {
       id: string
       role: string
-      source: { kind: string; plugin: string; form: string; summary: string }
+      source: { kind: string; form: string; summary: string }
       content: Array<{ type: string; text: string }>
     }
     expect(msg.role).toBe('user')
     expect(typeof msg.id).toBe('string')
     expect(msg.id.length).toBeGreaterThan(0)
-    expect(msg.source.kind).toBe('plugin')
-    expect(msg.source.plugin).toBe(PLUGIN_SOURCE_NAME)
-    expect(msg.source.plugin).toBe('dsh-finance')
+    expect(msg.source.kind).toBe(PLUGIN_SOURCE_NAME)
+    expect(msg.source.kind).toBe('dsh-finance')
+    expect(msg.source.kind).not.toBe('plugin')
+    expect(msg.source.kind.length).toBeGreaterThan(0)
     expect(msg.source.form).toBe('notice')
     expect(msg.source.summary).toBe(PAYLOAD.summary)
     expect(msg.source.summary.length).toBeLessThanOrEqual(WAKE_SUMMARY_MAX_CHARS)
@@ -451,14 +452,16 @@ describe('Task-11 独立复验 ⑥ 契约回归', () => {
     expect(inject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
   })
 
-  it('buildWakeMessage 结构：role=user、content 单一 text、source.plugin/notice', () => {
+  it('buildWakeMessage 结构：role=user、content 单一 text、kind=dsh-finance（非 plugin）、form=notice', () => {
     const msg = buildWakeMessage(PAYLOAD)
     expect(msg.role).toBe('user')
     expect(msg.content).toHaveLength(1)
     expect(msg.content[0]!.type).toBe('text')
-    expect(msg.source.kind).toBe('plugin')
-    expect(msg.source.plugin).toBe(PLUGIN_SOURCE_NAME)
+    expect(msg.source.kind).toBe(PLUGIN_SOURCE_NAME)
+    expect(msg.source.kind).toBe('dsh-finance')
+    expect(msg.source.kind).not.toBe('plugin')
     expect(msg.source.form).toBe('notice')
+    expect('plugin' in msg.source).toBe(false)
   })
 
   it('parseSensorResult 仍解析 shouldWake（无关回归护栏）', () => {

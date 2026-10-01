@@ -45,4 +45,29 @@ export interface SessionPersistenceLike {
   stat?(id: PinnedSessionId): Promise<unknown>
   /** 列出本进程可见的所有持久会话快照。 */
   list?(): Promise<readonly unknown[]>
+  /**
+   * 打开一个已存储会话的只读句柄（不占所有权，可与写句柄并存）。
+   *
+   * 对齐来源（已核对 harness 源码）：
+   *   - `packages/session/session-persistence/src/index.ts` L160 `open(id, access)`；
+   *     不存在的会话抛 `SessionPersistenceNotFoundError`；
+   *   - `SessionHandle.read(offset?, length?)` 返回
+   *     `{ eventState, events: readonly SessionEvent[] }`（`handle.ts` L59）。
+   *
+   * 仅用于「判读会话是否 blank（无 `turn/start` 事件）」，不写、不占所有权。
+   */
+  open?(id: PinnedSessionId, access: 'read' | 'write'): Promise<SessionHandleLike>
+}
+
+/** `SessionHandle` 的最小结构替身（仅需 `read`，用于判读 blank）。 */
+export interface SessionHandleLike {
+  /** 读取一段连续逻辑事件（`offset` 默认 0，超出尾部返回空数组）。 */
+  read(offset?: number, length?: number): Promise<{ events: readonly SessionEventLike[] }>
+  /** 关闭句柄（幂等；`Symbol.asyncDispose` 委托于此）。 */
+  close?(): Promise<void>
+}
+
+/** `SessionEvent` 的最小结构替身（仅需 `type` 判读 `turn/start`）。 */
+export interface SessionEventLike {
+  readonly type: string
 }

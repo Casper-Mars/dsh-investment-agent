@@ -33,7 +33,16 @@
  * 落盘时，将自然走 resume 分支恢复历史上下文（见 §9.5）。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { PINNED_SESSION_ID, type PinnedSessionId, type SessionPersistenceLike } from './session.js'
+import {
+  PINNED_SESSION_ID,
+  type PinnedSessionId,
+  type SessionPersistenceLike,
+} from './session.js'
+import {
+  deliverOpeningNotice,
+  type OpeningNoticeAgents,
+  type SessionProjectionsLike,
+} from './opening-notice.js'
 
 /** 会话确保依赖的可注入面（供纯函数三分支单测注入 fake）。 */
 export interface SessionEnsureDeps {
@@ -163,6 +172,65 @@ export async function ensurePinnedSession(
   }
 }
 
+/**
+ * `workspaceRegistry` 服务的最小结构替身（仅需 `resolveByPath` / `create`）。
+ *
+ * 对齐来源（已核对 harness 源码）：
+ *   - `packages/workspace/workspace/src/index.ts` L170 `WorkspaceRegistry`，
+ *     服务名 `workspaceRegistry`（L193 `super(ctx, 'workspaceRegistry')`）；
+ *   - `resolveByPath(path): Promise<Workspace | undefined>`（L501，未命中返回
+ *     `undefined`；path 不存在时 realpath **reject**）；
+ *   - `create(path, title?): Promise<Workspace>`（L236，path 必须存在且为目录）。
+ *
+ * 与 `SessionPersistenceLike` 同一套路：结构等价、运行时以实际源码为准，
+ * 不把 workspace 包加入本插件硬依赖。
+ */
+export interface WorkspaceRegistryLike {
+  /** 按 canonical 目录路径解析工作区；未命中返回 `undefined`（path 不存在 reject）。 */
+  resolveByPath(path: string): Promise<WorkspaceLike | undefined>
+  /** 创建（或复用）工作区；path 必须存在且为目录，否则 reject。 */
+  create(path: string, title?: string): Promise<WorkspaceLike>
+}
+
+/**
+ * `Workspace` 的最小结构替身（仅需 `attachSession`）。
+ *
+ * 对齐来源（已核对 harness 源码）：
+ *   - `packages/workspace/workspace/src/entity.ts` L109 `attachSession(sessionId)`：
+ *     校验该会话 `header.cwd` 必须等于工作区 path，自身幂等；
+ *   - `Workspace` 接口（`types.ts` L63）：`path` / `title` / `sessionIds` /
+ *     `attachSession`。
+ */
+export interface WorkspaceLike {
+  /** 工作区 canonical 路径（与 `header.cwd` 比对用）。 */
+  readonly path?: string
+  /** 将某会话归属到本工作区（幂等）。 */
+  attachSession(sessionId: PinnedSessionId): Promise<void>
+}
+
+/**
+ * 固定会话归属到其 cwd 对应的工作区（§9.7，v1.5）。
+ *
+ * 语义：
+ *   1. `resolveByPath(cwd)` 命中 → 复用该工作区；
+ *   2. 未命中 → `create(cwd)` 新建（cwd 已满足「存在且为目录」）；
+ *   3. `attachSession(PINNED_SESSION_ID)` 归属（`resolveByPath` 命中即复用、
+ *      `attachSession` 自身幂等，故重复 apply 不重复登记）。
+ *
+ * 降级：服务不可用 / 任一调用失败 → 抛错交调用方捕获（记日志、skip，不中断装载）。
+ *
+ * @param registry `workspaceRegistry` 结构替身。
+ * @param cwd 归属目标工作区目录。
+ */
+export async function attachPinnedSessionToWorkspace(
+  registry: WorkspaceRegistryLike,
+  cwd: string,
+): Promise<void> {
+  const ws =
+    (await registry.resolveByPath(cwd)) ?? (await registry.create(cwd))
+  await ws.attachSession(PINNED_SESSION_ID)
+}
+
 /** `agentDefaultModel` 服务的最小结构替身（仅需 `currentSelection()`）。 */
 export interface AgentDefaultModelLike {
   currentSelection(): { provider: string; model: string; reasoningEffort?: string }
@@ -188,15 +256,121 @@ export function resolveAgentOptions(
 }
 
 /**
+ * 会话归属降级包装：ensure 成功后动态注入 workspaceRegistry 并执行归属。
+ *
+ * 语义（§9.7）：
+ *   - 经 `ctx.inject(['workspaceRegistry'], cb)` **动态注入**（不改顶层 inject）；
+ *   - `workspaceRegistry` 缺失 / `resolveByPath` reject / `attachSession` 失败 /
+ *     inject 自身异常 → 记日志、降级 skip，**不抛、不中断装载**。
+ */
+function attachSessionToWorkspaceSafely(
+  ctx: Context,
+  log: (message: string) => void,
+  cwd: string,
+): void {
+  try {
+    ctx.inject(['workspaceRegistry'], (workspaceCtx) => {
+      const workspaceRegistry = workspaceCtx.get('workspaceRegistry') as
+        | WorkspaceRegistryLike
+        | undefined
+      if (!workspaceRegistry || typeof workspaceRegistry.resolveByPath !== 'function') {
+        log('[dsh-finance/session] 警告 workspaceRegistry 服务不可用，跳过会话归属（降级）')
+        return
+      }
+      void attachPinnedSessionToWorkspace(workspaceRegistry, cwd).then(
+        () => {},
+        (err: unknown) => {
+          log(`[dsh-finance/session] 警告 会话归属失败（降级 skip）：${String(err)}`)
+        },
+      )
+    })
+  } catch (err: unknown) {
+    // inject 自身异常（极端）：降级，不中断装载。
+    log(`[dsh-finance/session] 警告 会话归属装配失败（降级 skip）：${String(err)}`)
+  }
+}
+
+/**
+ * 开场 notice 降级装配（§9.7 v1.6，Task-15 AC1）：ensure 成功且 workspace 归属之后，
+ * 对**仍 blank** 的固定会话投递一次性「开场 notice」触发首个 `turn/start`，使其脱离
+ * blank 状态 → 左侧会话列表可见。
+ *
+ * 语义：
+ *   - 经 `ctx.inject(['agents', 'sessionPersistence'], cb)` **动态注入**两项服务（不变
+ *     层 inject，契约固定四项）；`sessionProjections` 为 web 宿主可用的可选投影，
+ *     用 `ctx.get` 软取，headless 无 → 降级到事件日志判读；
+ *   - 判据 = 会话是否 blank（无 `turn/start`），而非 ensure 结局（已持久化零事件的
+ *     固定会话首次启动走 resume 分支，仍需补投）；
+ *   - **一次性**：blank → 投一次；非 blank → 不投（重启自愈，不重复）；
+ *   - **降级**：`agents` / `sessionPersistence` 缺失 / 判读失败 / `followup` 抛错 →
+ *     记日志、skip，**不抛异常、不中断装载**，不影响 ensure 与 workspace 归属。
+ */
+function deliverOpeningNoticeSafely(
+  ctx: Context,
+  log: (message: string) => void,
+): void {
+  ctx.inject(['agents', 'sessionPersistence'], (noticeCtx) => {
+    const agents = noticeCtx.get('agents') as OpeningNoticeAgents | undefined
+    const sessionPersistence = noticeCtx.get('sessionPersistence') as
+      | SessionPersistenceLike
+      | undefined
+
+    if (!agents || typeof agents.get !== 'function') {
+      log('[dsh-finance/notice] 警告 agents 服务不可用，跳过开场 notice（降级）')
+      return
+    }
+    if (!sessionPersistence || typeof sessionPersistence.open !== 'function') {
+      log('[dsh-finance/notice] 警告 sessionPersistence 服务不可用，跳过开场 notice（降级）')
+      return
+    }
+    // 拆出 open 到局部（TS 收窄后仍可选，显式绑定避免闭包内 possibly-undefined）。
+    const open = sessionPersistence.open.bind(sessionPersistence)
+    const rawStat = sessionPersistence.stat?.bind(sessionPersistence)
+    // `stat` 在 `SessionPersistenceLike` 上返回 `Promise<unknown>`（宽类型），
+    // 此处收窄为 `eventCount` 快速路径所需的 `{ eventCount?: number }` 投影。
+    const maybeStat = rawStat
+      ? (id: string) =>
+          rawStat(id).then(
+            (snap) => snap as { eventCount?: number } | undefined,
+          )
+      : undefined
+
+    // 软取 sessionProjections（web 宿主有，headless 常无）。
+    let sessionProjections: SessionProjectionsLike | undefined
+    try {
+      sessionProjections = ctx.get('sessionProjections') as SessionProjectionsLike | undefined
+    } catch {
+      sessionProjections = undefined
+    }
+
+    void deliverOpeningNotice({
+      agents,
+      sessionPersistence: { open, stat: maybeStat },
+      sessionProjections,
+      logger: log,
+    }).catch((err: unknown) => {
+      log(`[dsh-finance/notice] 警告 开场 notice 投递异常：${String(err)}`)
+    })
+  })
+}
+
+/**
  * 装配「启动即确保」：在插件 `apply` 阶段对固定会话执行一次
  * 「检查 → 恢复 → 新建」（§9.5）。
  *
  * - 经 `ctx.inject(['agents', 'sessionPersistence'], cb)` **动态注入**两项会话服务；
  *   任一缺失 → 记日志、安全降级跳过（**不抛异常、不中断装载**），互不影响。
  * - 归属：`create` / `resume` 在 `ctx.effect` 内调用（ownerCtx 绑定插件 fiber），
- *   返回的 `handle.dispose()` 绑定 effect 卸载回调，插件卸载即拆除会话。
+ *   返回的 `handle.dispose()` 绑定 effect 卸载回调，插件卸载即拆除会话；handle
+ *   **唯一持有**（不存在第二个持有者）。
  * - 再次 apply 且会话已落盘时，`agents.get` 未命中 + `stat` 命中 → 走 resume 分支
  *   恢复历史上下文。
+ * - 固定会话归属（§9.7）：ensure **成功（非 skipped）后**，才经
+ *   `ctx.inject(['workspaceRegistry'], cb)` **动态注入** workspaceRegistry，把固定
+ *   会话归属到其 cwd 对应的工作区（使 dsh web 左侧会话列表可见）。归属注册发生在
+ *   ensure 成功之后，与 ensure 共享同一份 `outcome`/`handle`，因此 **ensure 只执行
+ *   一次**（消除并发重复 create 的竞态 + 顺序依赖）；服务缺失 / 调用失败 → 记日志、
+ *   降级 skip，不抛异常、不中断装载。
  */
 export function applySessionEnsure(
   ctx: Context,
@@ -243,7 +417,7 @@ export function applySessionEnsure(
           return
         }
         if (handle) {
-          // 归属：绑定插件 fiber，卸载时自动拆除。
+          // 归属：绑定插件 fiber，卸载时自动拆除（唯一持有，无第二持有者）。
           disposeHandle = () => {
             void handle.dispose()
           }
@@ -256,6 +430,17 @@ export function applySessionEnsure(
           case 'skipped':
             log(`[dsh-finance/session] 固定会话确保跳过：${outcome.detail}`)
             break
+        }
+
+        // 固定会话归属（§9.7）：仅在 ensure 成功（非 skipped）后动态注入
+        // workspaceRegistry 归属到 cwd 对应工作区。注册发生在 ensure 成功之后，
+        // 天然消除与 ensure 的顺序依赖 + 重复 ensure（D1/D3）；handle 仍由本块
+        // 唯一持有（D2），无第二持有者、无泄漏。
+        if (outcome.kind !== 'skipped') {
+          attachSessionToWorkspaceSafely(ctx, log, cwd)
+          // 开场 notice（§9.7 v1.6，Task-15 AC1）：归属之后对仍 blank 的固定会话
+          // 投递一次性 notice 触发首个 turn/start（脱离 blank → 左侧列表可见）。
+          deliverOpeningNoticeSafely(ctx, log)
         }
       }).catch((err: unknown) => {
         log(`[dsh-finance/session] 警告 会话确保异常：${String(err)}`)

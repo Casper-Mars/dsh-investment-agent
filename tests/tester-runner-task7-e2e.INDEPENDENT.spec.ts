@@ -177,11 +177,13 @@ describe('Task7 端到端闭环：调度 → 感知 → 研判唤醒', () => {
     expect(followup).toHaveBeenCalledTimes(1)
     const msg = followup.mock.calls[0]![0] as {
       role: string
-      source: { kind: string; plugin: string; form: string }
+      source: { kind: string; form: string }
       content: Array<{ type: string; text: string }>
     }
     expect(msg.role).toBe('user')
-    expect(msg.source.kind).toBe('plugin')
+    expect(msg.source.kind).toBe('dsh-finance')
+    expect(msg.source.kind).not.toBe('plugin')
+    expect(msg.source.kind.length).toBeGreaterThan(0)
     expect(msg.source.form).toBe('notice')
     expect(msg.content[0]!.text).toContain('588000')
     expect(msg.content[0]!.text).toContain('盘中脉冲')

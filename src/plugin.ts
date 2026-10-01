@@ -40,13 +40,28 @@ export {
   ensurePinnedSession,
   resolveAgentOptions,
   applySessionEnsure,
+  attachPinnedSessionToWorkspace,
   type SessionEnsureDeps,
   type EnsureAgent,
   type EnsureAgentOptions,
   type EnsureAgentHandle,
   type EnsureOutcome,
   type AgentDefaultModelLike,
+  type WorkspaceRegistryLike,
+  type WorkspaceLike,
 } from './session-ensure.js'
+export {
+  OPENING_NOTICE_TEXT,
+  OPENING_NOTICE_SUMMARY,
+  buildOpeningNoticeMessage,
+  isSessionBlank,
+  deliverOpeningNotice,
+  type OpeningNoticeAgent,
+  type OpeningNoticeAgents,
+  type OpeningNoticeDeps,
+  type OpeningNoticeResult,
+  type SessionProjectionsLike,
+} from './opening-notice.js'
 
 /** Cordis 函数式插件标识。 */
 export const name = 'investment-advisor'

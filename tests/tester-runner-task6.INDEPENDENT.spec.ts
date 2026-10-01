@@ -930,16 +930,20 @@ describe('[附加] 复盘 / 盘前固定唤醒', () => {
 })
 
 describe('[附加] 唤醒消息结构与摘要上限', () => {
-  it('plugin/notice 形态 + 正文含 symbol + 摘要 <= 120', () => {
+  it('producer-owned kind（dsh-finance，非 plugin）+ notice 形态 + 正文含 symbol + 摘要 <= 120', () => {
     const msg = buildWakeMessage({ reason: 'pulse', symbol: '588000', summary: 'x'.repeat(200) })
     expect(msg.role).toBe('user')
-    expect(msg.source.kind).toBe('plugin')
-    expect(msg.source.plugin).toBe(PLUGIN_SOURCE_NAME)
+    expect(msg.source.kind).toBe('dsh-finance')
+    expect(msg.source.kind).toBe(PLUGIN_SOURCE_NAME)
+    expect(msg.source.kind).not.toBe('plugin')
+    expect(msg.source.kind.length).toBeGreaterThan(0)
     expect(msg.source.form).toBe('notice')
     expect(msg.source.summary.length).toBeLessThanOrEqual(WAKE_SUMMARY_MAX_CHARS)
     expect(msg.content[0]!.type).toBe('text')
     expect(msg.content[0]!.text).toContain('588000')
     expect(typeof msg.id).toBe('string')
+    expect(msg.id.length).toBeGreaterThan(0)
+    expect('plugin' in msg.source).toBe(false)
     expect(boundSummary('短', 5)).toBe('短')
   })
 })

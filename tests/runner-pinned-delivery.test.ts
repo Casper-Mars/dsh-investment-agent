@@ -96,14 +96,15 @@ describe('定点投递 createAgentWaker（AC1/AC2/AC3）', () => {
     expect(a.followup).not.toHaveBeenCalled()
     expect(b.followup).not.toHaveBeenCalled()
 
-    // 校验投递的 payload 消息为 plugin/notice 形态，正文含 symbol。
+    // 校验投递的 payload 消息为 producer-owned kind/notice 形态，正文含 symbol。
     const msg = pinned.followup.mock.calls[0]![0] as {
       role: string
-      source: { kind: string; plugin: string; form: string }
+      source: { kind: string; form: string }
       content: Array<{ type: string; text: string }>
     }
     expect(msg.role).toBe('user')
-    expect(msg.source.kind).toBe('plugin')
+    expect(msg.source.kind).toBe('dsh-finance')
+    expect(msg.source.kind).not.toBe('plugin')
     expect(msg.source.form).toBe('notice')
     expect(msg.content[0]!.text).toContain('588000')
   })

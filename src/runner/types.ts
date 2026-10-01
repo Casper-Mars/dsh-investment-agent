@@ -3,8 +3,10 @@
  *
  * 设计约束（详细设计 §6 / §8）：本插件顶层 `inject` 固定为
  * `['tools','skills','ptcRuntime','fs']`，且**不把** `@deepseek-ai/dsh-ptc-runtime` /
- * `@deepseek-ai/dsh-sandbox` / `@deepseek-ai/dsh-agent` / `@deepseek-ai/dsh-llm`
- * 加入本包依赖（它们仅作为 dsh-tools 的传递依赖存在于 pnpm store，顶层不可解析）。
+ * `@deepseek-ai/dsh-sandbox` / `@deepseek-ai/dsh-agent` 加入本包依赖（它们仅作为
+ * dsh-tools 的传递依赖存在于 pnpm store，顶层不可解析）。
+ * `@deepseek-ai/dsh-llm` 自 Task-15 修复轮 2 起作为直接依赖（peer + dev，对齐
+ * `0.2.0-rc.2`），仅用于消息源构造（见 `src/message-source.ts`）。
  *
  * 因此这里按需声明与 harness 源码**逐字对齐**的最小结构契约，用于类型标注 /
  * 边界断言，运行时通过 `ctx.get('ptcRuntime')` 软取真实服务。这样：

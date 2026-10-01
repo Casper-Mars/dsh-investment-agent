@@ -15,53 +15,41 @@
  *   - `agent` 运行时面（`@deepseek-ai/dsh-agent` 声明合并）提供
  *     `.followup(msg)`（排队 follow-up turn 并唤醒）/ `.inject(msg)`（不唤醒）/ `.status`。
  *
- * 本模块不引入上述包（顶层不可解析），改为：
- *   1. 用**结构等价的**最小类型描述 agent / registry / message；
- *   2. 本地构造 UserMessage（`id` 取 `randomUUID()`；`MessageId` 是编译期 brand，
- *      运行时即普通字符串，故结构等价）；
- *   3. **降级固定为 skip**（NFR-03）：固定会话不可达（`get` 未命中 / registry
- *      不可用 / 投递抛错）时记日志并返回 0，**不抛异常、不中断调度链**，
- *      **不提供配置开关**。
+ * 消息构造（Task-15 修复轮 2）：改用官方 `createUserMessage`
+ * （`@deepseek-ai/dsh-llm`）构造，`source.kind` 取 producer 自有 kind
+ * `'dsh-finance'`（V4 契约，非退役的 `'plugin'` 包装；契约集中在
+ * `src/message-source.ts`）。agent / registry 仍用**结构等价**的最小类型描述
+ * （不引入 `@deepseek-ai/dsh-agent`，顶层不可解析）。
+ *
+ * 降级固定为 skip（NFR-03）：固定会话不可达（`get` 未命中 / registry 不可用 /
+ * 投递抛错）时记日志并返回 0，**不抛异常、不中断调度链**，**不提供配置开关**。
  */
-import { randomUUID } from 'node:crypto'
 import type { PtcJsonValue, SensorRunReason, SensorWakePayload, SensorWaker } from './types.js'
 import { RISK_DISCLAIMER } from '../tools/constants.js'
 import { PINNED_SESSION_ID } from '../session.js'
+import {
+  PRODUCER_KIND,
+  createNoticeMessage,
+  type NoticeUserMessage,
+} from '../message-source.js'
 
-/** 投递消息的插件源标识。 */
-export const PLUGIN_SOURCE_NAME = 'dsh-finance'
+/** 投递消息的生产者源标识（producer-owned kind，V4 契约）。 */
+export const PLUGIN_SOURCE_NAME = PRODUCER_KIND
 
 /** notice 摘要长度上限（对齐 harness `CONTEXT_SUMMARY_MAX_CHARS`）。 */
 export const WAKE_SUMMARY_MAX_CHARS = 120
 
-/** 程序（模型）可见的文本内容块。 */
-export interface WakeContentBlock {
-  type: 'text'
-  text: string
-}
-
-/** 插件 notice 形态的消息源。 */
-export interface WakeMessageSource {
-  kind: 'plugin'
-  plugin: string
-  form: 'notice'
-  summary: string
-}
-
-/** 结构等价的 `UserMessage`。 */
-export interface WakeUserMessage {
-  id: string
-  role: 'user'
-  content: WakeContentBlock[]
-  source: WakeMessageSource
-  [key: string]: unknown
-}
+/**
+ * @deprecated 结构等价 UserMessage 的别名（Task-15 起已收敛为
+ * {@link NoticeUserMessage}，保留以兼容既有导入）。
+ */
+export type WakeUserMessage = NoticeUserMessage
 
 /** agent 的最小结构契约（运行时面）。 */
 export interface AgentLike {
   readonly id: string
-  followup(message: WakeUserMessage): void
-  inject?(message: WakeUserMessage): void
+  followup(message: NoticeUserMessage): void
+  inject?(message: NoticeUserMessage): void
   readonly status?: 'idle' | 'running'
 }
 
@@ -109,26 +97,13 @@ export function buildWakeText(payload: SensorWakePayload): string {
 }
 
 /**
- * 构造一条唤醒 UserMessage（结构等价 `createUserMessage` 的产物）。
+ * 构造一条唤醒 UserMessage（官方 `createUserMessage` 产物，`source.kind` 为
+ * producer 自有 `'dsh-finance'`、`form: 'notice'`）。
  *
  * @param payload 唤醒载荷。
- * @param idFactory 消息 id 工厂（默认 `randomUUID`，便于测试注入）。
  */
-export function buildWakeMessage(
-  payload: SensorWakePayload,
-  idFactory: () => string = randomUUID,
-): WakeUserMessage {
-  return {
-    id: idFactory(),
-    role: 'user',
-    content: [{ type: 'text', text: buildWakeText(payload) }],
-    source: {
-      kind: 'plugin',
-      plugin: PLUGIN_SOURCE_NAME,
-      form: 'notice',
-      summary: boundSummary(payload.summary),
-    },
-  }
+export function buildWakeMessage(payload: SensorWakePayload): NoticeUserMessage {
+  return createNoticeMessage(buildWakeText(payload), boundSummary(payload.summary))
 }
 
 /**
