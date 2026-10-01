@@ -23,6 +23,13 @@
  *
  * 降级固定为 skip（NFR-03）：固定会话不可达（`get` 未命中 / registry 不可用 /
  * 投递抛错）时记日志并返回 0，**不抛异常、不中断调度链**，**不提供配置开关**。
+ *
+ * 职责边界（§10.1，感知层与策略解耦）：本模块属于「感知层 = 机制」
+ * （投递器），**与策略无关**——只负责「必要时叫醒固定会话」，不认识策略。
+ * 感知程序 = 内容（agent 生成的代码，全局唯一、标的无关）为策略服务：
+ * 策略声明「要什么」，感知程序实现「怎么看」。二者**不直连**，耦合发生在
+ * **生成时**（agent 把策略需求翻译成感知程序）与**复盘时**（可能同时更新
+ * 策略与感知程序）。策略/感知/工具的关系见详细设计 §10。
  */
 import type { PtcJsonValue, SensorRunReason, SensorWakePayload, SensorWaker } from './types.js'
 import { RISK_DISCLAIMER } from '../tools/constants.js'
