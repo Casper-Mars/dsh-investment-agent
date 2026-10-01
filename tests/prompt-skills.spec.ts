@@ -1,12 +1,12 @@
 /**
- * Task 5 验收测试：Prompt 注入（advisor.md）+ 4 个技术面 SKILL。
+ * Task 5 验收测试：Prompt 注入（advisor.md）+ 5 个技术面 SKILL。
  *
  * 覆盖验收标准：
  *   1. advisor.md 含角色/原则/工作流/合规四块，末尾明确「本内容不构成投资建议」。
- *   2. 4 个 SKILL.md 均含 frontmatter 的 name/description/whenToUse，name 为 kebab-case。
+ *   2. 5 个 SKILL.md 均含 frontmatter 的 name/description/whenToUse，name 为 kebab-case。
  *   3. prompt 与 skill 全文不出现写死的标的价格/阈值（数值用「从配置读取」占位）。
  *   4. sense-authorship 完整描述感知脚本结构、变更类型 keep/patch/replace、归档规范。
- *   5. apply(ctx) 注册后 4 个 skill 可被 ctx.skills 发现、advisor.md 注入 system-prompt。
+ *   5. apply(ctx) 注册后 5 个 skill 可被 ctx.skills 发现、advisor.md 注入 system-prompt。
  *
  * 另含：frontmatter 解析器单测、copy-assets 产物路径可解析校验。
  */
@@ -71,12 +71,12 @@ describe('验收 1：advisor.md 人设内容', () => {
 })
 
 /* ------------------------------------------------------------------ *
- * 验收 2：4 个 SKILL.md 的 frontmatter
+ * 验收 2：5 个 SKILL.md 的 frontmatter
  * ------------------------------------------------------------------ */
 
-describe('验收 2：4 个 SKILL.md frontmatter（name/description/whenToUse）', () => {
-  it('SKILL_NAMES 恰为 4 个且均为 kebab-case', () => {
-    expect(SKILL_NAMES).toHaveLength(4)
+describe('验收 2：5 个 SKILL.md frontmatter（name/description/whenToUse）', () => {
+  it('SKILL_NAMES 恰为 5 个且均为 kebab-case', () => {
+    expect(SKILL_NAMES).toHaveLength(5)
     for (const n of SKILL_NAMES) expect(SKILL_NAME_PATTERN.test(n)).toBe(true)
   })
 
@@ -101,7 +101,7 @@ describe('验收 2：4 个 SKILL.md frontmatter（name/description/whenToUse）'
     expect(reg.content).toBe(parseSkill(name).content)
   })
 
-  it('createAllSkillRegistrations 返回 4 个注册对象', () => {
+  it('createAllSkillRegistrations 返回 5 个注册对象', () => {
     const regs = createAllSkillRegistrations()
     expect(regs.map((r) => r.name).sort()).toEqual([...SKILL_NAMES].sort())
   })
@@ -238,8 +238,8 @@ async function newSkillContext(): Promise<Context> {
   return ctx
 }
 
-describe('验收 5：经真实 SkillRegistry 加载 / 卸载 4 个 SKILL', () => {
-  it('注册后 4 个 skill 均可在目录中列出，get() 返回正文；注销后消失', async () => {
+describe('验收 5：经真实 SkillRegistry 加载 / 卸载 5 个 SKILL', () => {
+  it('注册后 5 个 skill 均可在目录中列出，get() 返回正文；注销后消失', async () => {
     const ctx = await newSkillContext()
     const dispose = registerAllSkills(ctx)
 
@@ -315,7 +315,7 @@ describe('验收 5：advisor 人设 section 契约', () => {
 })
 
 /* ------------------------------------------------------------------ *
- * 插件 apply 接入：mock ctx 注册 4 skill + 1 prompt section
+ * 插件 apply 接入：mock ctx 注册 5 skill + 1 prompt section
  * ------------------------------------------------------------------ */
 
 describe('插件 apply 接入', () => {
@@ -358,11 +358,11 @@ describe('插件 apply 接入', () => {
     return { ctx, registeredSkills, injectedSections }
   }
 
-  it('apply 注册 4 个 skill + 1 个 prompt section，且不抛异常', () => {
+  it('apply 注册 5 个 skill + 1 个 prompt section，且不抛异常', () => {
     const { ctx, registeredSkills, injectedSections } = makeMockCtx()
     expect(() => apply(ctx)).not.toThrow()
 
-    expect(registeredSkills).toHaveLength(4)
+    expect(registeredSkills).toHaveLength(5)
     expect(registeredSkills.map((s) => s.name).sort()).toEqual([...SKILL_NAMES].sort())
     expect(registeredSkills.every((s) => s.source === 'runtime')).toBe(true)
     expect(registeredSkills.every((s) => s.content.length > 100)).toBe(true)

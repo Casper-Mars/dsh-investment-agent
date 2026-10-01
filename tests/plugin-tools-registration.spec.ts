@@ -202,6 +202,6 @@ describe('t100363 插件装配：18 个工具经 apply 注册', () => {
     } as unknown as Context
 
     expect(() => apply(ctx)).not.toThrow()
-    expect(registered).toHaveLength(4)
+    expect(registered).toHaveLength(5)
   })
 })

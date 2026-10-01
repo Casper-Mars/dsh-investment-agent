@@ -7,7 +7,7 @@
  *
  * 覆盖（对应建议测试方式 1-8）：
  *   1. frontmatter 解析边界（正常 / CRLF / BOM / 转义 / 缺 description / 非 kebab / 缺 whenToUse）
- *   2. 4 个 SKILL.md 逐字段校验（含用 harness 权威 isSkillName 复核 kebab-case）
+ *   2. 5 个 SKILL.md 逐字段校验（含用 harness 权威 isSkillName 复核 kebab-case）
  *   3. 真实 SkillRegistry 注册 / 发现 / 注销
  *   4. system-prompt 注入契约（stub + 真实 cordis 双路）
  *   5. 顶层 inject 契约不变
@@ -41,7 +41,7 @@ import {
 import { apply, inject as topLevelInject } from '../src/plugin'
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
-const EXPECTED_SKILLS = ['trend-analysis', 'grid-strategy', 'stop-rule', 'sense-authorship']
+const EXPECTED_SKILLS = ['trend-analysis', 'grid-strategy', 'stop-rule', 'strategy-authorship', 'sense-authorship']
 
 /** 5 份待扫描全文（验收点 3 的扫描面）。 */
 function allTexts(): Array<[string, string]> {
@@ -111,12 +111,12 @@ describe('[1] frontmatter 解析边界', () => {
 })
 
 /* ================================================================== *
- * 2. 4 个 SKILL.md 校验
+ * 2. 5 个 SKILL.md 校验
  * ================================================================== */
 
-describe('[2] 4 个 SKILL.md 逐字段校验', () => {
-  it('SKILL_NAMES 恰为 4 个（顺序即注册顺序）', () => {
-    expect(SKILL_NAMES).toHaveLength(4)
+describe('[2] 5 个 SKILL.md 逐字段校验', () => {
+  it('SKILL_NAMES 恰为 5 个（顺序即注册顺序）', () => {
+    expect(SKILL_NAMES).toHaveLength(5)
   })
 
   it('SKILL_NAMES 与预期集合一致', () => {
@@ -160,7 +160,7 @@ describe('[3] 真实 SkillRegistry 注册发现', () => {
     const ctx = new Context()
     await (ctx.plugin(SkillRegistry as never) as Promise<unknown>)
 
-    // 前置：干净上下文里没有这 4 个 skill。
+    // 前置：干净上下文里没有这 5 个 skill。
     const before = await ctx.skills.list({})
     expect(before.filter((s) => EXPECTED_SKILLS.includes(s.name))).toHaveLength(0)
 
@@ -306,7 +306,7 @@ describe('[0] advisor.md 人设结构', () => {
  * ================================================================== */
 
 describe('[5b] 真实 cordis 下 apply(ctx) 端到端装配', () => {
-  it('apply 后 4 个 skill 可经 ctx.skills 发现，且 advisor section 被注入', async () => {
+  it('apply 后 5 个 skill 可经 ctx.skills 发现，且 advisor section 被注入', async () => {
     const ctx = new Context()
     await (ctx.plugin(SkillRegistry as never) as Promise<unknown>)
 
@@ -426,7 +426,7 @@ describe('[7] sense-authorship 完整性', () => {
  * ================================================================== */
 
 describe('[8] copy-assets 产物与编译态路径', () => {
-  it('搬运后 dist-server 下 5 个 .md 存在且与源码一致，编译态 new URL 可解析', async () => {
+  it('搬运后 dist-server 下 6 个 .md 存在且与源码一致，编译态 new URL 可解析', async () => {
     execFileSync('node', ['scripts/copy-assets.mjs'], { cwd: REPO_ROOT, stdio: 'ignore' })
 
     const checks: Array<[string, string]> = [
