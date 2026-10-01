@@ -113,6 +113,40 @@ export interface SenseVersionFull {
 }
 
 // ---------------------------------------------------------------------------
+// 策略域（per-symbol 策略文档 + 版本链）类型，对应详细设计 §10.4 / §10.6。
+// 策略是 per-symbol 的文本实体（Markdown），首版即启用版本链，每版带 rationale。
+// ---------------------------------------------------------------------------
+
+/** 策略版本提交输入（对应 strategy_set 工具参数，§10.8）。 */
+export interface StrategyVersionInput {
+  /** 策略文档正文（Markdown）。 */
+  text: string
+  /** 本次版本的理由（agent 为什么这么写 / 为什么改）。 */
+  rationale: string
+  /** 上一版版本号；非首版必填，首版省略。 */
+  parentVersion?: string
+  /** 生成者。 */
+  by?: string
+}
+
+/** 策略版本元数据（meta.json 去序列化形态）。 */
+export interface StrategyVersionMeta {
+  version: string
+  rationale: string
+  ts: string
+  parent?: string
+  by?: string
+}
+
+/** 策略全文（含正文 + 版本元数据）。 */
+export interface StrategyFull {
+  symbol: string
+  text: string
+  version: string
+  meta: StrategyVersionMeta
+}
+
+// ---------------------------------------------------------------------------
 // predicts 域（预判）与 reviews 域（复盘）类型。
 // 对应详细设计 §7.1 的 predictions / reviews / metrics 三张表。
 // ---------------------------------------------------------------------------

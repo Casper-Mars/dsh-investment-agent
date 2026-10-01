@@ -17,7 +17,6 @@
  *       reviews.json     # Review[]
  *       metrics.json     # Metric[]
  *       thresholds.json  # Thresholds
- *       strategy.json    # Strategy
  *     000001/ ...
  * ```
  *
@@ -54,7 +53,6 @@ export type LedgerTable =
   | 'reviews'
   | 'metrics'
   | 'thresholds'
-  | 'strategy'
 
 /** 标的元数据（symbols 表）。 */
 export interface SymbolRecord {
