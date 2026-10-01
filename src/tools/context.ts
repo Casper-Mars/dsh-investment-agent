@@ -1,11 +1,11 @@
 /**
  * Agent 工具层：ToolContext 工厂 —— dataRoot 统一注入点。
  *
- * 16 个工具需共享同一份数据根目录。本工厂在构造时：
+ * 18 个工具需共享同一份数据根目录。本工厂在构造时：
  *   1. 解析 dataRoot（构造注入优先，缺省回退到环境变量
  *      `DSH_FINANCE_DATA_DIR`，再回退到 `<cwd>/.dsh-finance/data`）；
- *   2. 用该 dataRoot 实例化四个 domain 类（Ledger / Predicts / Reviews /
- *      SenseRegistry）各一次；
+ *   2. 用该 dataRoot 实例化五个 domain 类（Ledger / Predicts / Reviews /
+ *      SenseRegistry / StrategyRegistry）各一次；
  *   3. 工具闭包通过捕获这些实例共享同一数据源，保证「single dataRoot」。
  *
  * dataRoot 与 plugin 层衔接：plugin.ts 后续可经 `ctx.get('fs')` 解析插件
@@ -19,6 +19,7 @@ import { Ledger } from '../domain/ledger.js'
 import { Predicts } from '../domain/predicts.js'
 import { Reviews } from '../domain/reviews.js'
 import { SenseRegistry } from '../domain/sense-registry.js'
+import { StrategyRegistry } from '../domain/strategy.js'
 import { JsonStore } from '../domain/store.js'
 import type { AssetType, Thresholds } from '../domain/types.js'
 
@@ -43,7 +44,7 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
   missStreakMax: 3,
 }
 
-/** 领域类实例容器：16 个工具闭包共享。 */
+/** 领域类实例容器：18 个工具闭包共享。 */
 export interface ToolContext {
   /** 数据根目录（绝对路径）。 */
   readonly dataRoot: string
@@ -55,6 +56,8 @@ export interface ToolContext {
   readonly reviews: Reviews
   /** 感知版本注册表。 */
   readonly senseRegistry: SenseRegistry
+  /** 策略文档注册表。 */
+  readonly strategy: StrategyRegistry
   /** 可选行情源（用于 review_metrics 现价；缺省时不注入）。 */
   readonly quotes?: QuotePriceSource
   /** 读标的阈值配置（无则返回默认阈值）。 */
@@ -83,7 +86,7 @@ function resolveDataRoot(explicit?: string): string {
 }
 
 /**
- * 构造 ToolContext：注入 dataRoot，实例化四大 domain 类。
+ * 构造 ToolContext：注入 dataRoot，实例化五大 domain 类。
  *
  * @param opts 数据根目录配置。
  * @returns 共享同一 dataRoot 的领域实例容器。
@@ -99,6 +102,7 @@ export function createToolContext(opts: ToolContextOptions = {}): ToolContext {
     predicts: new Predicts(dataRoot),
     reviews: new Reviews(dataRoot, ledger),
     senseRegistry: new SenseRegistry(dataRoot),
+    strategy: new StrategyRegistry(dataRoot),
     quotes,
     getThresholds(symbol: string): Thresholds {
       const t = store.readTable<Thresholds>(symbol, 'thresholds')

@@ -1,14 +1,14 @@
 /**
- * 回归测试（t100363）：插件 `apply` 装配阶段必须注册 16 个模型工具。
+ * 回归测试（t100363）：插件 `apply` 装配阶段必须注册 18 个模型工具。
  *
  * 背景：此前 `src/plugin.ts` 的 `apply` 只注册 skills + advisor + runner，
- * 漏接 `registerAllTools`，导致 16 个工具对模型不可用。本测试锁定该修复：
+ * 漏接 `registerAllTools`，导致工具对模型不可用。本测试锁定该修复：
  *
  *   1. 真实装载：`new Context()` → 提供 `systemPrompt`（ToolRuntime 依赖）与
  *      `skills` / `ptcRuntime` / `fs` 桩 → `plugin(ToolRuntime)` 提供真实
  *      `ctx.tools` → 以**真实插件**（`src/plugin.ts` 的 name/inject/apply）
- *      驱动装载 → 断言 `ctx.tools` 恰好暴露 16 个工具（名称/分组逐一相符）。
- *   2. 注销绑定：dispose 插件 fiber 后 16 个工具全部消失（经 `ctx.effect` 注销）。
+ *      驱动装载 → 断言 `ctx.tools` 恰好暴露 18 个工具（名称/分组逐一相符）。
+ *   2. 注销绑定：dispose 插件 fiber 后 18 个工具全部消失（经 `ctx.effect` 注销）。
  *   3. 安全降级：`ctx.tools` 不可用的最小上下文下 `apply` 不抛错、不注册。
  *   4. 顶层 `inject` 契约保持 `['tools','skills','ptcRuntime','fs']` 不变。
  *
@@ -29,9 +29,10 @@ interface ToolBox {
   get: (name: string) => unknown
 }
 
-/** 16 个工具的期望名称集合（按 §4 契约表分组）。 */
+/** 18 个工具的期望名称集合（按 §4 契约表 + §10.8 策略域分组）。 */
 const EXPECTED_TOOLS = {
   ledgers: ['ledger_init', 'ledger_list', 'ledger_query', 'ledger_trade'],
+  strategy: ['strategy_get', 'strategy_set'],
   predicts: ['predict_make', 'predict_verify', 'predict_get'],
   reviews: [
     'review_check',
@@ -119,24 +120,24 @@ async function bootPlugin(dataRoot: string) {
   }
 }
 
-describe('t100363 插件装配：16 个工具经 apply 注册', () => {
+describe('t100363 插件装配：18 个工具经 apply 注册', () => {
   it('顶层 inject 契约保持 [tools, skills, ptcRuntime, fs]', () => {
     expect(topLevelInject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
   })
 
-  it('真实装载后 ctx.tools 恰好暴露 16 个工具，名称/分组逐一相符', async () => {
+  it('真实装载后 ctx.tools 恰好暴露 18 个工具，名称/分组逐一相符', async () => {
     const booted = await bootPlugin(makeTmpDataRoot())
     try {
       await vi.waitFor(
         () => {
-          expect(booted.tools.schemas()).toHaveLength(16)
+          expect(booted.tools.schemas()).toHaveLength(18)
         },
         { timeout: 5000, interval: 10 },
       )
 
       const names = booted.tools.schemas().map((s) => s.name)
-      expect(names).toHaveLength(16)
-      expect(new Set(names).size).toBe(16)
+      expect(names).toHaveLength(18)
+      expect(new Set(names).size).toBe(18)
       expect([...names].sort()).toEqual([...ALL_EXPECTED].sort())
       for (const group of Object.values(EXPECTED_TOOLS)) {
         for (const name of group) expect(booted.tools.get(name)).toBeDefined()
@@ -146,11 +147,11 @@ describe('t100363 插件装配：16 个工具经 apply 注册', () => {
     }
   })
 
-  it('dispose 插件 fiber 后 16 个工具全部注销（ctx.effect 绑定生效）', async () => {
+  it('dispose 插件 fiber 后 18 个工具全部注销（ctx.effect 绑定生效）', async () => {
     const booted = await bootPlugin(makeTmpDataRoot())
     await vi.waitFor(
       () => {
-        expect(booted.tools.schemas()).toHaveLength(16)
+        expect(booted.tools.schemas()).toHaveLength(18)
       },
       { timeout: 5000, interval: 10 },
     )

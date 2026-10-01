@@ -13,6 +13,32 @@
  */
 
 /* -------------------------------------------------------------------------- *
+ * 4.x strategy 域（详细设计 §10.8）
+ * -------------------------------------------------------------------------- */
+
+/** strategy_get 成功返回：`{ symbol, text, version, updated_at }`。 */
+export const strategyGetResultSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    symbol: { type: 'string', required: true, description: '标的代码' },
+    text: { type: 'string', required: true, description: '策略文档正文（Markdown）' },
+    version: { type: 'string', required: true, description: '版本号（vNNN）' },
+    updated_at: { type: 'string', required: true, description: '该版本归档时间（ISO 8601）' },
+  },
+} as const
+
+/** strategy_set 成功返回：`{ ok, version }`。 */
+export const strategySetResultSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ok: { type: 'boolean', required: true, description: '是否落库成功（恒 true）' },
+    version: { type: 'string', required: true, description: '新生成的版本号' },
+  },
+} as const
+
+/* -------------------------------------------------------------------------- *
  * 4.1 ledger 域
  * -------------------------------------------------------------------------- */
 

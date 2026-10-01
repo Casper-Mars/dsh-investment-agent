@@ -1,5 +1,5 @@
 /**
- * Agent 工具层入口：装配并注册 16 个工具（4 ledger + 3 predicts + 5 reviews + 4 sense_archives）。
+ * Agent 工具层入口：装配并注册 18 个工具（4 ledger + 2 strategy + 3 predicts + 5 reviews + 4 sense_archives）。
  *
  * 数据访问：全部经 {@link ToolContext} 走 domain 层（本地 JSON CRUD），无 HTTP 层。
  *   domain 层仅依赖 node:fs；工具层唯一外部包依赖是 `@deepseek-ai/dsh-tools`（defineTool）。
@@ -15,19 +15,21 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { createToolContext, type ToolContext, type ToolContextOptions } from './context.js'
 import { createLedgerTools } from './ledgers.js'
+import { createStrategyTools } from './strategy.js'
 import { createPredictTools } from './predicts.js'
 import { createReviewTools } from './reviews.js'
 import { createSenseArchiveTools } from './sense-archives.js'
 
 /**
- * 构造 16 个工具定义（顺序即向模型暴露的顺序）：
- *   ledgers(4) → predicts(3) → reviews(5) → sense_archives(4)。
+ * 构造 18 个工具定义（顺序即向模型暴露的顺序）：
+ *   ledgers(4) → strategy(2) → predicts(3) → reviews(5) → sense_archives(4)。
  *
  * 所有工具共享同一个 {@link ToolContext}（shared dataRoot）。
  */
 export function createAllTools(ctx: ToolContext): ToolDefinition[] {
   return [
     ...createLedgerTools(ctx),
+    ...createStrategyTools(ctx),
     ...createPredictTools(ctx),
     ...createReviewTools(ctx),
     ...createSenseArchiveTools(ctx),
@@ -43,7 +45,7 @@ function registerTools(ctx: Context, tools: ToolDefinition[]): () => void {
 }
 
 /**
- * 在当前上下文注册全部 16 个工具，返回注销器。
+ * 在当前上下文注册全部 18 个工具，返回注销器。
  *
  * @param ctx 插件上下文（已 `inject = ['tools', ...]`，`ctx.tools` 就绪）。
  * @param opts 数据根目录配置；默认 `createToolContext()`（dataRoot 取环境变量 / 默认值）。

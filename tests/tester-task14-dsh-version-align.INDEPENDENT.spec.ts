@@ -48,9 +48,10 @@ interface ToolBox {
   register: (tool: unknown) => () => void
 }
 
-/** 16 个工具的期望名称（按 §4 契约分组：ledgers 4 + predicts 3 + reviews 5 + sense_archives 4）。 */
+/** 18 个工具的期望名称（按 §4 契约分组：ledgers 4 + strategy 2 + predicts 3 + reviews 5 + sense_archives 4）。 */
 const EXPECTED = {
   ledgers: ['ledger_init', 'ledger_list', 'ledger_query', 'ledger_trade'],
+  strategy: ['strategy_get', 'strategy_set'],
   predicts: ['predict_make', 'predict_verify', 'predict_get'],
   reviews: [
     'review_check',
@@ -251,18 +252,18 @@ describe('Task-14 复验 B：真实构建产物（dist-server）装载与运行�
     )
   })
 
-  it('B2·★ 真实装载：apply 不抛异常，ctx.tools 恰好暴露 16 个工具（名称逐一核对）', async () => {
+  it('B2·★ 真实装载：apply 不抛异常，ctx.tools 恰好暴露 18 个工具（名称逐一核对）', async () => {
     const b = await bootDistPlugin(makeTmpDataRoot())
     try {
       // apply 经 app.plugin() 同步执行不抛异常（bootDistPlugin 未抛即为通过）。
       await vi_waitFor(
-        () => expect(b.tools.schemas()).toHaveLength(16),
+        () => expect(b.tools.schemas()).toHaveLength(18),
         8000,
       )
 
       const names = b.tools.schemas().map((s) => s.name)
-      expect(names).toHaveLength(16)
-      expect(new Set(names).size).toBe(16)
+      expect(names).toHaveLength(18)
+      expect(new Set(names).size).toBe(18)
       expect([...names].sort()).toEqual([...ALL_EXPECTED].sort())
 
       for (const [group, groupNames] of Object.entries(EXPECTED)) {
@@ -274,17 +275,17 @@ describe('Task-14 复验 B：真实构建产物（dist-server）装载与运行�
         expect(s.description.length, `${s.name} description 非空`).toBeGreaterThan(0)
       }
       console.log(
-        `[EVIDENCE B2] ctx.tools.schemas() count=16 :: ${[...names].sort().join(', ')}`,
+        `[EVIDENCE B2] ctx.tools.schemas() count=18 :: ${[...names].sort().join(', ')}`,
       )
     } finally {
       await b.dispose()
     }
   })
 
-  it('B3·★ dispose 插件 fiber 后 16 工具全部注销', async () => {
+  it('B3·★ dispose 插件 fiber 后 18 工具全部注销', async () => {
     const b = await bootDistPlugin(makeTmpDataRoot())
     try {
-      await vi_waitFor(() => expect(b.tools.schemas()).toHaveLength(16), 8000)
+      await vi_waitFor(() => expect(b.tools.schemas()).toHaveLength(18), 8000)
 
       await b.pluginFiber.dispose()
 
@@ -292,7 +293,7 @@ describe('Task-14 复验 B：真实构建产物（dist-server）装载与运行�
       for (const n of ALL_EXPECTED) {
         expect(b.tools.get(n), `${n} 应已注销`).toBeUndefined()
       }
-      console.log('[EVIDENCE B3] after pluginFiber.dispose(): schemas()=0, 16 工具全部注销')
+      console.log('[EVIDENCE B3] after pluginFiber.dispose(): schemas()=0, 18 工具全部注销')
     } finally {
       await b.toolsFiber.dispose()
     }

@@ -79,7 +79,7 @@ async function bootRegistry(dataRoot: string): Promise<Booted> {
   const tools = (app as unknown as { tools: ToolBox }).tools
   await vi.waitFor(
     () => {
-      expect(tools.schemas()).toHaveLength(16)
+      expect(tools.schemas()).toHaveLength(18)
     },
     { timeout: 5000, interval: 10 },
   )
@@ -120,6 +120,7 @@ const valueOf = (r: RegistryResult): unknown => r.value
 const WRITE_TOOLS = [
   'ledger_init',
   'ledger_trade',
+  'strategy_set',
   'predict_make',
   'review_report',
   'sense_archive_commit',
@@ -129,6 +130,7 @@ const WRITE_TOOLS = [
 const READ_TOOLS = [
   'ledger_list',
   'ledger_query',
+  'strategy_get',
   'predict_verify',
   'predict_get',
   'review_check',
@@ -147,6 +149,8 @@ const SCHEMA_FIELDS: Record<string, string[]> = {
     'symbol', 'type', 'name', 'qty', 'avg_cost', 'cash', 'realized_pnl', 'float_pnl',
   ],
   ledger_trade: ['ok', 'trade_id', 'new_qty', 'avg_cost'],
+  strategy_get: ['symbol', 'text', 'version', 'updated_at'],
+  strategy_set: ['ok', 'version'],
   predict_make: ['ok', 'prediction_id'],
   predict_verify: ['hit_dir', 'hit_range', 'deviation'],
   predict_get: ['prediction'],
@@ -207,41 +211,44 @@ afterEach(async () => {
 describe('验收点 1：工具注册数量/名称 + schema 合法性 + ctx.tools 可见', () => {
   const EXPECTED = [
     'ledger_init', 'ledger_list', 'ledger_query', 'ledger_trade',
+    'strategy_get', 'strategy_set',
     'predict_make', 'predict_verify', 'predict_get',
     'review_check', 'review_report', 'review_get', 'review_metrics', 'review_retrospect',
     'sense_archive_commit', 'sense_archive_list', 'sense_archive_rollback', 'sense_archive_get',
   ]
 
-  it('真实 registry 恰好暴露 16 个工具，名称/顺序与 §4 契约表一致', () => {
+  it('真实 registry 恰好暴露 18 个工具，名称/顺序与 §4 契约表一致', () => {
     const names = tools.schemas().map((s) => s.name)
-    expect(names.length).toBe(16)
+    expect(names.length).toBe(18)
     expect(names).toEqual(EXPECTED)
     // 无重复
-    expect(new Set(names).size).toBe(16)
+    expect(new Set(names).size).toBe(18)
     console.log(`[EVIDENCE AC1] registered count=${names.length} names=${names.join(',')}`)
   })
 
-  it('【核报】工具数量实为 16（任务描述写 15 = 与分组明细冲突，按 §4 契约表）', () => {
-    // 任务描述「共 15 个」；分组明细 4+3+5+4=16；实现为 16。
+  it('【核报】工具数量实为 18（§4 契约 16 + §10.8 策略域 2）', () => {
     const groups: Record<string, string[]> = {}
     for (const n of EXPECTED) {
       const g = n.startsWith('ledger')
         ? 'ledgers'
-        : n.startsWith('predict')
-          ? 'predicts'
-          : n.startsWith('review')
-            ? 'reviews'
-            : 'sense_archives'
+        : n.startsWith('strategy')
+          ? 'strategy'
+          : n.startsWith('predict')
+            ? 'predicts'
+            : n.startsWith('review')
+              ? 'reviews'
+              : 'sense_archives'
       ;(groups[g] ??= []).push(n)
     }
     expect(groups.ledgers).toHaveLength(4)
+    expect(groups.strategy).toHaveLength(2)
     expect(groups.predicts).toHaveLength(3)
     expect(groups.reviews).toHaveLength(5)
     expect(groups.sense_archives).toHaveLength(4)
-    expect(tools.schemas().length).toBe(16)
+    expect(tools.schemas().length).toBe(18)
     console.log(
-      `[EVIDENCE AC1] groups ledgers=${groups.ledgers.length} predicts=${groups.predicts.length} ` +
-        `reviews=${groups.reviews.length} sense=${groups.sense_archives.length} TOTAL=16`,
+      `[EVIDENCE AC1] groups ledgers=${groups.ledgers.length} strategy=${groups.strategy.length} predicts=${groups.predicts.length} ` +
+        `reviews=${groups.reviews.length} sense=${groups.sense_archives.length} TOTAL=18`,
     )
   })
 
@@ -278,7 +285,7 @@ describe('验收点 1：工具注册数量/名称 + schema 合法性 + ctx.tools
   })
 
   it('卸载：dispose 插件后 ctx.tools 不再暴露这些工具', async () => {
-    expect(tools.schemas()).toHaveLength(16)
+    expect(tools.schemas()).toHaveLength(18)
     await booted.dispose()
     await vi.waitFor(() => expect(tools.schemas()).toHaveLength(0), { timeout: 2000, interval: 10 })
     // 重新引导，供 afterEach 正常清理。
@@ -301,6 +308,7 @@ describe('验收点 1：工具注册数量/名称 + schema 合法性 + ctx.tools
     const dispose = registerAllTools(fakeCtx, { dataRoot: dir })
     expect(registered).toEqual([
       'ledger_init', 'ledger_list', 'ledger_query', 'ledger_trade',
+      'strategy_get', 'strategy_set',
       'predict_make', 'predict_verify', 'predict_get',
       'review_check', 'review_report', 'review_get', 'review_metrics', 'review_retrospect',
       'sense_archive_commit', 'sense_archive_list', 'sense_archive_rollback', 'sense_archive_get',
@@ -316,7 +324,7 @@ describe('验收点 1：工具注册数量/名称 + schema 合法性 + ctx.tools
  * ================================================================== */
 
 describe('验收点 2：lossless JSON + output.schema 严格校验', () => {
-  it('16 个工具真实执行成功值均通过 validateJsonSchemaValue（0 violation）', async () => {
+  it('18 个工具真实执行成功值均通过 validateJsonSchemaValue（0 violation）', async () => {
     // 铺垫数据，使所有读工具都返回成功值。
     await call(tools, 'ledger_init', {
       symbol: '588000', type: 'etf', name: '科创50ETF',
@@ -339,6 +347,8 @@ describe('验收点 2：lossless JSON + output.schema 严格校验', () => {
       ['ledger_list', {}],
       ['ledger_query', { symbol: '588000' }],
       ['ledger_trade', { symbol: '588000', side: 'sell', qty: 100, price: 2.5 }],
+      ['strategy_set', { symbol: '588000', text: '首版策略', rationale: 'r' }],
+      ['strategy_get', { symbol: '588000' }],
       ['predict_make', { symbol: '588000', date: '2026-09-30', dir: 'flat', range_low: 1.9, range_high: 2.1, confidence: 0.5, watch_points: [] }],
       ['predict_verify', { symbol: '588000', date: '2026-09-29', actual_close: 2.0, actual_high: 2.1, actual_low: 1.9, prev_close: 1.8 }],
       ['predict_get', { symbol: '588000', date: '2026-09-29' }],
@@ -358,7 +368,7 @@ describe('验收点 2：lossless JSON + output.schema 严格校验', () => {
       expect(r.isError, `${name} 应成功，实际：${textOf(r)}`).toBe(false)
       expectSchemaOk(tools, name, valueOf(r))
     }
-    console.log(`[EVIDENCE AC2] 16/16 tools executed OK, all values schema-valid`)
+    console.log(`[EVIDENCE AC2] 18/18 tools executed OK, all values schema-valid`)
   })
 
   it('严格性：字段缺失 / 多余字段都会被 validateJsonSchemaValue 判失败（additionalProperties:false）', () => {
@@ -389,6 +399,7 @@ describe('验收点 2：lossless JSON + output.schema 严格校验', () => {
     const { readFileSync } = await import('node:fs')
     const groups: Array<[string, RegExp]> = [
       ['ledgers.ts', /ctx\.ledger\./],
+      ['strategy.ts', /ctx\.strategy\./],
       ['predicts.ts', /ctx\.predicts\./],
       ['reviews.ts', /ctx\.reviews\./],
       ['sense-archives.ts', /ctx\.senseRegistry\./],
@@ -399,7 +410,7 @@ describe('验收点 2：lossless JSON + output.schema 严格校验', () => {
       expect(src, `${f} 不应使用 fetch/http（非 HTTP 层）`).not.toMatch(/\bfetch\s*\(|node:http|node:https/)
     }
     const ctxSrc = readFileSync(join(process.cwd(), 'src/tools/context.ts'), 'utf8')
-    for (const mod of ['ledger', 'predicts', 'reviews', 'sense-registry']) {
+    for (const mod of ['ledger', 'strategy', 'predicts', 'reviews', 'sense-registry']) {
       expect(ctxSrc, `context.ts 应装配 domain/${mod}`).toContain(`../domain/${mod}.js`)
     }
   })
@@ -434,7 +445,7 @@ describe('验收点 2：lossless JSON + output.schema 严格校验', () => {
  * ================================================================== */
 
 describe('验收点 3：写类返回 {ok,...}，读类返回无 ok 字段的数据对象', () => {
-  it('6 个写工具成功值均含 ok=true；10 个读工具成功值均不含 ok', async () => {
+  it('写工具成功值均含 ok=true；读工具成功值均不含 ok', async () => {
     // 铺垫
     const init = await call(tools, 'ledger_init', {
       symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 2, init_cash: 100000,
@@ -444,6 +455,7 @@ describe('验收点 3：写类返回 {ok,...}，读类返回无 ok 字段的数�
 
     const writeCalls: Array<[string, Record<string, unknown>]> = [
       ['ledger_trade', { symbol: '588000', side: 'buy', qty: 100, price: 2.1 }],
+      ['strategy_set', { symbol: '588000', text: '首版', rationale: 'r1' }],
       ['predict_make', { symbol: '588000', date: '2026-09-29', dir: 'up', range_low: 1, range_high: 3, confidence: 0.7, watch_points: [] }],
       ['review_report', { symbol: '588000', date: '2026-09-29', decision_triggered: true, decision_executed: true, hit_dir: true, hit_range: true }],
       ['sense_archive_commit', { change_type: 'replace', rationale: 'r', code: 'c' }],
@@ -460,6 +472,7 @@ describe('验收点 3：写类返回 {ok,...}，读类返回无 ok 字段的数�
     const readCalls: Array<[string, Record<string, unknown>]> = [
       ['ledger_list', {}],
       ['ledger_query', { symbol: '588000' }],
+      ['strategy_get', { symbol: '588000' }],
       ['predict_verify', { symbol: '588000', date: '2026-09-29', actual_close: 2, actual_high: 2.1, actual_low: 1.9, prev_close: 1.8 }],
       ['predict_get', { symbol: '588000', date: '2026-09-29' }],
       ['review_check', { symbol: '588000', date: '2026-09-29', decision_triggered: true, decision_executed: true }],

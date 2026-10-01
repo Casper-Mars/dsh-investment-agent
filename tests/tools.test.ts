@@ -68,18 +68,19 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-describe('验收点 1：16 个工具注册 + 名称 + schema 合法', () => {
+describe('验收点 1：18 个工具注册 + 名称 + schema 合法', () => {
   const expected = [
     'ledger_init', 'ledger_list', 'ledger_query', 'ledger_trade',
+    'strategy_get', 'strategy_set',
     'predict_make', 'predict_verify', 'predict_get',
     'review_check', 'review_report', 'review_get', 'review_metrics', 'review_retrospect',
     'sense_archive_commit', 'sense_archive_list', 'sense_archive_rollback', 'sense_archive_get',
   ]
-  it('createAllTools 返回 16 个工具，名称齐全无重复', () => {
-    // 注意：任务标题写「15 个」，但 §4 契约表实际为 4(ledgers)+3(predicts)+5(reviews)+4(sense)=16。
-    expect(tools.length).toBe(16)
+  it('createAllTools 返回 18 个工具，名称齐全无重复', () => {
+    // §4 契约表 16 个 + §10.8 策略域 2 个 = 18 个。
+    expect(tools.length).toBe(18)
     const names = tools.map((t) => t.name)
-    expect(new Set(names).size).toBe(16)
+    expect(new Set(names).size).toBe(18)
     for (const n of expected) expect(names).toContain(n)
   })
 
@@ -152,6 +153,67 @@ describe('验收点 2+3：ledger 域 —— 返回形态 + schema 对齐', () =>
     await expect(
       run('ledger_trade', { symbol: '588000', side: 'sell', qty: 2000, price: 2.5 }),
     ).rejects.toThrow(/超过|超卖/)
+  })
+})
+
+describe('验收点 2+3：strategy 域（strategy_get / strategy_set）', () => {
+  it('strategy_set 首版返回 {ok,version=v001}；strategy_get 往返返回 {symbol,text,version,updated_at}', async () => {
+    await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 1.95, init_cash: 100000 })
+    const s = await run('strategy_set', { symbol: '588000', text: '# 首版\n买入并持有', rationale: '初始策略' })
+    expect(s).toEqual({ ok: true, version: 'v001' })
+    expectMatchesOutputSchema('strategy_set', s)
+
+    const g = await run('strategy_get', { symbol: '588000' })
+    expect(g).not.toHaveProperty('ok')
+    expect(g.symbol).toBe('588000')
+    expect(g.text).toBe('# 首版\n买入并持有')
+    expect(g.version).toBe('v001')
+    expect(typeof g.updated_at).toBe('string')
+    expect(g.updated_at).not.toBe('')
+    expectMatchesOutputSchema('strategy_get', g)
+  })
+
+  it('strategy_set 带 parent_version 版本递增 v001→v002', async () => {
+    await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 1.95, init_cash: 100000 })
+    await run('strategy_set', { symbol: '588000', text: 'v1', rationale: 'r1' })
+    const v2 = await run('strategy_set', { symbol: '588000', text: 'v2', rationale: 'r2', parent_version: 'v001' })
+    expect(v2).toEqual({ ok: true, version: 'v002' })
+    expectMatchesOutputSchema('strategy_set', v2)
+
+    // 历史版本仍可读（不可变）。
+    const old = await run('strategy_get', { symbol: '588000', version: 'v001' })
+    expect(old.text).toBe('v1')
+    expect(old.version).toBe('v001')
+    expectMatchesOutputSchema('strategy_get', old)
+  })
+
+  it('strategy_set parent_version 与当前版不一致报错（防并发覆盖，不吞错）', async () => {
+    await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 1.95, init_cash: 100000 })
+    await run('strategy_set', { symbol: '588000', text: 'v1', rationale: 'r1' })
+    await run('strategy_set', { symbol: '588000', text: 'v2', rationale: 'r2', parent_version: 'v001' })
+    // 当前已是 v002，却声明 parent=v001
+    await expect(
+      run('strategy_set', { symbol: '588000', text: 'v3', rationale: 'r3', parent_version: 'v001' }),
+    ).rejects.toThrow(/不一致/)
+  })
+
+  it('strategy_set 未初始化台账的标的报错', async () => {
+    await expect(
+      run('strategy_set', { symbol: '999999', text: 'x', rationale: 'r' }),
+    ).rejects.toThrow(/台账|ledger_init/)
+  })
+
+  it('strategy_get 未设定策略的标的报错（明确可读引导）', async () => {
+    await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 1.95, init_cash: 100000 })
+    await expect(run('strategy_get', { symbol: '588000' })).rejects.toThrow(/strategy_set/)
+  })
+
+  it('strategy_set 写前取消时不产生版本', async () => {
+    await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 1.95, init_cash: 100000 })
+    await expect(
+      run('strategy_set', { symbol: '588000', text: 'v1', rationale: 'r1' }, true),
+    ).rejects.toThrow(/取消/)
+    await expect(run('strategy_get', { symbol: '588000' })).rejects.toThrow(/strategy_set/)
   })
 })
 

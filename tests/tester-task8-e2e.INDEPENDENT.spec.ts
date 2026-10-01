@@ -113,7 +113,7 @@ async function bootRegistry(dataRoot: string): Promise<Booted> {
   } as never) as unknown as { dispose: () => Promise<void> }
 
   const tools = (app as unknown as { tools: ToolBox }).tools
-  await vi.waitFor(() => { expect(tools.schemas()).toHaveLength(16) }, { timeout: 5000, interval: 10 })
+  await vi.waitFor(() => { expect(tools.schemas()).toHaveLength(18) }, { timeout: 5000, interval: 10 })
   const toolCtx = createToolContext({ dataRoot })
   return {
     app,
