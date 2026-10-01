@@ -123,9 +123,9 @@ describe('验收 3：prompt 与 skill 全文不出现写死的价格/阈值', ()
     expect(text).not.toMatch(/(?<![`\w])\d+\.\d+(?![`\w])/)
   })
 
-  it('阈值类表述一律指向「该标的策略配置 / 配置读取」', () => {
+  it('阈值类表述一律指向「该标的策略文档」且声明不硬编码', () => {
     const joined = readAllTexts().map(([, t]) => t).join('\n')
-    expect(joined).toMatch(/该标的(策略)?配置/)
+    expect(joined).toMatch(/该标的策略文档/)
     expect(joined).toMatch(/不(写|硬编)/)
   })
 

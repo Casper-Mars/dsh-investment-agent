@@ -1,7 +1,8 @@
 /**
  * tester-task13-tools-registration.INDEPENDENT.spec.ts
  * ==================================================================
- * Tester 独立复验（Task-13）：16 个模型工具是否确实经 plugin.apply 注册、对模型可用。
+ * Tester 独立复验（Task-13）：模型工具是否确实经 plugin.apply 注册、对模型可用。
+ * （该轮为 16 个；Task-18 起为 18 个 —— 本文件的数量断言已随之更新。）
  *
  * 独立性声明（不复用 Developer 的 tests/plugin-tools-registration.spec.ts）：
  *   1) 装载路径不同：本文件以 **ES module 命名空间整体** 装载真实插件
