@@ -44,6 +44,7 @@ import type {
   SenseVersionInput,
   SenseVersionMeta,
 } from './types.js'
+import { assertSafeSegment } from './path-guard.js'
 
 /** current 指针文件名。 */
 const CURRENT_POINTER = 'current'
@@ -66,9 +67,9 @@ export class SenseRegistry {
     mkdirSync(this.root, { recursive: true })
   }
 
-  /** 版本目录路径。 */
+  /** 版本目录路径。version 为外部输入，先做路径段安全校验。 */
   private versionDir(version: string): string {
-    return join(this.root, version)
+    return join(this.root, assertSafeSegment(version, 'version'))
   }
 
   /** current 指针文件路径。 */

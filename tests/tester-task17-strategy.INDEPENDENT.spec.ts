@@ -274,8 +274,8 @@ describe('⑦ 目录隔离', () => {
   })
 })
 
-describe('⑧ 路径安全评估（如实观察，不要求修复）', () => {
-  it('symbol 含 ../ 或 / 的行为观测', () => {
+describe('⑧ 路径安全评估（已修复：越界 symbol 一律被拒）', () => {
+  it('symbol 含 ../ 或 / 一律被拒且不落盘', () => {
     const { baseDir, sandbox } = makeBaseDir()
     try {
       const reg = new StrategyRegistry(baseDir)
@@ -294,14 +294,13 @@ describe('⑧ 路径安全评估（如实观察，不要求修复）', () => {
         return { threw: false, msg: 'ok', escapedOut: created }
       }
 
-      // 单层 ../ ：是否逃出 strategy_versions/ 目录（仍在 baseDir 内）
+      // 单层 ../ ：被拒。
       const r1 = probe('../esc1')
-      // 双层 ../ ：是否逃出 baseDir 本体（写入 sandbox 层）
+      // 双层 ../ ：被拒，不得逃出 baseDir 本体。
       const r2 = probe('../../esc2')
-      // 绝对路径风格 / ：是否被 path.join 归并（不逃逸）
+      // 绝对路径风格 / ：被拒（含 `/`）。
       const r3 = probe('/absfoo')
 
-      // 记录原始观测，供报告引用。
       console.log('[task17-path-safety] ../esc1  threw=%s msg=%s created=%s',
         r1.threw, r1.msg, JSON.stringify(r1.escapedOut))
       console.log('[task17-path-safety] ../../esc2 threw=%s msg=%s created=%s',
@@ -309,9 +308,13 @@ describe('⑧ 路径安全评估（如实观察，不要求修复）', () => {
       console.log('[task17-path-safety] /absfoo threw=%s msg=%s created=%s',
         r3.threw, r3.msg, JSON.stringify(r3.escapedOut))
 
-      // 断言「观测到的事实」：双层 ../ 已把文件写到 baseDir 之外（sandbox 层）。
-      // 这是如实记录漏洞存在，而非通过断言要求修复。
-      expect(r2.escapedOut.length).toBeGreaterThan(0)
+      // 路径安全校验已修复：三种越界 symbol 均应被拒（抛错）且不落盘任何文件。
+      expect(r1.threw).toBe(true)
+      expect(r1.escapedOut.length).toBe(0)
+      expect(r2.threw).toBe(true)
+      expect(r2.escapedOut.length).toBe(0)
+      expect(r3.threw).toBe(true)
+      expect(r3.escapedOut.length).toBe(0)
     } finally {
       rmSync(sandbox, { recursive: true, force: true })
     }

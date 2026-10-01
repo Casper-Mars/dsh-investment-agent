@@ -42,6 +42,7 @@ import type {
   Thresholds,
   Trade,
 } from './types.js'
+import { assertSafeSegment } from './path-guard.js'
 
 /** 台账相关的九张表名（对应详细设计 §7.1）。 */
 export type LedgerTable =
@@ -90,9 +91,9 @@ export class JsonStore {
     return join(this.dataRoot, 'ledger')
   }
 
-  /** 某标的的目录。 */
+  /** 某标的的目录。symbol 为外部输入，先做路径段安全校验。 */
   symbolDir(symbol: string): string {
-    return join(this.ledgerRoot, symbol)
+    return join(this.ledgerRoot, assertSafeSegment(symbol, 'symbol'))
   }
 
   /** 某标的某张表的文件路径。 */

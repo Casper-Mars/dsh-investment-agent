@@ -46,6 +46,7 @@ import type {
   StrategyVersionInput,
   StrategyVersionMeta,
 } from './types.js'
+import { assertSafeSegment } from './path-guard.js'
 
 /** current 指针文件名。 */
 const CURRENT_POINTER = 'current'
@@ -74,24 +75,30 @@ export class StrategyRegistry {
     return join(this.baseDir, 'strategy_versions')
   }
 
-  /** 某标的的版本链目录。 */
+  /** 某标的的版本链目录。symbol 为外部输入，先做路径段安全校验。 */
   private symbolVersionsDir(symbol: string): string {
-    return join(this.versionsRoot, symbol)
+    return join(this.versionsRoot, assertSafeSegment(symbol, 'symbol'))
   }
 
   /** 某标的的当前版文档路径。 */
   private currentPath(symbol: string): string {
-    return join(this.currentRoot, `${symbol}.md`)
+    return join(this.currentRoot, `${assertSafeSegment(symbol, 'symbol')}.md`)
   }
 
-  /** 某标的某版本的正文文件路径。 */
+  /** 某标的某版本的正文文件路径。version 为外部输入，先做路径段安全校验。 */
   private versionFile(symbol: string, version: string): string {
-    return join(this.symbolVersionsDir(symbol), `${version}.md`)
+    return join(
+      this.symbolVersionsDir(symbol),
+      `${assertSafeSegment(version, 'version')}.md`,
+    )
   }
 
   /** 某标的某版本的 meta.json 路径。 */
   private metaFile(symbol: string, version: string): string {
-    return join(this.symbolVersionsDir(symbol), `${version}.meta.json`)
+    return join(
+      this.symbolVersionsDir(symbol),
+      `${assertSafeSegment(version, 'version')}.meta.json`,
+    )
   }
 
   /** 某标的的 current 指针文件路径。 */
