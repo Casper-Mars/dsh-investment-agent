@@ -42,6 +42,10 @@ src/tools/
 - **错误处理**：错误通过 throw 表达（registry 归一为 isError、跳过 schema 校验），
   不返回 `{ ok:false }`；写类成功返回 `{ ok, ... }`，读类返回无 ok 字段的数据对象。
 - **exec.signal 可中断**：写操作前 `assertNotAborted(exec.signal)`，中断即 throw，不产生半写。
+- **阈值来源（反向检讨）**：`review_retrospect` 的阈值由 `ToolContext.getThresholds(symbol)` 供给，
+  来源已迁移到策略文档 front-matter（`strategy/<symbol>.md` 顶部 `---` 内的 `thresholds.*`，蛇形键），
+  逐键校验（有限数 + `dir_hit_min ∈ [0,1]`），非法/缺失键回落默认；旧 `ledger/<symbol>/thresholds.json`
+  仅作兼容回落（@deprecated，不再写入）。
 
 ## 接入方式
 

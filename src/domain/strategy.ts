@@ -253,4 +253,195 @@ export class StrategyRegistry {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 策略文档 front-matter 轻量解析（阈值来源迁移用，Task-19）。
+//
+// 策略文档 `strategy/<symbol>.md` 的顶部可带 YAML front-matter（`---` 包裹）：
+// ```
+// ---
+// thresholds:
+//   dir_hit_min: 0.6
+//   cum_return_min: 0.02
+//   miss_streak_max: 3
+// ---
+// （正文）
+// ```
+// 键名为**蛇形**，由 tools/context 映射到驼峰 `Thresholds`。
+//
+// 设计约束（沿用 skills/frontmatter.ts 的「无第三方 YAML 依赖」范式）：
+//   - 仅支持「缩进层级 + `key: value`」的轻量语法子集（数字/布尔/null/引号或裸字符串标量）；
+//   - 解析失败**绝不抛出**：返回 `structured = {}` + `parseError`；
+//   - 无 front-matter：`structured = {}`、`body = text`。
+// ---------------------------------------------------------------------------
+
+/** 策略文档 front-matter 解析结果。 */
+export interface ParsedStrategyDoc {
+  /** front-matter 之后的 Markdown 正文（无 front-matter 时为原文）。 */
+  body: string
+  /** front-matter 解析出的结构化对象（顶层键 → 值）。解析失败/无 front-matter 为空对象。 */
+  structured: Record<string, unknown>
+  /** 解析失败原因（仅当存在 front-matter 且解析失败时设置）。 */
+  parseError?: string
+}
+
+/** 统计行首空格数（YAML 缩进层级；仅计空格，制表符视为 0 级以避免误判）。 */
+function indentOf(line: string): number {
+  let n = 0
+  while (n < line.length && line[n] === ' ') n += 1
+  return n
+}
+
+/** 还原成对引号包裹的标量（单引号 `''`→`'`；双引号 `\n`/`\"`/`\\` 转义）。 */
+function unquoteScalar(raw: string): string {
+  const quote = raw[0]
+  const inner = raw.slice(1, -1)
+  if (quote === "'") return inner.replace(/''/g, "'")
+  return inner.replace(/\\(["\\n])/g, (_m, ch: string) => (ch === 'n' ? '\n' : ch))
+}
+
+/** 解析单个标量值（轻量 YAML 子集）。失败返回 error。 */
+function parseScalar(raw: string): { value?: unknown; error?: string } {
+  let s = raw.trim()
+  if (s === '') return { value: '' }
+
+  // 引号字符串：须成对闭合。
+  if (s.startsWith('"') || s.startsWith("'")) {
+    const quote = s[0]
+    if (s.length < 2 || !s.endsWith(quote)) {
+      return { error: `引号未闭合：${raw}` }
+    }
+    return { value: unquoteScalar(s) }
+  }
+
+  // 流式集合（[...] / {...}）不在本轻量子集内 → 判为解析失败（如 `thresholds: [1,2`）。
+  if (s.startsWith('[') || s.startsWith('{')) {
+    return { error: `不支持流式集合：${raw}` }
+  }
+
+  // 去除行内注释（# 前需有空白）。
+  const hashIdx = s.search(/\s#/)
+  if (hashIdx >= 0) s = s.slice(0, hashIdx).trimEnd()
+  if (s === '') return { value: '' }
+
+  if (s === 'true' || s === 'True' || s === 'TRUE') return { value: true }
+  if (s === 'false' || s === 'False' || s === 'FALSE') return { value: false }
+  if (s === 'null' || s === 'Null' || s === 'NULL' || s === '~') return { value: null }
+
+  if (/^[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$/.test(s)) {
+    const n = Number(s)
+    if (Number.isFinite(n)) return { value: n }
+    return { error: `数值非法：${raw}` }
+  }
+
+  return { value: s }
+}
+
+/**
+ * 递归解析一段「同缩进层级」的 mapping（返回对象）。
+ * 遇到缩进回退即交还父级；`pos.i` 推进到已消费位置；`endLine` 为 front-matter 块右边界。
+ */
+function parseMapping(
+  lines: string[],
+  pos: { i: number },
+  indent: number,
+  endLine: number,
+): { value: Record<string, unknown>; error?: string } {
+  const obj: Record<string, unknown> = {}
+
+  while (pos.i < endLine) {
+    const line = lines[pos.i]
+    if (line.trim() === '' || line.trimStart().startsWith('#')) {
+      pos.i += 1
+      continue
+    }
+    const cur = indentOf(line)
+    if (cur < indent) break // 缩进回退：交还父级
+    if (cur > indent) {
+      return { value: obj, error: `第 ${pos.i + 1} 行缩进异常` }
+    }
+
+    const content = line.trim()
+    const sep = content.indexOf(':')
+    if (sep === -1) return { value: obj, error: `无法解析的行：${content}` }
+    const key = content.slice(0, sep).trim()
+    if (key === '') return { value: obj, error: `键名为空：${content}` }
+    const rest = content.slice(sep + 1).trim()
+    pos.i += 1
+
+    if (rest !== '') {
+      const scalar = parseScalar(rest)
+      if (scalar.error) return { value: obj, error: `${key}: ${scalar.error}` }
+      obj[key] = scalar.value
+    } else {
+      // 嵌套 mapping：子行实际缩进为准。
+      let j = pos.i
+      while (
+        j < endLine &&
+        (lines[j].trim() === '' || lines[j].trimStart().startsWith('#'))
+      ) j += 1
+      const childIndent = j < endLine ? indentOf(lines[j]) : indent + 1
+      if (childIndent <= indent) {
+        obj[key] = {} // 空 mapping（key: 无子键）
+        continue
+      }
+      const child = parseMapping(lines, pos, childIndent, endLine)
+      if (child.error) return { value: obj, error: child.error }
+      obj[key] = child.value
+    }
+  }
+
+  return { value: obj }
+}
+
+/**
+ * 解析策略文档文本，提取顶部 `---` YAML front-matter 与正文。
+ *
+ * @param raw 文档原文（可含 BOM、CRLF）。
+ * @returns 结构化 front-matter + 正文。解析失败**绝不抛出**：
+ *   返回 `structured = {}` + `parseError`；无 front-matter 时 `structured = {}`、
+ *   `body = raw`。
+ */
+export function parseStrategyDoc(raw: string): ParsedStrategyDoc {
+  const text = raw.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n')
+  try {
+    const lines = text.split('\n')
+
+    let start = 0
+    while (start < lines.length && lines[start].trim() === '') start += 1
+    if (lines[start]?.trim() !== '---') {
+      return { body: text, structured: {} }
+    }
+
+    let end = start + 1
+    while (end < lines.length && lines[end].trim() !== '---') end += 1
+    if (end >= lines.length) {
+      return {
+        body: text,
+        structured: {},
+        parseError: 'front-matter 未闭合（缺少结尾 "---"）',
+      }
+    }
+
+    const pos = { i: start + 1 }
+    const parsed = parseMapping(lines, pos, 0, end)
+    if (parsed.error) {
+      return { body: text, structured: {}, parseError: parsed.error }
+    }
+
+    const body = lines
+      .slice(end + 1)
+      .join('\n')
+      .replace(/^\n+/, '')
+      .replace(/\n+$/, '')
+
+    return { body, structured: parsed.value }
+  } catch (err) {
+    return {
+      body: text,
+      structured: {},
+      parseError: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
 export type { StrategyFull, StrategyVersionInput, StrategyVersionMeta }

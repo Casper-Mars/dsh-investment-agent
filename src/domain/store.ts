@@ -16,7 +16,7 @@
  *       predictions.json # Prediction[]
  *       reviews.json     # Review[]
  *       metrics.json     # Metric[]
- *       thresholds.json  # Thresholds
+ *       thresholds.json  # Thresholds（@deprecated：阈值来源已迁移到策略文档 front-matter）
  *     000001/ ...
  * ```
  *
@@ -198,6 +198,13 @@ export class LedgerStore {
     return this.store.readTable<Thresholds>(symbol, 'thresholds')
   }
 
+  /**
+   * 写标的阈值配置。
+   *
+   * @deprecated 阈值来源已迁移到策略文档 front-matter（`strategy/<symbol>.md` 的
+   *   `thresholds.*`，见 tools/context.getThresholds 的优先级①）。本期起不再写入本表；
+   *   `getThresholds` 仍可读以兼容历史数据。
+   */
   saveThresholds(symbol: string, thresholds: Thresholds): void {
     this.store.writeTable<Thresholds>(symbol, 'thresholds', thresholds)
   }
