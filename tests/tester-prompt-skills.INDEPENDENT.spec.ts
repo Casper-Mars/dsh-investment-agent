@@ -372,9 +372,9 @@ describe('[6] 全文无写死价格 / 阈值', () => {
     }
   })
 
-  it('阈值类表述一律指向「该标的策略配置」且声明不硬编码', () => {
+  it('阈值类表述一律指向「该标的策略文档」且声明不硬编码', () => {
     const joined = allTexts().map(([, t]) => t).join('\n')
-    expect(joined).toMatch(/该标的(策略)?配置/)
+    expect(joined).toMatch(/该标的策略文档/)
     expect(joined).toMatch(/不(写死|硬编|硬编码)/)
   })
 })
