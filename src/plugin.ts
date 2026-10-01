@@ -22,7 +22,11 @@
  * 依赖服务说明（已在 harness 源码核实）：
  *   - `tools`      —— dsh 工具注册表（`ctx.tools`，defineTool 注册面向模型的工具）
  *   - `skills`     —— dsh 技能注册表（`ctx.skills`，注册面向模型的 SKILL 操作指南）
- *   - `ptcRuntime` —— dsh 进程间/任务控制运行时（`ctx.ptcRuntime`，感知脚本执行）
+ *   - `ptcRuntime` —— PTC（Programmatic Tool Calling，程序化工具调用）执行接缝
+ *     （`ctx.ptcRuntime`）。接口/服务来自 `@deepseek-ai/dsh-ptc-runtime`，后端由
+ *     `@deepseek-ai/dsh-ptc-runtime-node` 实现（每个 run 起全新 Node 进程，受会话
+ *     文件沙箱策略约束，带执行时限/输出上限/V8 堆上限）。感知脚本即经其在
+ *     `read-only` 沙箱中程序化执行（`src/runner/sensor-runner.ts`）。
  *   - `fs`         —— cordis 标准服务（`node:fs` 的文件系统访问）
  *
  * 注意：`systemPrompt` **不**加入顶层 `inject`，而是在 `apply` 内以
