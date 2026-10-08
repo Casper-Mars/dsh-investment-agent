@@ -2,7 +2,7 @@
  * domain/sense-registry.ts —— 感知版本注册表。
  *
  * 职责：维护 `sense_versions/` 目录 + `current` 指针，保证版本不可变、演化链可追溯。
- * 被 `tools/sense_archive` 和 `runner` 共用。脚本标的无关，registry 不区分标的。
+ * 被 `tools/sense_archive` 复用。脚本标的无关，registry 不区分标的。
  *
  * 接口签名对齐详细设计 §5.3：
  * ```

@@ -20,7 +20,7 @@
  *     000001/ ...
  * ```
  *
- * 读写接口设计为「可被后续 tools / runner 复用」：底层暴露泛型的
+ * 读写接口设计为「可被后续 tools 复用」：底层暴露泛型的
  * `readTable` / `writeTable`，上层按业务表封装带类型的读写函数。
  *
  * 注意：本模块只依赖 `node:fs` / `node:path`，不接触 dsh/cordis API。
@@ -140,7 +140,7 @@ export class JsonStore {
 }
 
 /**
- * 台账读取工具（供 ledger 及后续 tools/runner 使用）。
+ * 台账读取工具（供 ledger 及后续 tools 使用）。
  * 封装「按 symbol 隔离」的各业务表读写，返回结构化的领域对象。
  */
 export class LedgerStore {

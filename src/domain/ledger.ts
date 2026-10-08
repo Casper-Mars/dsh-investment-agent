@@ -306,5 +306,5 @@ export class Ledger {
   }
 }
 
-// Re-export types used by downstream tools/runner.
+// Re-export types used by downstream tools.
 export type { AssetType, PositionSnapshot, SymbolSnapshot, Side, Trade, TradeResult }

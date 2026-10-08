@@ -25,7 +25,7 @@
  *   3. `sessionPersistence.stat(id).eventCount === 0` —— JSONL 后端 `stat` 不返回
  *      `eventCount`（恒 undefined），仅作兜底快速路径。
  *
- * 本模块采用与 `src/runner/wake.ts` 同款的定点投递 + 降级语义：
+ * 本模块采用定点投递 + 降级语义：
  *   1. 消息形态用官方 `createUserMessage`（`@deepseek-ai/dsh-llm`）构造，
  *      `source.kind` 取 producer 自有 kind `'dsh-finance'`（V4 契约，非退役的
  *      `'plugin'` 包装，见 `src/message-source.ts`），`form: 'notice'` + `summary`；

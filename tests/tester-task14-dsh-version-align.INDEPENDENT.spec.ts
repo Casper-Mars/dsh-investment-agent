@@ -30,8 +30,6 @@ import { Context } from '@deepseek-ai/cordis'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 // ★ 真实构建产物入口（exports["."].default = ./dist-server/index.js）
 import * as pluginNs from '../dist-server/index.js'
-import * as scheduler from '../dist-server/runner/scheduler.js'
-import * as sensor from '../dist-server/runner/sensor-runner.js'
 
 const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const readJson = (rel: string): Record<string, unknown> =>
@@ -171,7 +169,6 @@ async function bootDistPlugin(dataRoot: string) {
   const sk = makeSkillsStub()
   app.provide('systemPrompt', sp.service)
   app.provide('skills', sk.service)
-  // ptcRuntime 无 run() → applyRunner 安全降级，不启动调度 timer。
   app.provide('ptcRuntime', { name: 'ptcRuntime' } as never)
   app.provide('fs', { name: 'fs' } as never)
 
@@ -352,43 +349,6 @@ describe('Task-14 复验 B：真实构建产物（dist-server）装载与运行�
     } finally {
       await b.dispose()
     }
-  })
-})
-
-describe('Task-14 复验 C：回归（0.2.0-rc.2 依赖下调度契约关键断言，参考 task13）', () => {
-  it('C1·盘中脉冲周期=30s；窗口 9:30-11:30 / 13:00-15:00（含端点）', () => {
-    expect(scheduler.PULSE_STEP_SECONDS).toBe(30)
-    expect(scheduler.PULSE_WINDOWS).toEqual([
-      [9 * 60 + 30, 11 * 60 + 30],
-      [13 * 60, 15 * 60],
-    ])
-    expect(scheduler.isPulseMinute(570)).toBe(true)
-    expect(scheduler.isPulseMinute(690)).toBe(true)
-    expect(scheduler.isPulseMinute(691)).toBe(false)
-    expect(scheduler.isPulseMinute(780)).toBe(true)
-    expect(scheduler.isPulseMinute(900)).toBe(true)
-    expect(scheduler.isPulseMinute(901)).toBe(false)
-    console.log(
-      `[EVIDENCE C1] pulse=${scheduler.PULSE_STEP_SECONDS}s windows=${JSON.stringify(scheduler.PULSE_WINDOWS)}`,
-    )
-  })
-
-  it('C2·盘后复盘=18:30；盘前准备=9:25', () => {
-    expect(scheduler.REVIEW_MINUTE).toBe(18 * 60 + 30)
-    expect(scheduler.PREP_MINUTE).toBe(9 * 60 + 25)
-    console.log(
-      `[EVIDENCE C2] review=${scheduler.REVIEW_MINUTE}min(18:30) prep=${scheduler.PREP_MINUTE}min(9:25)`,
-    )
-  })
-
-  it('C3·唤醒冷却=5min；批处理上界=20；单次预算=60s；文本预算=2000', () => {
-    expect(sensor.DEFAULT_WAKE_COOLDOWN_MS).toBe(5 * 60 * 1000)
-    expect(sensor.DEFAULT_BATCH_LIMIT).toBe(20)
-    expect(sensor.DEFAULT_SENSOR_TIMEOUT_MS).toBe(60_000)
-    expect(sensor.DEFAULT_WAKE_TEXT_BUDGET).toBe(2000)
-    console.log(
-      `[EVIDENCE C3] cooldown=${sensor.DEFAULT_WAKE_COOLDOWN_MS}ms batch=${sensor.DEFAULT_BATCH_LIMIT} timeout=${sensor.DEFAULT_SENSOR_TIMEOUT_MS}ms textBudget=${sensor.DEFAULT_WAKE_TEXT_BUDGET}`,
-    )
   })
 })
 

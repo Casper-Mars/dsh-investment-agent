@@ -12,8 +12,8 @@
  *     `name` 一致），使「该插件独占的常驻会话」与插件身份一一对应。
  *   - `SessionPersistenceLike` 是 `@deepseek-ai/dsh-session-persistence` 的
  *     `SessionPersistence` 服务的最小结构替身（结构等价，运行时即以实际源码
- *     为准），避免把该包加入本插件硬依赖（与 `src/runner/types.ts` 的
- *     `PtcRuntimeLike` / `src/prompts/index.ts` 的 `SystemPromptLike` 同一套路）。
+ *     为准），避免把该包加入本插件硬依赖（与 `src/prompts/index.ts` 的
+ *     `SystemPromptLike` 同一套路）。
  *
  * 对齐来源（已核对 harness 源码）：
  *   - `packages/session/session-persistence/src/index.ts`：`SessionPersistence`

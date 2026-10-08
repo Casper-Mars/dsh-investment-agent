@@ -14,10 +14,7 @@
  *       2. 经 `ctx.skills.register` 注册 6 个技术面 SKILL
  *          （trend-analysis / grid-strategy / stop-rule / strategy-authorship / sense-authorship / task-authorship）；
  *       3. 经 `ctx.inject(['systemPrompt'], cb)` **动态注入** advisor.md 人设
- *          （详见 `src/prompts/index.ts`）；
- *       4. 经 `applyRunner(ctx)` 装配**感知脚本执行 + 自持调度**
- *          （`src/runner/`）：读 current 感知脚本、只读 bindings 沙箱执行、
- *          应唤醒时投递 agent；调度随 `ctx.effect` 自持启停。
+ *          （详见 `src/prompts/index.ts`）。
  *
  * 依赖服务说明（已在 harness 源码核实）：
  *   - `tools`      —— dsh 工具注册表（`ctx.tools`，defineTool 注册面向模型的工具）
@@ -25,8 +22,7 @@
  *   - `ptcRuntime` —— PTC（Programmatic Tool Calling，程序化工具调用）执行接缝
  *     （`ctx.ptcRuntime`）。接口/服务来自 `@deepseek-ai/dsh-ptc-runtime`，后端由
  *     `@deepseek-ai/dsh-ptc-runtime-node` 实现（每个 run 起全新 Node 进程，受会话
- *     文件沙箱策略约束，带执行时限/输出上限/V8 堆上限）。感知脚本即经其在
- *     `read-only` 沙箱中程序化执行（`src/runner/sensor-runner.ts`）。
+ *     文件沙箱策略约束，带执行时限/输出上限/V8 堆上限）。
  *   - `fs`         —— cordis 标准服务（`node:fs` 的文件系统访问）
  *
  * 注意：`systemPrompt` **不**加入顶层 `inject`，而是在 `apply` 内以
@@ -36,7 +32,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { registerAllSkills } from './skills/index.js'
 import { applyAdvisorPrompt } from './prompts/index.js'
-import { applyRunner } from './runner/index.js'
 import { applyScheduler } from './scheduler/index.js'
 import { applySessionEnsure } from './session-ensure.js'
 
@@ -161,13 +156,6 @@ export function apply(ctx: Context): void {
     applySessionEnsure(ctx)
   } catch (err: unknown) {
     console.error('[dsh-finance] 会话确保装配失败：', err)
-  }
-
-  // ---- 感知脚本执行 + 自持调度（apply 即启动，随 effect 卸载 stop） ----
-  try {
-    applyRunner(ctx)
-  } catch (err: unknown) {
-    console.error('[dsh-finance] runner 装配失败：', err)
   }
 
   // ---- 定时任务多任务调度（loader → runner → waker 编排 + 7 工具，§4.3） ----

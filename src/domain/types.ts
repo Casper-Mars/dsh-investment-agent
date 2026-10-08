@@ -2,7 +2,7 @@
  * domain 层共享类型定义。
  *
  * 本文件仅承载纯类型与常量，不依赖任何 dsh/cordis API，也不接触 I/O。
- * 供 `ledger` / `metrics` / `sense-registry` 三域以及后续 `tools` / `runner`
+ * 供 `ledger` / `metrics` / `sense-registry` 三域以及后续 `tools`
  * 复用。所有数据结构以 `symbol` 为维度隔离（感知版本注册表除外）。
  */
 
