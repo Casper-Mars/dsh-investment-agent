@@ -12,7 +12,7 @@
  *   1. 策略版本链 E2E（v001→v002 / 落盘 / current 指针 / 版本不可变 / parent 冲突 / 未 init / 未设定）
  *   2. 阈值来源 E2E（front-matter → 旧 json → 默认；非法键回落且不抛）
  *   3. review_retrospect 端到端（调整策略阈值可翻转「触发检讨」结论）
- *   4. 运行时可见性（真实插件装载：工具 25 / SKILL 5）
+ *   4. 运行时可见性（真实插件装载：工具 25 / SKILL 6）
  *   5. 旧功能全量回归（ledger_* / predict_* / review_* / sense_archive_*）
  *   6. Prompt/Skill 文本（advisor 6 步 + 措辞；3 skill 无残留；strategy-authorship 注册且 frontmatter 合法）
  *   7. 契约未变（顶层 inject 四项；cordis.patch.yml 无 diff；无新依赖）
@@ -395,11 +395,11 @@ describe('3. review_retrospect 端到端：触发检讨由策略文档阈值决�
 })
 
 /* ================================================================== *
- * 4. 运行时可见性（真实插件装载：工具 25 / SKILL 5）
+ * 4. 运行时可见性（真实插件装载：工具 25 / SKILL 6）
  * ================================================================== */
 
 describe('4. 运行时可见性：真实插件装载路径', () => {
-  it('顶层 inject 契约 + 真实装载后工具 25 / SKILL 5', async () => {
+  it('顶层 inject 契约 + 真实装载后工具 25 / SKILL 6', async () => {
     expect(topLevelInject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
 
     const registeredSkills: Array<{ name: string }> = []
@@ -436,7 +436,7 @@ describe('4. 运行时可见性：真实插件装载路径', () => {
     )
 
     // SKILL 同步注册，立即可见。
-    expect(registeredSkills).toHaveLength(5)
+    expect(registeredSkills).toHaveLength(6)
     expect(registeredSkills.map((s) => s.name)).toEqual([...SKILL_NAMES])
 
     console.log(
@@ -449,9 +449,9 @@ describe('4. 运行时可见性：真实插件装载路径', () => {
     delete process.env.DSH_FINANCE_DATA_DIR
   })
 
-  it('createAllSkillRegistrations 产出 5 个且 frontmatter 合法', () => {
+  it('createAllSkillRegistrations 产出 6 个且 frontmatter 合法', () => {
     const regs = createAllSkillRegistrations()
-    expect(regs).toHaveLength(5)
+    expect(regs).toHaveLength(6)
     for (const r of regs) {
       expect(r.name.length).toBeGreaterThan(0)
       expect(r.description.length).toBeGreaterThan(0)

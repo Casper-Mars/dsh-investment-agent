@@ -11,8 +11,8 @@
  *          `src/tools/index.ts`）。工具模块图较重，故在 `apply` 内以
  *          `import('./tools/index.js')` **惰性加载**后注册（参照 dsh-tasks）；
  *          注销器绑定 `ctx.effect`，fiber 卸载（含 HMR 重载）时自动注销；
- *       2. 经 `ctx.skills.register` 注册 5 个技术面 SKILL
- *          （trend-analysis / grid-strategy / stop-rule / strategy-authorship / sense-authorship）；
+ *       2. 经 `ctx.skills.register` 注册 6 个技术面 SKILL
+ *          （trend-analysis / grid-strategy / stop-rule / strategy-authorship / sense-authorship / task-authorship）；
  *       3. 经 `ctx.inject(['systemPrompt'], cb)` **动态注入** advisor.md 人设
  *          （详见 `src/prompts/index.ts`）；
  *       4. 经 `applyRunner(ctx)` 装配**感知脚本执行 + 自持调度**
@@ -94,7 +94,7 @@ export const inject: string[] = ['tools', 'skills', 'ptcRuntime', 'fs']
  *      插件 fiber 卸载（含 HMR 重载）时自动注销。`tools` 经顶层 `inject` 保证
  *      就绪，但此处仍以 `ctx.get('tools')` 软取，使插件在「未提供 tools 服务的
  *      最小上下文」（如装载测试）下安全降级，不中断插件装载。
- *   2. 在 `ctx.effect` 内注册 5 个技术面 SKILL；注销器绑定到 effect，
+ *   2. 在 `ctx.effect` 内注册 6 个技术面 SKILL；注销器绑定到 effect，
  *      插件 fiber 卸载（含 HMR 重载）时自动注销。`skills` 经顶层 `inject`
  *      保证就绪，但此处仍以 `ctx.get('skills')` 软取，使插件在「未提供 skills
  *      服务的最小上下文」（如装载测试）下安全降级，不中断插件装载。

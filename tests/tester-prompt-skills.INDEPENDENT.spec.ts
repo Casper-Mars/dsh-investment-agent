@@ -7,7 +7,7 @@
  *
  * 覆盖（对应建议测试方式 1-8）：
  *   1. frontmatter 解析边界（正常 / CRLF / BOM / 转义 / 缺 description / 非 kebab / 缺 whenToUse）
- *   2. 5 个 SKILL.md 逐字段校验（含用 harness 权威 isSkillName 复核 kebab-case）
+ *   2. 6 个 SKILL.md 逐字段校验（含用 harness 权威 isSkillName 复核 kebab-case）
  *   3. 真实 SkillRegistry 注册 / 发现 / 注销
  *   4. system-prompt 注入契约（stub + 真实 cordis 双路）
  *   5. 顶层 inject 契约不变
@@ -41,9 +41,16 @@ import {
 import { apply, inject as topLevelInject } from '../src/plugin'
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
-const EXPECTED_SKILLS = ['trend-analysis', 'grid-strategy', 'stop-rule', 'strategy-authorship', 'sense-authorship']
+const EXPECTED_SKILLS = [
+  'trend-analysis',
+  'grid-strategy',
+  'stop-rule',
+  'strategy-authorship',
+  'sense-authorship',
+  'task-authorship',
+]
 
-/** 5 份待扫描全文（验收点 3 的扫描面）。 */
+/** 7 份待扫描全文（advisor.md + 6 个 SKILL.md，验收点 3 的扫描面）。 */
 function allTexts(): Array<[string, string]> {
   return [
     ['src/prompts/advisor.md', loadAdvisorMd()],
@@ -114,9 +121,9 @@ describe('[1] frontmatter 解析边界', () => {
  * 2. 5 个 SKILL.md 校验
  * ================================================================== */
 
-describe('[2] 5 个 SKILL.md 逐字段校验', () => {
-  it('SKILL_NAMES 恰为 5 个（顺序即注册顺序）', () => {
-    expect(SKILL_NAMES).toHaveLength(5)
+describe('[2] 6 个 SKILL.md 逐字段校验', () => {
+  it('SKILL_NAMES 恰为 6 个（顺序即注册顺序）', () => {
+    expect(SKILL_NAMES).toHaveLength(6)
   })
 
   it('SKILL_NAMES 与预期集合一致', () => {
@@ -341,7 +348,9 @@ describe('[5b] 真实 cordis 下 apply(ctx) 端到端装配', () => {
 describe('[6] 全文无写死价格 / 阈值', () => {
   it('不出现小数形态数值（价格典型特征）', () => {
     for (const [label, text] of allTexts()) {
-      const m = text.match(/(?<![`\w])\d+\.\d+(?![`\w])/g)
+      // 版本号（semver，如 1.0.0 / ^22.0.0）非价格：先剔除再扫描。
+      const withoutSemver = text.replace(/\^?\d+\.\d+\.\d+/g, '')
+      const m = withoutSemver.match(/(?<![`\w])\d+\.\d+(?![`\w])/g)
       expect(m, `${label} 含疑似小数价格: ${m}`).toBeNull()
     }
   })
@@ -363,8 +372,9 @@ describe('[6] 全文无写死价格 / 阈值', () => {
   })
 
   it('全部数字 token 落在合规白名单内（序号 / 置信度 / 标的代码 / 名称）', () => {
-    // 允许：列表序号 1-5、置信度标度 0-1、标的代码 588000、名称中的 50（科创50ETF）。
-    const ALLOWED = new Set(['0', '1', '2', '3', '4', '5', '50', '588000'])
+    // 允许：列表序号 1-5、置信度标度 0-1、标的代码 588000、名称中的 50（科创50ETF）；
+    // 以及 task-authorship 中非阈值字面量：依赖版本号片段 22（^22.0.0）、默认超时 60（60s）。
+    const ALLOWED = new Set(['0', '1', '2', '3', '4', '5', '22', '50', '60', '588000'])
     for (const [label, text] of allTexts()) {
       const tokens = text.match(/\d+/g) ?? []
       const illegal = [...new Set(tokens.filter((t) => !ALLOWED.has(t)))]
@@ -426,7 +436,7 @@ describe('[7] sense-authorship 完整性', () => {
  * ================================================================== */
 
 describe('[8] copy-assets 产物与编译态路径', () => {
-  it('搬运后 dist-server 下 6 个 .md 存在且与源码一致，编译态 new URL 可解析', async () => {
+  it('搬运后 dist-server 下 7 个 .md 存在且与源码一致，编译态 new URL 可解析', async () => {
     execFileSync('node', ['scripts/copy-assets.mjs'], { cwd: REPO_ROOT, stdio: 'ignore' })
 
     const checks: Array<[string, string]> = [

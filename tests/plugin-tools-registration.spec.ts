@@ -211,6 +211,8 @@ describe('t100363 插件装配：25 个工具经 apply 注册', () => {
     } as unknown as Context
 
     expect(() => apply(ctx)).not.toThrow()
-    expect(registered).toHaveLength(5)
+    // 技术面 SKILL 共 6 个（trend-analysis / grid-strategy / stop-rule /
+    // strategy-authorship / sense-authorship / task-authorship）。
+    expect(registered).toHaveLength(6)
   })
 })
