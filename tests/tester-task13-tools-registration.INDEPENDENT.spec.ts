@@ -2,7 +2,7 @@
  * tester-task13-tools-registration.INDEPENDENT.spec.ts
  * ==================================================================
  * Tester 独立复验（Task-13）：模型工具是否确实经 plugin.apply 注册、对模型可用。
- * （该轮为 16 个；Task-18 起为 18 个 —— 本文件的数量断言已随之更新。）
+ * （该轮为 16 个；Task-18 起为 18 个；引入定时任务层 7 工具后为 25 个 —— 本文件的数量断言已随之更新。）
  *
  * 独立性声明（不复用 Developer 的 tests/plugin-tools-registration.spec.ts）：
  *   1) 装载路径不同：本文件以 **ES module 命名空间整体** 装载真实插件
@@ -39,7 +39,7 @@ interface ToolBox {
   get: (name: string) => unknown
 }
 
-/** 18 个工具的期望名称（按 §4 契约 + §10.8 策略域分组）。 */
+/** 25 个工具的期望名称（按 §4 契约 + §10.8 策略域分组 + §7 定时任务层 7 工具）。 */
 const EXPECTED = {
   ledgers: ['ledger_init', 'ledger_list', 'ledger_query', 'ledger_trade'],
   strategy: ['strategy_get', 'strategy_set'],
@@ -56,6 +56,15 @@ const EXPECTED = {
     'sense_archive_list',
     'sense_archive_rollback',
     'sense_archive_get',
+  ],
+  scheduler: [
+    'task_create',
+    'task_list',
+    'task_get',
+    'task_update',
+    'task_delete',
+    'task_enable',
+    'task_disable',
   ],
 } as const
 const ALL_EXPECTED = Object.values(EXPECTED).flat()
@@ -128,24 +137,24 @@ async function bootRealPlugin(dataRoot: string) {
   }
 }
 
-describe('Task-13 独立复验：18 工具经 plugin.apply 注册（真实运行时）', () => {
+describe('Task-13 独立复验：25 工具经 plugin.apply 注册（真实运行时）', () => {
   it('插件契约：name=investment-advisor 且顶层 inject=[tools,skills,ptcRuntime,fs]', () => {
     expect(pluginNs.name).toBe('investment-advisor')
     expect(pluginNs.inject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
     expect(typeof pluginNs.apply).toBe('function')
   })
 
-  it('★ 真实装载后 ctx.tools 恰好暴露 18 个工具（名称逐一核对，逐一可 get）', async () => {
+  it('★ 真实装载后 ctx.tools 恰好暴露 25 个工具（名称逐一核对，逐一可 get）', async () => {
     const b = await bootRealPlugin(makeTmpDataRoot())
     try {
-      await vi.waitFor(() => expect(b.tools.schemas()).toHaveLength(18), {
+      await vi.waitFor(() => expect(b.tools.schemas()).toHaveLength(25), {
         timeout: 8000,
         interval: 10,
       })
 
       const names = b.tools.schemas().map((s) => s.name)
-      expect(names).toHaveLength(18)
-      expect(new Set(names).size).toBe(18)
+      expect(names).toHaveLength(25)
+      expect(new Set(names).size).toBe(25)
       expect([...names].sort()).toEqual([...ALL_EXPECTED].sort())
 
       // 分组逐一存在
@@ -160,17 +169,17 @@ describe('Task-13 独立复验：18 工具经 plugin.apply 注册（真实运行
       }
 
       console.log(
-        `[EVIDENCE T13-1] ctx.tools.schemas() count=18 :: ${[...names].sort().join(', ')}`,
+        `[EVIDENCE T13-1] ctx.tools.schemas() count=25 :: ${[...names].sort().join(', ')}`,
       )
     } finally {
       await b.dispose()
     }
   })
 
-  it('★ 注销验证：dispose 插件 fiber 后 18 工具全部从 registry 消失', async () => {
+  it('★ 注销验证：dispose 插件 fiber 后 25 工具全部从 registry 消失', async () => {
     const b = await bootRealPlugin(makeTmpDataRoot())
     try {
-      await vi.waitFor(() => expect(b.tools.schemas()).toHaveLength(18), {
+      await vi.waitFor(() => expect(b.tools.schemas()).toHaveLength(25), {
         timeout: 8000,
         interval: 10,
       })
@@ -181,7 +190,7 @@ describe('Task-13 独立复验：18 工具经 plugin.apply 注册（真实运行
       for (const n of ALL_EXPECTED) {
         expect(b.tools.get(n), `${n} 应已注销`).toBeUndefined()
       }
-      console.log('[EVIDENCE T13-2] after pluginFiber.dispose(): schemas()=0, all 18 gone')
+      console.log('[EVIDENCE T13-2] after pluginFiber.dispose(): schemas()=0, all 25 gone')
     } finally {
       await b.toolsFiber.dispose()
     }

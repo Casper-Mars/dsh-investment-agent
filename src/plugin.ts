@@ -37,6 +37,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { registerAllSkills } from './skills/index.js'
 import { applyAdvisorPrompt } from './prompts/index.js'
 import { applyRunner } from './runner/index.js'
+import { applyScheduler } from './scheduler/index.js'
 import { applySessionEnsure } from './session-ensure.js'
 
 export { PINNED_SESSION_ID, type SessionPersistenceLike, type PinnedSessionId } from './session.js'
@@ -167,5 +168,12 @@ export function apply(ctx: Context): void {
     applyRunner(ctx)
   } catch (err: unknown) {
     console.error('[dsh-finance] runner 装配失败：', err)
+  }
+
+  // ---- 定时任务多任务调度（loader → runner → waker 编排 + 7 工具，§4.3） ----
+  try {
+    applyScheduler(ctx)
+  } catch (err: unknown) {
+    console.error('[dsh-finance] scheduler 装配失败：', err)
   }
 }
