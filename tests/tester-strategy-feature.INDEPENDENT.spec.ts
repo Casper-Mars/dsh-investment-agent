@@ -14,7 +14,7 @@
  *   3. review_retrospect 端到端（调整策略阈值可翻转「触发检讨」结论）
  *   4. 运行时可见性（真实插件装载：工具 21 / SKILL 5）
  *   5. 旧功能全量回归（ledger_* / predict_* / review_*）
- *   6. Prompt/Skill 文本（advisor 5 步 + 措辞；3 skill 无残留；strategy-authorship 注册且 frontmatter 合法）
+ *   6. Prompt/Skill 文本（advisor 6 步 + 措辞；3 skill 无残留；strategy-authorship 注册且 frontmatter 合法）
  *   7. 契约未变（顶层 inject 四项；cordis.patch.yml 无 diff；无新依赖）
  *   8. typecheck/build/test 全绿（由外部命令复核，见 REPORT）
  *
@@ -545,14 +545,14 @@ describe('6. Prompt / Skill 文本', () => {
   const skill = (name: string) =>
     readFileSync(join(process.cwd(), 'src/skills', name, 'SKILL.md'), 'utf8')
 
-  it('advisor.md 为 5 步工作流，且含「策略由你负责生成与迭代，不依赖用户输入」', () => {
+  it('advisor.md 为 6 步工作流，且含「策略由你负责生成与迭代，不依赖用户输入」', () => {
     const a = advisor()
     const steps = a.split('\n').filter((l) => /^[一二三四五六七八九十]、/.test(l))
-    expect(steps).toHaveLength(5)
+    expect(steps).toHaveLength(6)
     expect(steps[0]).toContain('建立标的')
-    expect(steps[4]).toContain('迭代策略')
+    expect(steps[5]).toContain('双线迭代')
     expect(a).toContain('策略由你负责生成与迭代，不依赖用户输入')
-    console.log('[EVIDENCE 6a] advisor.md 5-step workflow confirmed')
+    console.log('[EVIDENCE 6a] advisor.md 6-step workflow confirmed')
   })
 
   it('3 个 skill 无「从该标的策略配置读取」残留，且含「遵循该标的策略文档」', () => {
