@@ -12,7 +12,7 @@
  * 只新增本测试文件，不改动 src/**。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -79,7 +79,7 @@ async function bootRegistry(dataRoot: string): Promise<Booted> {
   const tools = (app as unknown as { tools: ToolBox }).tools
   await vi.waitFor(
     () => {
-      expect(tools.schemas()).toHaveLength(18)
+      expect(tools.schemas()).toHaveLength(14)
     },
     { timeout: 5000, interval: 10 },
   )
@@ -123,8 +123,6 @@ const WRITE_TOOLS = [
   'strategy_set',
   'predict_make',
   'review_report',
-  'sense_archive_commit',
-  'sense_archive_rollback',
 ] as const
 
 const READ_TOOLS = [
@@ -137,8 +135,6 @@ const READ_TOOLS = [
   'review_get',
   'review_metrics',
   'review_retrospect',
-  'sense_archive_list',
-  'sense_archive_get',
 ] as const
 
 /** §4 契约表：逐工具 output.schema 顶层字段集合（数组取 items.properties）。 */
@@ -159,10 +155,6 @@ const SCHEMA_FIELDS: Record<string, string[]> = {
   review_get: ['reports'],
   review_metrics: ['dir_hit_rate', 'range_hit_rate', 'cum_return', 'history'],
   review_retrospect: ['root_cause', 'improvements'],
-  sense_archive_commit: ['ok', 'version', 'is_current'],
-  sense_archive_list: ['versions'],
-  sense_archive_rollback: ['ok', 'current'],
-  sense_archive_get: ['rationale', 'code', 'meta'],
 }
 
 /** 从 output.schema 取字段名（数组型取 items.properties）。 */
@@ -205,7 +197,7 @@ afterEach(async () => {
 })
 
 /* ================================================================== *
- * 验收点 1：16 工具注册、名称集合、schema 合法、ctx.tools 可见
+ * 验收点 1：14 工具注册、名称集合、schema 合法、ctx.tools 可见
  * ================================================================== */
 
 describe('验收点 1：工具注册数量/名称 + schema 合法性 + ctx.tools 可见', () => {
@@ -214,19 +206,18 @@ describe('验收点 1：工具注册数量/名称 + schema 合法性 + ctx.tools
     'strategy_get', 'strategy_set',
     'predict_make', 'predict_verify', 'predict_get',
     'review_check', 'review_report', 'review_get', 'review_metrics', 'review_retrospect',
-    'sense_archive_commit', 'sense_archive_list', 'sense_archive_rollback', 'sense_archive_get',
   ]
 
-  it('真实 registry 恰好暴露 18 个工具，名称/顺序与 §4 契约表一致', () => {
+  it('真实 registry 恰好暴露 14 个工具，名称/顺序与 §4 契约表一致', () => {
     const names = tools.schemas().map((s) => s.name)
-    expect(names.length).toBe(18)
+    expect(names.length).toBe(14)
     expect(names).toEqual(EXPECTED)
     // 无重复
-    expect(new Set(names).size).toBe(18)
+    expect(new Set(names).size).toBe(14)
     console.log(`[EVIDENCE AC1] registered count=${names.length} names=${names.join(',')}`)
   })
 
-  it('【核报】工具数量实为 18（§4 契约 16 + §10.8 策略域 2）', () => {
+  it('【核报】工具数量实为 14（§4 契约 12 + §10.8 策略域 2）', () => {
     const groups: Record<string, string[]> = {}
     for (const n of EXPECTED) {
       const g = n.startsWith('ledger')
@@ -235,20 +226,17 @@ describe('验收点 1：工具注册数量/名称 + schema 合法性 + ctx.tools
           ? 'strategy'
           : n.startsWith('predict')
             ? 'predicts'
-            : n.startsWith('review')
-              ? 'reviews'
-              : 'sense_archives'
+            : 'reviews'
       ;(groups[g] ??= []).push(n)
     }
     expect(groups.ledgers).toHaveLength(4)
     expect(groups.strategy).toHaveLength(2)
     expect(groups.predicts).toHaveLength(3)
     expect(groups.reviews).toHaveLength(5)
-    expect(groups.sense_archives).toHaveLength(4)
-    expect(tools.schemas().length).toBe(18)
+    expect(tools.schemas().length).toBe(14)
     console.log(
       `[EVIDENCE AC1] groups ledgers=${groups.ledgers.length} strategy=${groups.strategy.length} predicts=${groups.predicts.length} ` +
-        `reviews=${groups.reviews.length} sense=${groups.sense_archives.length} TOTAL=18`,
+        `reviews=${groups.reviews.length} TOTAL=14`,
     )
   })
 
@@ -285,7 +273,7 @@ describe('验收点 1：工具注册数量/名称 + schema 合法性 + ctx.tools
   })
 
   it('卸载：dispose 插件后 ctx.tools 不再暴露这些工具', async () => {
-    expect(tools.schemas()).toHaveLength(18)
+    expect(tools.schemas()).toHaveLength(14)
     await booted.dispose()
     await vi.waitFor(() => expect(tools.schemas()).toHaveLength(0), { timeout: 2000, interval: 10 })
     // 重新引导，供 afterEach 正常清理。
@@ -311,7 +299,6 @@ describe('验收点 1：工具注册数量/名称 + schema 合法性 + ctx.tools
       'strategy_get', 'strategy_set',
       'predict_make', 'predict_verify', 'predict_get',
       'review_check', 'review_report', 'review_get', 'review_metrics', 'review_retrospect',
-      'sense_archive_commit', 'sense_archive_list', 'sense_archive_rollback', 'sense_archive_get',
     ])
     dispose()
     expect(unregistered).toEqual([...registered].reverse())
@@ -324,7 +311,7 @@ describe('验收点 1：工具注册数量/名称 + schema 合法性 + ctx.tools
  * ================================================================== */
 
 describe('验收点 2：lossless JSON + output.schema 严格校验', () => {
-  it('18 个工具真实执行成功值均通过 validateJsonSchemaValue（0 violation）', async () => {
+  it('14 个工具真实执行成功值均通过 validateJsonSchemaValue（0 violation）', async () => {
     // 铺垫数据，使所有读工具都返回成功值。
     await call(tools, 'ledger_init', {
       symbol: '588000', type: 'etf', name: '科创50ETF',
@@ -339,8 +326,6 @@ describe('验收点 2：lossless JSON + output.schema 严格校验', () => {
       symbol: '588000', date: '2026-09-29',
       decision_triggered: true, decision_executed: true, hit_dir: true, hit_range: true,
     })
-    await call(tools, 'sense_archive_commit', { change_type: 'replace', rationale: 'r1', code: 'c1' })
-    await call(tools, 'sense_archive_rollback', { version: 'v001' })
 
     const cases: Array<[string, Record<string, unknown>]> = [
       ['ledger_init', { symbol: '000001', type: 'stock', init_qty: 100, init_cost: 10, init_cash: 5000 }],
@@ -357,10 +342,6 @@ describe('验收点 2：lossless JSON + output.schema 严格校验', () => {
       ['review_get', { symbol: '588000' }],
       ['review_metrics', { symbol: '588000' }],
       ['review_retrospect', { symbol: '588000' }],
-      ['sense_archive_commit', { change_type: 'patch', rationale: 'r2', code: 'c2', parent_version: 'v001' }],
-      ['sense_archive_list', {}],
-      ['sense_archive_rollback', { version: 'v001' }],
-      ['sense_archive_get', { version: 'v001' }],
     ]
 
     for (const [name, args] of cases) {
@@ -368,7 +349,7 @@ describe('验收点 2：lossless JSON + output.schema 严格校验', () => {
       expect(r.isError, `${name} 应成功，实际：${textOf(r)}`).toBe(false)
       expectSchemaOk(tools, name, valueOf(r))
     }
-    console.log(`[EVIDENCE AC2] 18/18 tools executed OK, all values schema-valid`)
+    console.log(`[EVIDENCE AC2] 14/14 tools executed OK, all values schema-valid`)
   })
 
   it('严格性：字段缺失 / 多余字段都会被 validateJsonSchemaValue 判失败（additionalProperties:false）', () => {
@@ -402,7 +383,6 @@ describe('验收点 2：lossless JSON + output.schema 严格校验', () => {
       ['strategy.ts', /ctx\.strategy\./],
       ['predicts.ts', /ctx\.predicts\./],
       ['reviews.ts', /ctx\.reviews\./],
-      ['sense-archives.ts', /ctx\.senseRegistry\./],
     ]
     for (const [f, re] of groups) {
       const src = readFileSync(join(process.cwd(), 'src/tools', f), 'utf8')
@@ -410,7 +390,7 @@ describe('验收点 2：lossless JSON + output.schema 严格校验', () => {
       expect(src, `${f} 不应使用 fetch/http（非 HTTP 层）`).not.toMatch(/\bfetch\s*\(|node:http|node:https/)
     }
     const ctxSrc = readFileSync(join(process.cwd(), 'src/tools/context.ts'), 'utf8')
-    for (const mod of ['ledger', 'strategy', 'predicts', 'reviews', 'sense-registry']) {
+    for (const mod of ['ledger', 'strategy', 'predicts', 'reviews']) {
       expect(ctxSrc, `context.ts 应装配 domain/${mod}`).toContain(`../domain/${mod}.js`)
     }
   })
@@ -458,8 +438,6 @@ describe('验收点 3：写类返回 {ok,...}，读类返回无 ok 字段的数�
       ['strategy_set', { symbol: '588000', text: '首版', rationale: 'r1' }],
       ['predict_make', { symbol: '588000', date: '2026-09-29', dir: 'up', range_low: 1, range_high: 3, confidence: 0.7, watch_points: [] }],
       ['review_report', { symbol: '588000', date: '2026-09-29', decision_triggered: true, decision_executed: true, hit_dir: true, hit_range: true }],
-      ['sense_archive_commit', { change_type: 'replace', rationale: 'r', code: 'c' }],
-      ['sense_archive_rollback', { version: 'v001' }],
     ]
     for (const [name, args] of writeCalls) {
       const r = await call(tools, name, args)
@@ -479,8 +457,6 @@ describe('验收点 3：写类返回 {ok,...}，读类返回无 ok 字段的数�
       ['review_get', { symbol: '588000' }],
       ['review_metrics', { symbol: '588000' }],
       ['review_retrospect', { symbol: '588000' }],
-      ['sense_archive_list', {}],
-      ['sense_archive_get', { version: 'v001' }],
     ]
     for (const [name, args] of readCalls) {
       const r = await call(tools, name, args)
@@ -494,94 +470,6 @@ describe('验收点 3：写类返回 {ok,...}，读类返回无 ok 字段的数�
     console.log(
       `[EVIDENCE AC3] writes=${WRITE_TOOLS.length} have ok; reads=${READ_TOOLS.length} have no ok`,
     )
-  })
-})
-
-/* ================================================================== *
- * 验收点 4：sense_archive_commit 的 change_type / parent 校验
- * ================================================================== */
-
-describe('验收点 4：sense_archive_commit 校验 change_type / parent', () => {
-  const senseVersionsDir = () => join(dir, 'sense_versions')
-  const versionDirs = (): string[] =>
-    existsSync(senseVersionsDir())
-      ? readdirSync(senseVersionsDir()).filter((e) => /^v\d{3,}$/.test(e))
-      : []
-
-  it('patch 缺 parent → 报错（isError），不产生新版本', async () => {
-    const r = await call(tools, 'sense_archive_commit', {
-      change_type: 'patch', rationale: 'r', code: 'c',
-    })
-    expect(r.isError).toBe(true)
-    expect(textOf(r)).toMatch(/parent/)
-    expect(versionDirs()).toEqual([])
-    console.log(`[EVIDENCE AC4] patch w/o parent -> isError: ${r.error?.message}`)
-  })
-
-  it('patch 携带不存在的 parent → 报错', async () => {
-    const r = await call(tools, 'sense_archive_commit', {
-      change_type: 'patch', rationale: 'r', code: 'c', parent_version: 'v999',
-    })
-    expect(r.isError).toBe(true)
-    expect(textOf(r)).toMatch(/parent/)
-  })
-
-  it('keep 在无 current 时报错，且不产生任何版本', async () => {
-    const r = await call(tools, 'sense_archive_commit', {
-      change_type: 'keep', rationale: 'r', code: 'c',
-    })
-    expect(r.isError).toBe(true)
-    expect(textOf(r)).toMatch(/current/)
-    expect(versionDirs()).toEqual([])
-    console.log(`[EVIDENCE AC4] keep w/o current -> isError: ${r.error?.message}`)
-  })
-
-  it('【核报】replace 缺 parent 的实际行为：成功（作为首版），返回 v001 且 is_current=true', async () => {
-    // 任务验收点 4 写「patch/replace 缺 parent 报错」；§4.4 只强制 patch；
-    // 实现为 replace 允许无 parent 作首版引导 —— 如实记录实际行为。
-    const r = await call(tools, 'sense_archive_commit', {
-      change_type: 'replace', rationale: '初版', code: 'sensor v1',
-    })
-    expect(r.isError, textOf(r)).toBe(false)
-    const v = valueOf(r) as { ok: boolean; version: string; is_current: boolean }
-    expect(v).toEqual({ ok: true, version: 'v001', is_current: true })
-    expect(versionDirs()).toEqual(['v001'])
-    console.log(
-      `[EVIDENCE AC4] replace w/o parent -> OK version=${v.version} is_current=${v.is_current}`,
-    )
-  })
-
-  it('正常 patch 带 parent → 成功，version 递增且 is_current=true', async () => {
-    await call(tools, 'sense_archive_commit', { change_type: 'replace', rationale: 'r1', code: 'c1' })
-    const r = await call(tools, 'sense_archive_commit', {
-      change_type: 'patch', rationale: 'r2', code: 'c2', parent_version: 'v001',
-    })
-    expect(r.isError, textOf(r)).toBe(false)
-    const v = valueOf(r) as { version: string; is_current: boolean }
-    expect(v.version).toBe('v002')
-    expect(v.is_current).toBe(true)
-  })
-
-  it('keep 有 current 时不产生新版本（返回沿用版本，is_current=true）', async () => {
-    await call(tools, 'sense_archive_commit', { change_type: 'replace', rationale: 'r1', code: 'c1' })
-    const r = await call(tools, 'sense_archive_commit', { change_type: 'keep', rationale: 'r', code: 'c' })
-    expect(r.isError, textOf(r)).toBe(false)
-    const v = valueOf(r) as { version: string; is_current: boolean }
-    expect(v.version).toBe('v001')
-    expect(v.is_current).toBe(true)
-    expect(versionDirs()).toEqual(['v001']) // 未产生新版本
-  })
-
-  it('rollback → current 指针回指历史版本（磁盘 current 文件核实）', async () => {
-    await call(tools, 'sense_archive_commit', { change_type: 'replace', rationale: 'r1', code: 'c1' })
-    await call(tools, 'sense_archive_commit', { change_type: 'patch', rationale: 'r2', code: 'c2', parent_version: 'v001' })
-    expect(readFileSync(join(senseVersionsDir(), 'current'), 'utf8').trim()).toBe('v002')
-
-    const r = await call(tools, 'sense_archive_rollback', { version: 'v001' })
-    expect(r.isError, textOf(r)).toBe(false)
-    expect(valueOf(r)).toEqual({ ok: true, current: 'v001' })
-    expect(readFileSync(join(senseVersionsDir(), 'current'), 'utf8').trim()).toBe('v001')
-    console.log('[EVIDENCE AC4] rollback current v002 -> v001 (disk pointer confirmed)')
   })
 })
 
@@ -662,21 +550,6 @@ describe('验收点 6：exec.signal 取消（registry 管线 + 工具级守卫�
     console.log(`[EVIDENCE AC6] aborted ledger_init -> code=${r.error?.info?.code}, no residual`)
   })
 
-  it('registry.execute 取消 sense_archive_commit → isError，且无版本目录', async () => {
-    const ctrl = new AbortController()
-    ctrl.abort()
-    const r = await call(
-      tools,
-      'sense_archive_commit',
-      { change_type: 'replace', rationale: 'r', code: 'c' },
-      ctrl.signal,
-    )
-    expect(r.isError).toBe(true)
-    const svDir = join(dir, 'sense_versions')
-    const versions = existsSync(svDir) ? readdirSync(svDir).filter((e) => /^v\d/.test(e)) : []
-    expect(versions).toEqual([])
-  })
-
   it('工具级守卫：直接调用 execute 且 signal 已 abort → 抛错（不落盘）', async () => {
     const def = tools.get('ledger_init')!
     const ctrl = new AbortController()
@@ -690,21 +563,6 @@ describe('验收点 6：exec.signal 取消（registry 管线 + 工具级守卫�
     const ledgerDir = join(dir, 'ledger')
     const dirs = existsSync(ledgerDir) ? readdirSync(ledgerDir) : []
     expect(dirs).toEqual([])
-  })
-
-  it('工具级守卫：sense_archive_commit 直接调用且 signal 已 abort → 抛错且无版本', async () => {
-    const def = tools.get('sense_archive_commit')!
-    const ctrl = new AbortController()
-    ctrl.abort()
-    await expect(
-      def.execute(
-        { change_type: 'replace', rationale: 'r', code: 'c' },
-        { signal: ctrl.signal } as never,
-      ),
-    ).rejects.toThrow(/取消|abort/i)
-    const svDir = join(dir, 'sense_versions')
-    const versions = existsSync(svDir) ? readdirSync(svDir).filter((e) => /^v\d/.test(e)) : []
-    expect(versions).toEqual([])
   })
 })
 

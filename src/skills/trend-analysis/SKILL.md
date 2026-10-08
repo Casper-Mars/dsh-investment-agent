@@ -51,4 +51,3 @@ whenToUse: "收到感知汇报、需判断当前变化是信号还是噪音时�
 
 - 判定为 `sideways` → 交给 `grid-strategy` 生成网格买卖点。
 - 价格逼近 / 跌破止损线 → 交给 `stop-rule` 给出仓位动作。
-- 感知维度不足以支撑研判 → 按 `sense-authorship` 调整感知脚本。

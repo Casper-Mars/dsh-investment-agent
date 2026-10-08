@@ -12,9 +12,9 @@
  *   1. 策略版本链 E2E（v001→v002 / 落盘 / current 指针 / 版本不可变 / parent 冲突 / 未 init / 未设定）
  *   2. 阈值来源 E2E（front-matter → 旧 json → 默认；非法键回落且不抛）
  *   3. review_retrospect 端到端（调整策略阈值可翻转「触发检讨」结论）
- *   4. 运行时可见性（真实插件装载：工具 25 / SKILL 6）
- *   5. 旧功能全量回归（ledger_* / predict_* / review_* / sense_archive_*）
- *   6. Prompt/Skill 文本（advisor 6 步 + 措辞；3 skill 无残留；strategy-authorship 注册且 frontmatter 合法）
+ *   4. 运行时可见性（真实插件装载：工具 21 / SKILL 5）
+ *   5. 旧功能全量回归（ledger_* / predict_* / review_*）
+ *   6. Prompt/Skill 文本（advisor 5 步 + 措辞；3 skill 无残留；strategy-authorship 注册且 frontmatter 合法）
  *   7. 契约未变（顶层 inject 四项；cordis.patch.yml 无 diff；无新依赖）
  *   8. typecheck/build/test 全绿（由外部命令复核，见 REPORT）
  *
@@ -92,7 +92,7 @@ async function bootRegistry(dataRoot: string): Promise<Booted> {
   const tools = (app as unknown as { tools: ToolBox }).tools
   await vi.waitFor(
     () => {
-      expect(tools.schemas()).toHaveLength(18)
+      expect(tools.schemas()).toHaveLength(14)
     },
     { timeout: 5000, interval: 10 },
   )
@@ -395,11 +395,11 @@ describe('3. review_retrospect 端到端：触发检讨由策略文档阈值决�
 })
 
 /* ================================================================== *
- * 4. 运行时可见性（真实插件装载：工具 25 / SKILL 6）
+ * 4. 运行时可见性（真实插件装载：工具 21 / SKILL 5）
  * ================================================================== */
 
 describe('4. 运行时可见性：真实插件装载路径', () => {
-  it('顶层 inject 契约 + 真实装载后工具 25 / SKILL 6', async () => {
+  it('顶层 inject 契约 + 真实装载后工具 21 / SKILL 5', async () => {
     expect(topLevelInject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
 
     const registeredSkills: Array<{ name: string }> = []
@@ -430,13 +430,13 @@ describe('4. 运行时可见性：真实插件装载路径', () => {
     const toolsBox = (app as unknown as { tools: ToolBox }).tools
     await vi.waitFor(
       () => {
-        expect(toolsBox.schemas()).toHaveLength(25)
+        expect(toolsBox.schemas()).toHaveLength(21)
       },
       { timeout: 8000, interval: 10 },
     )
 
     // SKILL 同步注册，立即可见。
-    expect(registeredSkills).toHaveLength(6)
+    expect(registeredSkills).toHaveLength(5)
     expect(registeredSkills.map((s) => s.name)).toEqual([...SKILL_NAMES])
 
     console.log(
@@ -449,9 +449,9 @@ describe('4. 运行时可见性：真实插件装载路径', () => {
     delete process.env.DSH_FINANCE_DATA_DIR
   })
 
-  it('createAllSkillRegistrations 产出 6 个且 frontmatter 合法', () => {
+  it('createAllSkillRegistrations 产出 5 个且 frontmatter 合法', () => {
     const regs = createAllSkillRegistrations()
-    expect(regs).toHaveLength(6)
+    expect(regs).toHaveLength(5)
     for (const r of regs) {
       expect(r.name.length).toBeGreaterThan(0)
       expect(r.description.length).toBeGreaterThan(0)
@@ -463,7 +463,7 @@ describe('4. 运行时可见性：真实插件装载路径', () => {
 })
 
 /* ================================================================== *
- * 5. 旧功能全量回归（ledger_* / predict_* / review_* / sense_archive_*）
+ * 5. 旧功能全量回归（ledger_* / predict_* / review_*）
  * ================================================================== */
 
 describe('5. 旧功能全量回归（工具层）', () => {
@@ -533,26 +533,6 @@ describe('5. 旧功能全量回归（工具层）', () => {
     expect(valueOf(met)).toMatchObject({ dir_hit_rate: 1, range_hit_rate: 1 })
     console.log('[EVIDENCE 5c] review check/report/get/metrics OK')
   })
-
-  it('sense_archive_*：commit(replace→patch)/rollback/list/get 全链路', async () => {
-    const c1 = await call(tools, 'sense_archive_commit', { change_type: 'replace', rationale: 'r1', code: 'c1' })
-    expect(valueOf(c1)).toEqual({ ok: true, version: 'v001', is_current: true })
-
-    const c2 = await call(tools, 'sense_archive_commit', {
-      change_type: 'patch', rationale: 'r2', code: 'c2', parent_version: 'v001',
-    })
-    expect(valueOf(c2)).toEqual({ ok: true, version: 'v002', is_current: true })
-
-    const list = await call(tools, 'sense_archive_list', {})
-    expect((valueOf(list) as { versions: unknown[] }).versions).toHaveLength(2)
-
-    const get = await call(tools, 'sense_archive_get', { version: 'v002' })
-    expect(valueOf(get)).toMatchObject({ code: 'c2', rationale: 'r2' })
-
-    const rb = await call(tools, 'sense_archive_rollback', { version: 'v001' })
-    expect(valueOf(rb)).toEqual({ ok: true, current: 'v001' })
-    console.log('[EVIDENCE 5d] sense_archive commit/rollback/list/get OK')
-  })
 })
 
 /* ================================================================== *
@@ -565,14 +545,14 @@ describe('6. Prompt / Skill 文本', () => {
   const skill = (name: string) =>
     readFileSync(join(process.cwd(), 'src/skills', name, 'SKILL.md'), 'utf8')
 
-  it('advisor.md 为 6 步工作流，且含「策略由你负责生成与迭代，不依赖用户输入」', () => {
+  it('advisor.md 为 5 步工作流，且含「策略由你负责生成与迭代，不依赖用户输入」', () => {
     const a = advisor()
     const steps = a.split('\n').filter((l) => /^[一二三四五六七八九十]、/.test(l))
-    expect(steps).toHaveLength(6)
+    expect(steps).toHaveLength(5)
     expect(steps[0]).toContain('建立标的')
-    expect(steps[5]).toContain('双线迭代')
+    expect(steps[4]).toContain('迭代策略')
     expect(a).toContain('策略由你负责生成与迭代，不依赖用户输入')
-    console.log('[EVIDENCE 6a] advisor.md 6-step workflow confirmed')
+    console.log('[EVIDENCE 6a] advisor.md 5-step workflow confirmed')
   })
 
   it('3 个 skill 无「从该标的策略配置读取」残留，且含「遵循该标的策略文档」', () => {

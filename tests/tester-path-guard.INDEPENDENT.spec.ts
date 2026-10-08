@@ -3,14 +3,14 @@
  *
  * 被测交付物（基线 84a0c46 + 未提交改动）：
  *   - 新增 src/domain/path-guard.ts：assertSafeSegment(seg, label)
- *   - 调用点：store.ts symbolDir / strategy.ts(4) / sense-registry.ts versionDir
+ *   - 调用点：store.ts symbolDir / strategy.ts(4)
  *
  * 本文件为 Tester 独立产出，**不改** src/ 与既有测试（含 Developer 的
  * tests/path-guard.test.ts）。所有用例用 mkdtemp 临时目录作 baseDir，不污染真实
  * 数据；测试结束清理诱饵文件与临时目录。
  *
  * 覆盖（对应任务卡 5 项验证）：
- *   ① 写路径被拒且零越界（9 种非法输入 × ledger_init / strategy_set / sense rollback）
+ *   ① 写路径被拒且零越界（9 种非法输入 × ledger_init / strategy_set）
  *   ② 读路径绝不越界读取（baseDir 之外放诱饵，越界 symbol/version 读不到）
  *   ③ 合法值回归 E2E（588000 / 000001 / v001；ledger_init→set v001→get→set v002）
  *   ④ 入口覆盖审计（静态源码复核：所有 join() 外部输入均经守卫）
@@ -32,9 +32,8 @@ import { assertSafeSegment } from '../src/domain/path-guard.js'
 import { JsonStore } from '../src/domain/store.js'
 import { Ledger } from '../src/domain/ledger.js'
 import { StrategyRegistry } from '../src/domain/strategy.js'
-import { SenseRegistry } from '../src/domain/sense-registry.js'
 
-/** 诱饵哨兵值：若发生越界读，该值会出现在返回/错误中，用于断言「读不到」。 */
+/** 诱饵哨兵值：若发生越界读取，该值会出现在返回/错误中，用于断言「读不到」。 */
 const DECOY_SENTINEL = '__DECOY_LEAKED_PATHGUARD__'
 
 /** 记录本测试文件创建的所有临时目录，测试结束统一清理。 */
@@ -111,19 +110,6 @@ describe('① 写路径被拒且零越界', () => {
       expect(existsSync(join(baseDir, 'esc2'))).toBe(false)
     })
 
-    it('sense rollback（SenseRegistry.rollback）抛 [path-guard] 且零越界', () => {
-      const { sandbox, baseDir } = makeSandbox()
-      const reg = new SenseRegistry(baseDir)
-      const before = snapshot(sandbox)
-
-      expect(() => reg.rollback(input)).toThrow(/\[path-guard\]/)
-
-      const after = snapshot(sandbox)
-      expect(after).toEqual(before)
-      expect(existsSync(join(sandbox, 'esc2'))).toBe(false)
-      expect(existsSync(join(baseDir, 'esc2'))).toBe(false)
-    })
-
     it('ledger_init（Ledger.init）被拒且零越界', () => {
       const { sandbox, baseDir } = makeSandbox()
       const ledger = new Ledger(baseDir)
@@ -152,20 +138,16 @@ describe('① 写路径被拒且零越界', () => {
     })
   })
 
-  it('sense_archive_commit 经 nextVersion 生成的版本号永远合法（无越界通道）', () => {
-    // commit 的 version 由 nextVersion 内部生成（vNNN），不来自外部输入；
-    // 此处验证 commit → read → rollback 正常，且 rollback 越界 version 被拒。
+  it('strategy_set 经 nextVersion 生成的版本号永远合法（无越界通道）', () => {
+    // set 的 version 由 nextVersion 内部生成（vNNN），不来自外部输入；
+    // 此处验证 set → get 正常，且 get 越界 version 被拒。
     const { sandbox, baseDir } = makeSandbox()
-    const reg = new SenseRegistry(baseDir)
-    const v = reg.commit({
-      changeType: 'replace',
-      rationale: 'r',
-      code: 'export default () => 1',
-    })
+    const reg = new StrategyRegistry(baseDir)
+    const v = reg.set('588000', { text: 'c1', rationale: 'r' })
     expect(v).toBe('v001')
-    expect(reg.read('v001').code).toBe('export default () => 1')
-    expect(() => reg.rollback('../../esc2')).toThrow(/\[path-guard\]/)
-    expect(() => reg.rollback('../esc1')).toThrow(/\[path-guard\]/)
+    expect(reg.get('588000')?.text).toBe('c1')
+    expect(reg.get('588000', '../../esc2')).toBeUndefined()
+    expect(reg.get('588000', '../esc1')).toBeUndefined()
     expect(existsSync(join(sandbox, 'esc2'))).toBe(false)
   })
 })
@@ -214,34 +196,6 @@ describe('② 读路径绝不越界读取', () => {
     // 诱饵文件未被守卫读写/改动（仍为哨兵原样）。
     expect(readFileSync(join(decoyDir, 'v001.md'), 'utf8')).toBe(DECOY_SENTINEL)
     expect(readFileSync(join(sandbox, 'esc2.md'), 'utf8')).toBe(DECOY_SENTINEL)
-  })
-
-  it('SenseRegistry.read 越界 version 抛错且读不到 baseDir 之外的诱饵', () => {
-    const { sandbox, baseDir } = makeSandbox()
-    const reg = new SenseRegistry(baseDir)
-
-    // 诱饵：join(baseDir, 'sense_versions', '../../esc2') = sandbox/esc2/（父目录层）。
-    const decoyDir = join(sandbox, 'esc2')
-    mkdirSync(decoyDir, { recursive: true })
-    writeFileSync(
-      join(decoyDir, 'meta.json'),
-      JSON.stringify({ version: DECOY_SENTINEL, changeType: 'replace' }),
-      'utf8',
-    )
-    writeFileSync(join(decoyDir, 'rationale.md'), DECOY_SENTINEL, 'utf8')
-    writeFileSync(join(decoyDir, 'sensor.ts'), DECOY_SENTINEL, 'utf8')
-
-    let msg = ''
-    try {
-      reg.read('../../esc2')
-    } catch (e) {
-      msg = (e as Error).message
-    }
-    expect(msg).toMatch(/\[path-guard\]/)
-    expect(msg).not.toContain(DECOY_SENTINEL)
-
-    // current() 亦不得读诱饵：无 current 指针时返回 null。
-    expect(reg.current()).toBeNull()
   })
 
   it('ledger_query 越界 symbol 抛错且读不到 baseDir 之外的诱饵', () => {
@@ -329,15 +283,16 @@ describe('③ 合法值回归 E2E', () => {
     expect(existsSync(join(baseDir, 'ledger', '588000', 'symbols.json'))).toBe(true)
   })
 
-  it('SenseRegistry 合法版本 commit → read → rollback 正常', () => {
+  it('StrategyRegistry 合法版本 set → get → set v002 正常', () => {
     const { baseDir } = makeSandbox()
-    const reg = new SenseRegistry(baseDir)
-    const v1 = reg.commit({ changeType: 'replace', rationale: 'r1', code: 'c1' })
+    const reg = new StrategyRegistry(baseDir)
+    const v1 = reg.set('588000', { text: '正文 v1', rationale: 'r1' })
     expect(v1).toBe('v001')
-    expect(reg.current()?.version).toBe('v001')
-    expect(reg.read('v001').rationale).toBe('r1')
-    reg.rollback('v001')
-    expect(reg.current()?.version).toBe('v001')
+    expect(reg.get('588000')?.version).toBe('v001')
+    expect(reg.get('588000')?.text).toBe('正文 v1')
+    const v2 = reg.set('588000', { text: '正文 v2', rationale: 'r2', parentVersion: 'v001' })
+    expect(v2).toBe('v002')
+    expect(reg.get('588000')?.version).toBe('v002')
   })
 })
 
@@ -348,23 +303,19 @@ describe('④ 入口覆盖审计', () => {
   const read = (rel: string): string =>
     readFileSync(join(__dirname, '..', 'src', rel), 'utf8')
 
-  it('path-guard 在 5 处调用点均被引用（store/strategy/sense-registry）', () => {
+  it('path-guard 在 4 处调用点均被引用（store/strategy）', () => {
     const store = read('domain/store.ts')
     const strategy = read('domain/strategy.ts')
-    const sense = read('domain/sense-registry.ts')
 
     // store.ts:96 symbolDir
     expect(store).toContain('assertSafeSegment(symbol, \'symbol\')')
     // strategy.ts:80 symbolVersionsDir、:85 currentPath（symbol）、:92 versionFile、:100 metaFile（version）
     expect(strategy.match(/assertSafeSegment\(symbol, 'symbol'\)/g)?.length).toBeGreaterThanOrEqual(2)
     expect(strategy.match(/assertSafeSegment\(version, 'version'\)/g)?.length).toBeGreaterThanOrEqual(2)
-    // sense-registry.ts:72 versionDir
-    expect(sense).toContain('assertSafeSegment(version, \'version\')')
 
     // 均 import 自 path-guard.js
     expect(store).toContain("import { assertSafeSegment } from './path-guard.js'")
     expect(strategy).toContain("import { assertSafeSegment } from './path-guard.js'")
-    expect(sense).toContain("import { assertSafeSegment } from './path-guard.js'")
   })
 
   it('path-guard 拒绝字符集与长度规则与任务卡一致', () => {

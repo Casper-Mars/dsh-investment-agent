@@ -1,12 +1,11 @@
 /**
- * Task 5 验收测试：Prompt 注入（advisor.md）+ 6 个技术面 SKILL。
+ * Task 5 验收测试：Prompt 注入（advisor.md）+ 5 个技术面 SKILL。
  *
  * 覆盖验收标准：
  *   1. advisor.md 含角色/原则/工作流/合规四块，末尾明确「本内容不构成投资建议」。
- *   2. 6 个 SKILL.md 均含 frontmatter 的 name/description/whenToUse，name 为 kebab-case。
+ *   2. 5 个 SKILL.md 均含 frontmatter 的 name/description/whenToUse，name 为 kebab-case。
  *   3. prompt 与 skill 全文不出现写死的标的价格/阈值（数值用「从配置读取」占位）。
- *   4. sense-authorship 完整描述感知脚本结构、变更类型 keep/patch/replace、归档规范。
- *   5. apply(ctx) 注册后 6 个 skill 可被 ctx.skills 发现、advisor.md 注入 system-prompt。
+ *   4. apply(ctx) 注册后 5 个 skill 可被 ctx.skills 发现、advisor.md 注入 system-prompt。
  *
  * 另含：frontmatter 解析器单测、copy-assets 产物路径可解析校验。
  */
@@ -74,9 +73,9 @@ describe('验收 1：advisor.md 人设内容', () => {
  * 验收 2：5 个 SKILL.md 的 frontmatter
  * ------------------------------------------------------------------ */
 
-describe('验收 2：6 个 SKILL.md frontmatter（name/description/whenToUse）', () => {
-  it('SKILL_NAMES 恰为 6 个且均为 kebab-case', () => {
-    expect(SKILL_NAMES).toHaveLength(6)
+describe('验收 2：5 个 SKILL.md frontmatter（name/description/whenToUse）', () => {
+  it('SKILL_NAMES 恰为 5 个且均为 kebab-case', () => {
+    expect(SKILL_NAMES).toHaveLength(5)
     for (const n of SKILL_NAMES) expect(SKILL_NAME_PATTERN.test(n)).toBe(true)
   })
 
@@ -101,7 +100,7 @@ describe('验收 2：6 个 SKILL.md frontmatter（name/description/whenToUse）'
     expect(reg.content).toBe(parseSkill(name).content)
   })
 
-  it('createAllSkillRegistrations 返回 6 个注册对象', () => {
+  it('createAllSkillRegistrations 返回 5 个注册对象', () => {
     const regs = createAllSkillRegistrations()
     expect(regs.map((r) => r.name).sort()).toEqual([...SKILL_NAMES].sort())
   })
@@ -135,61 +134,6 @@ describe('验收 3：prompt 与 skill 全文不出现写死的价格/阈值', ()
     for (const [, text] of readAllTexts()) {
       expect(text).not.toMatch(/\d\s*%/)
     }
-  })
-})
-
-/* ------------------------------------------------------------------ *
- * 验收 4：sense-authorship 完整性
- * ------------------------------------------------------------------ */
-
-describe('验收 4：sense-authorship 完整描述感知脚本规范', () => {
-  const body = parseSkill('sense-authorship').content
-
-  it('描述「只做采集/唤醒判断/汇报，不做交易判断」', () => {
-    expect(body).toMatch(/采集/)
-    expect(body).toMatch(/唤醒/)
-    expect(body).toMatch(/汇报/)
-    expect(body).toMatch(/不做交易判断|不做.*交易判断/)
-  })
-
-  it('描述标的无关原则（遍历 symbols 清单、增删标的不改脚本）', () => {
-    expect(body).toContain('symbols.list()')
-    expect(body).toMatch(/标的无关/)
-    expect(body).toMatch(/增删标的.*不改脚本|不改脚本本身/)
-  })
-
-  it('列出 ptc-runtime bindings（5 个 host 函数）', () => {
-    for (const fn of [
-      'symbols.list()',
-      'quote.realtime(',
-      'quote.intraday(',
-      'quote.history(',
-      'ledger.get(',
-    ]) {
-      expect(body).toContain(fn)
-    }
-  })
-
-  it('描述返回契约 { shouldWake, symbol, summary, metrics } / { shouldWake:false }', () => {
-    expect(body).toMatch(/shouldWake/)
-    expect(body).toMatch(/symbol/)
-    expect(body).toMatch(/summary/)
-    expect(body).toMatch(/metrics/)
-    expect(body).toMatch(/shouldWake:\s*false/)
-  })
-
-  it('描述变更类型 keep / patch / replace', () => {
-    expect(body).toMatch(/\bkeep\b/)
-    expect(body).toMatch(/\bpatch\b/)
-    expect(body).toMatch(/\breplace\b/)
-    expect(body).toMatch(/parent/)
-  })
-
-  it('描述归档规范 sense_versions/<version>/ + rationale.md/sensor.ts/meta.json', () => {
-    expect(body).toContain('sense_versions/')
-    expect(body).toContain('rationale.md')
-    expect(body).toContain('sensor.ts')
-    expect(body).toContain('meta.json')
   })
 })
 
@@ -240,8 +184,8 @@ async function newSkillContext(): Promise<Context> {
   return ctx
 }
 
-describe('验收 5：经真实 SkillRegistry 加载 / 卸载 6 个 SKILL', () => {
-  it('注册后 6 个 skill 均可在目录中列出，get() 返回正文；注销后消失', async () => {
+describe('验收 5：经真实 SkillRegistry 加载 / 卸载 5 个 SKILL', () => {
+  it('注册后 5 个 skill 均可在目录中列出，get() 返回正文；注销后消失', async () => {
     const ctx = await newSkillContext()
     const dispose = registerAllSkills(ctx)
 
@@ -360,11 +304,11 @@ describe('插件 apply 接入', () => {
     return { ctx, registeredSkills, injectedSections }
   }
 
-  it('apply 注册 6 个 skill + 1 个 prompt section，且不抛异常', () => {
+  it('apply 注册 5 个 skill + 1 个 prompt section，且不抛异常', () => {
     const { ctx, registeredSkills, injectedSections } = makeMockCtx()
     expect(() => apply(ctx)).not.toThrow()
 
-    expect(registeredSkills).toHaveLength(6)
+    expect(registeredSkills).toHaveLength(5)
     expect(registeredSkills.map((s) => s.name).sort()).toEqual([...SKILL_NAMES].sort())
     expect(registeredSkills.every((s) => s.source === 'runtime')).toBe(true)
     expect(registeredSkills.every((s) => s.content.length > 100)).toBe(true)

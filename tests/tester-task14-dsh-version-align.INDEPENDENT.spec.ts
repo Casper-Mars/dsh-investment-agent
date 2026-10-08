@@ -15,7 +15,7 @@
  *   2) 运行在**真实 @deepseek-ai/dsh-tools@0.2.0-rc.2**（node_modules 已解析
  *      0.2.0-rc.2）+ 真实 @deepseek-ai/cordis 4.0.4 的 Context 之上，并在测试
  *      内**运行时读取** node_modules 版本号作为「确实以 0.2.0-rc.2 运行」的证据。
- *   3) skills 与 systemPrompt 服务以**捕获式桩**提供，逐项核对 6 个 SKILL 与
+ *   3) skills 与 systemPrompt 服务以**捕获式桩**提供，逐项核对 5 个 SKILL 与
  *      人设 section 的注册结果（非空桩）。
  *
  * 仅新增本测试文件，不改动 src/** 与 package.json。
@@ -46,7 +46,7 @@ interface ToolBox {
   register: (tool: unknown) => () => void
 }
 
-/** 25 个工具的期望名称（按 §4 契约分组：ledgers 4 + strategy 2 + predicts 3 + reviews 5 + sense_archives 4 + scheduler 7）。 */
+/** 21 个工具的期望名称（按 §4 契约分组：ledgers 4 + strategy 2 + predicts 3 + reviews 5 + scheduler 7）。 */
 const EXPECTED = {
   ledgers: ['ledger_init', 'ledger_list', 'ledger_query', 'ledger_trade'],
   strategy: ['strategy_get', 'strategy_set'],
@@ -57,12 +57,6 @@ const EXPECTED = {
     'review_get',
     'review_metrics',
     'review_retrospect',
-  ],
-  sense_archives: [
-    'sense_archive_commit',
-    'sense_archive_list',
-    'sense_archive_rollback',
-    'sense_archive_get',
   ],
   scheduler: [
     'task_create',
@@ -75,13 +69,12 @@ const EXPECTED = {
   ],
 } as const
 const ALL_EXPECTED = Object.values(EXPECTED).flat()
-/** 6 个技术面 SKILL（注册顺序：趋势研判 → 网格策略 → 止损纪律 → 策略创作 → 感知脚本创作 → 任务程序创作）。 */
+/** 5 个技术面 SKILL（注册顺序：趋势研判 → 网格策略 → 止损纪律 → 策略创作 → 任务程序创作）。 */
 const EXPECTED_SKILLS = [
   'trend-analysis',
   'grid-strategy',
   'stop-rule',
   'strategy-authorship',
-  'sense-authorship',
   'task-authorship',
 ] as const
 /** 人设 section 契约（src/prompts/index.ts）。 */
@@ -112,7 +105,7 @@ function makeSystemPromptStub() {
   }
 }
 
-/** skills 捕获式桩：记录 register 调用（用于逐项核对 6 个 SKILL）。 */
+/** skills 捕获式桩：记录 register 调用（用于逐项核对 5 个 SKILL）。 */
 function makeSkillsStub() {
   const registered: Array<{
     name: string
@@ -260,18 +253,18 @@ describe('Task-14 复验 B：真实构建产物（dist-server）装载与运行�
     )
   })
 
-  it('B2·★ 真实装载：apply 不抛异常，ctx.tools 恰好暴露 25 个工具（名称逐一核对）', async () => {
+  it('B2·★ 真实装载：apply 不抛异常，ctx.tools 恰好暴露 21 个工具（名称逐一核对）', async () => {
     const b = await bootDistPlugin(makeTmpDataRoot())
     try {
       // apply 经 app.plugin() 同步执行不抛异常（bootDistPlugin 未抛即为通过）。
       await vi_waitFor(
-        () => expect(b.tools.schemas()).toHaveLength(25),
+        () => expect(b.tools.schemas()).toHaveLength(21),
         8000,
       )
 
       const names = b.tools.schemas().map((s) => s.name)
-      expect(names).toHaveLength(25)
-      expect(new Set(names).size).toBe(25)
+      expect(names).toHaveLength(21)
+      expect(new Set(names).size).toBe(21)
       expect([...names].sort()).toEqual([...ALL_EXPECTED].sort())
 
       for (const [group, groupNames] of Object.entries(EXPECTED)) {
@@ -283,17 +276,17 @@ describe('Task-14 复验 B：真实构建产物（dist-server）装载与运行�
         expect(s.description.length, `${s.name} description 非空`).toBeGreaterThan(0)
       }
       console.log(
-        `[EVIDENCE B2] ctx.tools.schemas() count=25 :: ${[...names].sort().join(', ')}`,
+        `[EVIDENCE B2] ctx.tools.schemas() count=21 :: ${[...names].sort().join(', ')}`,
       )
     } finally {
       await b.dispose()
     }
   })
 
-  it('B3·★ dispose 插件 fiber 后 25 工具全部注销', async () => {
+  it('B3·★ dispose 插件 fiber 后 21 工具全部注销', async () => {
     const b = await bootDistPlugin(makeTmpDataRoot())
     try {
-      await vi_waitFor(() => expect(b.tools.schemas()).toHaveLength(25), 8000)
+      await vi_waitFor(() => expect(b.tools.schemas()).toHaveLength(21), 8000)
 
       await b.pluginFiber.dispose()
 
@@ -301,13 +294,13 @@ describe('Task-14 复验 B：真实构建产物（dist-server）装载与运行�
       for (const n of ALL_EXPECTED) {
         expect(b.tools.get(n), `${n} 应已注销`).toBeUndefined()
       }
-      console.log('[EVIDENCE B3] after pluginFiber.dispose(): schemas()=0, 25 工具全部注销')
+      console.log('[EVIDENCE B3] after pluginFiber.dispose(): schemas()=0, 21 工具全部注销')
     } finally {
       await b.toolsFiber.dispose()
     }
   })
 
-  it('B4·★ skills 6 个正常注册（名称/顺序逐一核对）', async () => {
+  it('B4·★ skills 5 个正常注册（名称/顺序逐一核对）', async () => {
     const b = await bootDistPlugin(makeTmpDataRoot())
     try {
       const names = b.sk.registered.map((s) => s.name)

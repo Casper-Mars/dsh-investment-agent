@@ -7,13 +7,12 @@
  *
  * 覆盖（对应建议测试方式 1-8）：
  *   1. frontmatter 解析边界（正常 / CRLF / BOM / 转义 / 缺 description / 非 kebab / 缺 whenToUse）
- *   2. 6 个 SKILL.md 逐字段校验（含用 harness 权威 isSkillName 复核 kebab-case）
+ *   2. 5 个 SKILL.md 逐字段校验（含用 harness 权威 isSkillName 复核 kebab-case）
  *   3. 真实 SkillRegistry 注册 / 发现 / 注销
  *   4. system-prompt 注入契约（stub + 真实 cordis 双路）
  *   5. 顶层 inject 契约不变
  *   6. 验收点 3：全文数值扫描（写死价格 / 阈值）
- *   7. sense-authorship 完整性
- *   8. copy-assets 产物 + 编译态 new URL 可解析
+ *   7. copy-assets 产物 + 编译态 new URL 可解析
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
@@ -46,11 +45,10 @@ const EXPECTED_SKILLS = [
   'grid-strategy',
   'stop-rule',
   'strategy-authorship',
-  'sense-authorship',
   'task-authorship',
 ]
 
-/** 7 份待扫描全文（advisor.md + 6 个 SKILL.md，验收点 3 的扫描面）。 */
+/** 6 份待扫描全文（advisor.md + 5 个 SKILL.md，验收点 3 的扫描面）。 */
 function allTexts(): Array<[string, string]> {
   return [
     ['src/prompts/advisor.md', loadAdvisorMd()],
@@ -121,9 +119,9 @@ describe('[1] frontmatter 解析边界', () => {
  * 2. 5 个 SKILL.md 校验
  * ================================================================== */
 
-describe('[2] 6 个 SKILL.md 逐字段校验', () => {
-  it('SKILL_NAMES 恰为 6 个（顺序即注册顺序）', () => {
-    expect(SKILL_NAMES).toHaveLength(6)
+describe('[2] 5 个 SKILL.md 逐字段校验', () => {
+  it('SKILL_NAMES 恰为 5 个（顺序即注册顺序）', () => {
+    expect(SKILL_NAMES).toHaveLength(5)
   })
 
   it('SKILL_NAMES 与预期集合一致', () => {
@@ -163,7 +161,7 @@ describe('[2] 6 个 SKILL.md 逐字段校验', () => {
  * ================================================================== */
 
 describe('[3] 真实 SkillRegistry 注册发现', () => {
-  it('registerAllSkills 后 list() 发现 4 个；get() 取回正文；注销后归 0', async () => {
+  it('registerAllSkills 后 list() 发现 5 个；get() 取回正文；注销后归 0', async () => {
     const ctx = new Context()
     await (ctx.plugin(SkillRegistry as never) as Promise<unknown>)
 
@@ -390,53 +388,11 @@ describe('[6] 全文无写死价格 / 阈值', () => {
 })
 
 /* ================================================================== *
- * 7. sense-authorship 完整性
- * ================================================================== */
-
-describe('[7] sense-authorship 完整性', () => {
-  const body = parseSkill('sense-authorship').content
-
-  it('含 5 个 ptc-runtime bindings', () => {
-    for (const b of [
-      'symbols.list(',
-      'quote.realtime(',
-      'quote.intraday(',
-      'quote.history(',
-      'ledger.get(',
-    ]) {
-      expect(body, `缺 binding ${b}`).toContain(b)
-    }
-  })
-
-  it('含变更类型 keep / patch / replace 及 parent 演进链', () => {
-    expect(body).toMatch(/\bkeep\b/)
-    expect(body).toMatch(/\bpatch\b/)
-    expect(body).toMatch(/\breplace\b/)
-    expect(body).toMatch(/parent/)
-  })
-
-  it('含归档规范 sense_versions/<version>/ + rationale.md / sensor.ts / meta.json', () => {
-    expect(body).toContain('sense_versions/')
-    expect(body).toContain('rationale.md')
-    expect(body).toContain('sensor.ts')
-    expect(body).toContain('meta.json')
-  })
-
-  it('含唤醒返回契约与「不做交易判断」边界', () => {
-    expect(body).toMatch(/shouldWake/)
-    expect(body).toMatch(/shouldWake:\s*false/)
-    expect(body).toMatch(/summary/)
-    expect(body).toMatch(/metrics/)
-    expect(body).toMatch(/不做交易判断|不得.*买卖|仅.*采集/)
-  })
-})
-
-/* ================================================================== *
  * 8. copy-assets 产物 + 编译态 new URL 解析
  * ================================================================== */
 
 describe('[8] copy-assets 产物与编译态路径', () => {
-  it('搬运后 dist-server 下 7 个 .md 存在且与源码一致，编译态 new URL 可解析', async () => {
+  it('搬运后 dist-server 下 6 个 .md 存在且与源码一致，编译态 new URL 可解析', async () => {
     execFileSync('node', ['scripts/copy-assets.mjs'], { cwd: REPO_ROOT, stdio: 'ignore' })
 
     const checks: Array<[string, string]> = [

@@ -4,8 +4,7 @@
  * AC1：assertSafeSegment 对合法值通过、对非法值（空 / `.` / `..` / 含 `../` /
  *  前导 `/` / 含 `/` / 含空白 / 超 64 长度）抛错。
  * AC2：端到端越界用例被拒——symbol 为 `../../esc2` 时，JsonStore.symbolDir /
- *  Ledger.init / StrategyRegistry.set 均抛错，且 baseDir 之外不产生任何文件；
- *  SenseRegistry 对越界 version 同样被拒。
+ *  Ledger.init / StrategyRegistry.set 均抛错，且 baseDir 之外不产生任何文件。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, rmSync, existsSync } from 'node:fs'
@@ -15,7 +14,6 @@ import { assertSafeSegment } from '../src/domain/path-guard.js'
 import { JsonStore } from '../src/domain/store.js'
 import { Ledger } from '../src/domain/ledger.js'
 import { StrategyRegistry } from '../src/domain/strategy.js'
-import { SenseRegistry } from '../src/domain/sense-registry.js'
 
 let dir: string
 
@@ -99,12 +97,6 @@ describe('端到端越界 symbol 被拒（不落盘 baseDir 之外）', () => {
 })
 
 describe('端到端越界 version 被拒', () => {
-  it('SenseRegistry.read/rollback 越界 version 抛错', () => {
-    const reg = new SenseRegistry(dir)
-    expect(() => reg.read('../../esc2')).toThrow(/\[path-guard\]/)
-    expect(() => reg.rollback('../esc1')).toThrow(/\[path-guard\]/)
-  })
-
   it('StrategyRegistry.get 越界 version 抛错（显式 version 来自工具输入）', () => {
     const reg = new StrategyRegistry(dir)
     reg.set('588000', { text: '首版', rationale: 'r' })

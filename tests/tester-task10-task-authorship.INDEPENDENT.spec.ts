@@ -1,27 +1,27 @@
 /**
  * tester-task10-task-authorship.INDEPENDENT.spec.ts
  * ==================================================================
- * Tester 独立复验（飞书任务卡 t100386）：新增第 6 个技术面 SKILL ——
- * `task-authorship`（任务程序创作），`SKILL_NAMES` 计数 5 → 6。
+ * Tester 独立复验（飞书任务卡 t100386）：新增技术面 SKILL ——
+ * `task-authorship`（任务程序创作），`SKILL_NAMES` 计数 4 → 5。
  *
  * 被测交付物：
  *   - 新增 `src/skills/task-authorship/SKILL.md`（按 §10.2 逐字落地）
- *   - `src/skills/index.ts`：SKILL_NAMES 追加 `'task-authorship'`（末尾）、计数 5 → 6
- *   - `src/skills/README.md`、`src/plugin.ts`：计数表述同步为 6
+ *   - `src/skills/index.ts`：SKILL_NAMES 追加 `'task-authorship'`（末尾）、计数 4 → 5
+ *   - `src/skills/README.md`、`src/plugin.ts`：计数表述同步为 5
  *
  * 独立性声明：本文件由 Tester 独立编写，**不依赖** Developer 的
  * `tests/prompt-skills.spec.ts`。分两条独立证据链：
  *   1) 源码态：`src/skills/*` 逐要素比对 §10.2 要素清单（关键词 / 结构）；
  *   2) 装载态：真实 `@deepseek-ai/dsh-skill` SkillRegistry + 真实构建产物
- *      `dist-server/` 插件装载，观测 `ctx.skills` 恰好注册 6 个 SKILL。
+ *      `dist-server/` 插件装载，观测 `ctx.skills` 恰好注册 5 个 SKILL。
  *
  * 覆盖 8 条验收点：
  *   1. SKILL.md 存在 + frontmatter（name=kebab / description / whenToUse）
  *   2. 正文要素齐全（对照 §10.2 清单）
- *   3. SKILL_NAMES 末尾含 task-authorship、长度 6、顺序正确
+ *   3. SKILL_NAMES 末尾含 task-authorship、长度 5、顺序正确
  *   4. parseSkill('task-authorship') 可解析、content 非空
- *   5. 真实装载后 ctx.skills 恰好注册 6 个，名称与 SKILL_NAMES 一致（含注销）
- *   6. index.ts / README.md / plugin.ts 计数表述为 6
+ *   5. 真实装载后 ctx.skills 恰好注册 5 个，名称与 SKILL_NAMES 一致（含注销）
+ *   6. index.ts / README.md / plugin.ts 计数表述为 5
  *   7. task-authorship 正文标的无关（无写死价格 / 阈值）
  *   8. 顶层 inject 契约仍为 [tools, skills, ptcRuntime, fs]
  * ==================================================================
@@ -34,7 +34,7 @@ import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-// ★ 真实构建产物入口（dist-server），验证编译态同样注册 6 个 SKILL。
+// ★ 真实构建产物入口（dist-server），验证编译态同样注册 5 个 SKILL。
 import * as pluginNs from '../dist-server/index.js'
 import {
   SKILL_NAMES,
@@ -49,13 +49,12 @@ import { inject as srcInject } from '../src/plugin.js'
 
 const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url))
 
-/** 期望的 6 个 SKILL（顺序 = 注册顺序）。 */
+/** 期望的 5 个 SKILL（顺序 = 注册顺序）。 */
 const EXPECTED_SKILLS = [
   'trend-analysis',
   'grid-strategy',
   'stop-rule',
   'strategy-authorship',
-  'sense-authorship',
   'task-authorship',
 ] as const
 
@@ -173,18 +172,18 @@ describe('[验收2] 正文覆盖 §10.2 全部要素', () => {
  * 验收 3：SKILL_NAMES 长度 / 顺序 / 末尾
  * ================================================================== */
 
-describe('[验收3] SKILL_NAMES 恰为 6 个且顺序正确', () => {
-  it('长度 = 6', () => {
-    expect(SKILL_NAMES).toHaveLength(6)
+describe('[验收3] SKILL_NAMES 恰为 5 个且顺序正确', () => {
+  it('长度 = 5', () => {
+    expect(SKILL_NAMES).toHaveLength(5)
   })
 
-  it('顺序：trend-analysis → grid-strategy → stop-rule → strategy-authorship → sense-authorship → task-authorship', () => {
+  it('顺序：trend-analysis → grid-strategy → stop-rule → strategy-authorship → task-authorship', () => {
     expect([...SKILL_NAMES]).toEqual([...EXPECTED_SKILLS])
   })
 
-  it('末尾为 task-authorship；原 5 个位置不变', () => {
+  it('末尾为 task-authorship；原 4 个位置不变', () => {
     expect(SKILL_NAMES[SKILL_NAMES.length - 1]).toBe(TA)
-    expect([...SKILL_NAMES].slice(0, 5)).toEqual([...EXPECTED_SKILLS].slice(0, 5))
+    expect([...SKILL_NAMES].slice(0, 4)).toEqual([...EXPECTED_SKILLS].slice(0, 4))
   })
 
   it('每个名称均为 kebab-case', () => {
@@ -213,19 +212,19 @@ describe('[验收4] parseSkill(task-authorship) 可解析', () => {
     expect(reg.content).toBe(parseSkill(TA).content)
   })
 
-  it('createAllSkillRegistrations 返回 6 个，名称与 SKILL_NAMES 一致', () => {
+  it('createAllSkillRegistrations 返回 5 个，名称与 SKILL_NAMES 一致', () => {
     const regs = createAllSkillRegistrations()
-    expect(regs).toHaveLength(6)
+    expect(regs).toHaveLength(5)
     expect(regs.map((r) => r.name)).toEqual([...SKILL_NAMES])
   })
 })
 
 /* ================================================================== *
- * 验收 5：真实装载注册 6 个（SkillRegistry + dist 插件）
+ * 验收 5：真实装载注册 5 个（SkillRegistry + dist 插件）
  * ================================================================== */
 
-describe('[验收5] 真实装载后 ctx.skills 恰好注册 6 个', () => {
-  it('真实 SkillRegistry：registerAllSkills 后 6 个可发现，注销后归 0', async () => {
+describe('[验收5] 真实装载后 ctx.skills 恰好注册 5 个', () => {
+  it('真实 SkillRegistry：registerAllSkills 后 5 个可发现，注销后归 0', async () => {
     const ctx = new Context()
     await (ctx.plugin(SkillRegistry as never) as Promise<unknown>)
 
@@ -236,7 +235,7 @@ describe('[验收5] 真实装载后 ctx.skills 恰好注册 6 个', () => {
 
     const after = await ctx.skills.list({})
     const got = after.filter((s) => (EXPECTED_SKILLS as readonly string[]).includes(s.name))
-    expect(got).toHaveLength(6)
+    expect(got).toHaveLength(5)
     expect(got.map((s) => s.name).sort()).toEqual([...EXPECTED_SKILLS].sort())
 
     for (const n of EXPECTED_SKILLS) {
@@ -255,7 +254,7 @@ describe('[验收5] 真实装载后 ctx.skills 恰好注册 6 个', () => {
     await ctx.fiber.dispose()
   })
 
-  it('真实构建产物 dist-server 装载：skills 注册 6 个，顺序与 SKILL_NAMES 一致', async () => {
+  it('真实构建产物 dist-server 装载：skills 注册 5 个，顺序与 SKILL_NAMES 一致', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-fin-ta-'))
     process.env.DSH_FINANCE_DATA_DIR = dir
 
@@ -294,16 +293,16 @@ describe('[验收5] 真实装载后 ctx.skills 恰好注册 6 个', () => {
     }
 
     try {
-      await vi.waitFor(() => expect(registered).toHaveLength(6), { timeout: 5000, interval: 10 })
+      await vi.waitFor(() => expect(registered).toHaveLength(5), { timeout: 5000, interval: 10 })
       expect(registered.map((s) => s.name)).toEqual([...SKILL_NAMES])
       for (const s of registered) {
         expect(s.description.length, `${s.name} description 非空`).toBeGreaterThan(0)
         expect(s.content.length, `${s.name} content 非空`).toBeGreaterThan(0)
       }
-      // 第 6 个恰为 task-authorship。
-      expect(registered[5].name).toBe(TA)
+      // 最后一个恰为 task-authorship。
+      expect(registered[4].name).toBe(TA)
 
-      // 注销：dispose 插件 fiber 后 6 个全部消失。
+      // 注销：dispose 插件 fiber 后 5 个全部消失。
       await pluginFiber.dispose()
       expect(registered).toHaveLength(0)
     } finally {
@@ -315,30 +314,30 @@ describe('[验收5] 真实装载后 ctx.skills 恰好注册 6 个', () => {
 })
 
 /* ================================================================== *
- * 验收 6：计数表述同步为 6
+ * 验收 6：计数表述同步为 5
  * ================================================================== */
 
-describe('[验收6] index.ts / README.md / plugin.ts 计数表述为 6', () => {
+describe('[验收6] index.ts / README.md / plugin.ts 计数表述为 5', () => {
   const read = (rel: string): string => readFileSync(join(PROJECT_ROOT, rel), 'utf8')
 
-  it('src/skills/index.ts 注释计数为 6，且不再出现「5 个 …SKILL」', () => {
+  it('src/skills/index.ts 注释计数为 5，且不再出现「6 个 …SKILL」', () => {
     const src = read('src/skills/index.ts')
-    expect(src).toMatch(/6 个/)
-    expect(src).not.toMatch(/5 个(运行时)?\s*SKILL/)
+    expect(src).toMatch(/5 个/)
+    expect(src).not.toMatch(/6 个(运行时)?\s*SKILL/)
     expect(src).toContain("'task-authorship'")
   })
 
-  it('src/skills/README.md 计数为 6，且不再出现「5 个 …SKILL」', () => {
+  it('src/skills/README.md 计数为 5，且不再出现「6 个 …SKILL」', () => {
     const src = read('src/skills/README.md')
-    expect(src).toMatch(/6 个/)
-    expect(src).not.toMatch(/5 个/)
+    expect(src).toMatch(/5 个/)
+    expect(src).not.toMatch(/6 个/)
     expect(src).toContain('task-authorship')
   })
 
-  it('src/plugin.ts 注释计数为 6，且不再出现「5 个技术面 SKILL」', () => {
+  it('src/plugin.ts 注释计数为 5，且不再出现「6 个技术面 SKILL」', () => {
     const src = read('src/plugin.ts')
-    expect(src).toMatch(/6 个技术面 SKILL/)
-    expect(src).not.toMatch(/5 个技术面 SKILL/)
+    expect(src).toMatch(/5 个技术面 SKILL/)
+    expect(src).not.toMatch(/6 个技术面 SKILL/)
     expect(src).toContain('task-authorship')
   })
 })

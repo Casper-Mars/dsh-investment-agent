@@ -2,8 +2,8 @@
  * domain 层共享类型定义。
  *
  * 本文件仅承载纯类型与常量，不依赖任何 dsh/cordis API，也不接触 I/O。
- * 供 `ledger` / `metrics` / `sense-registry` 三域以及后续 `tools`
- * 复用。所有数据结构以 `symbol` 为维度隔离（感知版本注册表除外）。
+ * 供 `ledger` / `metrics` / `strategy` 三域以及后续 `tools`
+ * 复用。所有数据结构以 `symbol` 为维度隔离。
  */
 
 /** 标的类型：ETF（份） / 股票（股）。仅作元数据与交易单位提示，不改变台账数值逻辑。 */
@@ -74,42 +74,6 @@ export interface Thresholds {
   cumReturnMin: number
   /** 连续未命中次数上限。 */
   missStreakMax: number
-}
-
-/** 感知版本变更类型。 */
-export type ChangeType = 'keep' | 'patch' | 'replace'
-
-/** 感知版本提交输入。 */
-export interface SenseVersionInput {
-  changeType: ChangeType
-  /** 推理理由（写入 rationale.md）。 */
-  rationale: string
-  /** 感知脚本本体（写入 sensor.ts）。 */
-  code: string
-  /** patch/replace 时的父版本号。 */
-  parent?: string
-  /** 触发本次调整的前因。 */
-  trigger?: string
-  /** 生成者。 */
-  by?: string
-}
-
-/** 感知版本元数据（meta.json 去序列化形态）。 */
-export interface SenseVersionMeta {
-  version: string
-  changeType: ChangeType
-  parent?: string
-  trigger?: string
-  rationale?: string
-  ts: string
-  by?: string
-}
-
-/** 感知版本全文（含推理理由 + 脚本本体 + 元数据）。 */
-export interface SenseVersionFull {
-  meta: SenseVersionMeta
-  rationale: string
-  code: string
 }
 
 // ---------------------------------------------------------------------------

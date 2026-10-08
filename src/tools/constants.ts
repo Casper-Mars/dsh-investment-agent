@@ -3,7 +3,7 @@
  *
  * 合规声明（§ task 验收「所有输出末尾附」）：附在唤醒消息正文与关键写/决策类
  * 工具 render 输出末尾，避免硬编码散落。只读查询工具（ledger_list/query、
- * predict_get、sense_archive_*）不加，以免冗余。
+ * predict_get）不加，以免冗余。
  */
 
 /** 输出末尾合规声明（醒目一行，供工具 render 与唤醒正文复用）。 */

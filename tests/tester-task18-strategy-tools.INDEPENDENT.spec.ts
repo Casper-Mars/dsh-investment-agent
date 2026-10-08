@@ -4,19 +4,19 @@
  * 被测交付物（工具层，Ta***s）：
  *   - 新增 src/tools/strategy.ts（createStrategyTools → strategy_get / strategy_set）
  *   - 改 src/tools/schemas.ts（+2 严格 schema）、src/tools/context.ts（ToolContext.strategy）、
- *     src/tools/index.ts（16→18）、src/tools/README.md、src/plugin.ts（仅注释）
+ *     src/tools/index.ts（16→14）、src/tools/README.md、src/plugin.ts（仅注释）
  *
  * 本文件为 Tester 独立产出，**不改** src/ 与既有测试。
  * 一律用 mkdtemp 临时目录作为 dataRoot，直接构造真实 ToolContext + createAllTools，
  * 真实调用 ToolDefinition.execute(args, { signal })，不污染真实 dataRoot。
  *
  * 覆盖（对应任务卡 6 项必验点）：
- *   1. 注册与顺序（18 个；ledgers → strategy → predicts → reviews → sense_archives）
+ *   1. 注册与顺序（14 个；ledgers → strategy → predicts → reviews）
  *   2. 参数契约（strategy_get / strategy_set 的 required/optional）
  *   3. 行为（未初始化报错 / 首版 / 未设定读报错 / 版本递增与冲突 / 落盘）
  *   4. 中断语义（exec.signal aborted → 抛错且不落盘）
  *   5. schema 严格性（多余字段 / 缺失字段 → validateJsonSchemaValue 判失败）
- *   6. 契约未变（顶层 inject 四项 / cordis.patch.yml 无 diff / README 工具表 18）
+ *   6. 契约未变（顶层 inject 四项 / cordis.patch.yml 无 diff / README 工具表 14）
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
@@ -93,17 +93,16 @@ describe('必验点 1：注册与顺序', () => {
     'strategy_get', 'strategy_set',
     'predict_make', 'predict_verify', 'predict_get',
     'review_check', 'review_report', 'review_get', 'review_metrics', 'review_retrospect',
-    'sense_archive_commit', 'sense_archive_list', 'sense_archive_rollback', 'sense_archive_get',
   ]
 
-  it('createAllTools 长度为 18，名称齐全且无重复', () => {
-    expect(tools.length).toBe(18)
+  it('createAllTools 长度为 14，名称齐全且无重复', () => {
+    expect(tools.length).toBe(14)
     const names = tools.map((t) => t.name)
-    expect(new Set(names).size).toBe(18)
+    expect(new Set(names).size).toBe(14)
     for (const n of expectedOrder) expect(names).toContain(n)
   })
 
-  it('顺序严格为 ledgers → strategy → predicts → reviews → sense_archives', () => {
+  it('顺序严格为 ledgers → strategy → predicts → reviews', () => {
     const names = tools.map((t) => t.name)
     expect(names).toEqual(expectedOrder)
   })
@@ -300,7 +299,7 @@ describe('必验点 5：schema 严格性（多余/缺失字段 → 校验失败�
 })
 
 describe('必验点 6：契约未变', () => {
-  it('顶层 inject 四项；cordis.patch.yml 无策略域变更；README 工具表 18', () => {
+  it('顶层 inject 四项；cordis.patch.yml 无策略域变更；README 工具表 14', () => {
     const pluginSrc = readFileSync(join(__dirname, '..', 'src', 'plugin.ts'), 'utf8')
     // inject 数组仍为四项（契约固定）
     expect(pluginSrc).toMatch(/export const inject: string\[\] = \['tools', 'skills', 'ptcRuntime', 'fs'\]/)
@@ -309,14 +308,13 @@ describe('必验点 6：契约未变', () => {
     expect(patchSrc).toMatch(/inject: \['tools', 'skills', 'ptcRuntime', 'fs'\]/)
 
     const readme = readFileSync(join(__dirname, '..', 'src', 'tools', 'README.md'), 'utf8')
-    // 工具表为 18（标题声明 18 个）
-    expect(readme).toMatch(/18 个/)
+    // 工具表为 14（标题声明 14 个）
+    expect(readme).toMatch(/14 个/)
     const allNames = [
       'ledger_init', 'ledger_list', 'ledger_query', 'ledger_trade',
       'strategy_get', 'strategy_set',
       'predict_make', 'predict_verify', 'predict_get',
       'review_check', 'review_report', 'review_get', 'review_metrics', 'review_retrospect',
-      'sense_archive_commit', 'sense_archive_list', 'sense_archive_rollback', 'sense_archive_get',
     ]
     for (const n of allNames) expect(readme).toContain(n)
   })

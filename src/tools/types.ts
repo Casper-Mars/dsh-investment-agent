@@ -103,35 +103,3 @@ export interface ReviewRetrospectResult {
   root_cause: string
   improvements: string[]
 }
-
-/** 感知版本变更类型。 */
-export type ChangeType = 'keep' | 'patch' | 'replace'
-
-/** 版本链元素（sense_archive_list）。 */
-export interface SenseVersionMetaView {
-  version: string
-  change_type: ChangeType
-  ts: string
-  rationale_extract: string
-}
-
-/** 版本链结果（sense_archive_list）。 */
-export interface SenseArchiveListResult {
-  versions: SenseVersionMetaView[]
-}
-
-/** 某一版全文 meta（sense_archive_get）。 */
-export interface SenseVersionFullMetaView {
-  version: string
-  change_type: ChangeType
-  parent: string | null
-  trigger: string | null
-  ts: string
-}
-
-/** 某一版全文（sense_archive_get）。 */
-export interface SenseVersionFullView {
-  rationale: string
-  code: string
-  meta: SenseVersionFullMetaView
-}

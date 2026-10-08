@@ -2,7 +2,7 @@
  * domain/strategy.ts —— per-symbol 策略文档注册表。
  *
  * 职责：维护 per-symbol 策略文档（Markdown 文本实体）的版本链，保证
- * 「版本不可变 + rationale 追溯 + current 指针」可回滚，与 sense-registry 对称。
+ * 「版本不可变 + rationale 追溯 + current 指针」可回滚。
  * 详细设计 §10.4 / §10.6：策略是 per-symbol 的文本实体，首版即启用版本链；
  * §10.8 定义 strategy_get / strategy_set 的契约。
  *

@@ -9,7 +9,6 @@ import { join } from 'node:path'
 import { Ledger } from '../src/domain/ledger.js'
 import { JsonStore, LedgerStore } from '../src/domain/store.js'
 import { hitRate, cumReturn } from '../src/domain/metrics.js'
-import { SenseRegistry } from '../src/domain/sense-registry.js'
 import { LOT_SIZE, COST_PRECISION } from '../src/domain/types.js'
 import type { Trade } from '../src/domain/types.js'
 
@@ -173,58 +172,8 @@ describe('验收点5：metrics.hitRate & cumReturn', () => {
   })
 })
 
-// ---------- 验收点 6：sense-registry 版本不可变 ----------
-describe('验收点6：sense-registry 版本不可变 & rollback', () => {
-  it('patch 不带 parent → 抛错', () => {
-    const reg = new SenseRegistry(dir)
-    expect(() =>
-      reg.commit({ changeType: 'patch', rationale: 'x', code: 'x' }),
-    ).toThrow(/parent/)
-  })
-
-  it('版本一经 commit 不可变：二次 commit 生成新版本，旧版本内容不变', () => {
-    const reg = new SenseRegistry(dir)
-    const v1 = reg.commit({ changeType: 'replace', rationale: '初始', code: 'c1' })
-    const beforeV1 = reg.read(v1)
-
-    // 再 commit → 生成 v002，而非覆盖 v001
-    const v2 = reg.commit({ changeType: 'patch', rationale: '改', code: 'c2', parent: v1 })
-    expect(v2).toBe('v002')
-
-    // 旧版本全文完全不变
-    const afterV1 = reg.read(v1)
-    expect(afterV1).toEqual(beforeV1)
-    expect(afterV1.code).toBe('c1')
-    expect(afterV1.rationale).toBe('初始')
-    expect(afterV1.meta.changeType).toBe('replace')
-  })
-
-  it('read 返回对象为副本：修改返回值不影响磁盘存档（不可变）', () => {
-    const reg = new SenseRegistry(dir)
-    const v = reg.commit({ changeType: 'replace', rationale: '初始', code: 'c1' })
-    const full = reg.read(v)
-    // 修改内存中的返回对象
-    full.meta.changeType = 'keep'
-    full.code = 'HACKED'
-    full.rationale = 'HACKED'
-    // 重新读取，磁盘内容不受影响
-    const again = reg.read(v)
-    expect(again.meta.changeType).toBe('replace')
-    expect(again.code).toBe('c1')
-    expect(again.rationale).toBe('初始')
-  })
-
-  it('rollback 到历史版本后 current() 返回该版本', () => {
-    const reg = new SenseRegistry(dir)
-    const v1 = reg.commit({ changeType: 'replace', rationale: 'v1', code: 'c1' })
-    const v2 = reg.commit({ changeType: 'replace', rationale: 'v2', code: 'c2', parent: v1 })
-    expect(reg.current()?.version).toBe(v2)
-    reg.rollback(v1)
-    expect(reg.current()?.version).toBe(v1)
-    // rollback 后 read 依然能读到该历史版本的完整内容
-    expect(reg.read(v1).code).toBe('c1')
-  })
-})
+// ---------- 验收点 6：版本不可变（已随 sense-registry 域一并移除） ----------
+// 旧 sense-registry 版本不可变 & rollback 用例已删除（sense_archive 工具链已废弃）。
 
 // ---------- 验收点 7：纯 TS，不 import dsh API ----------
 describe('验收点7：domain 模块纯 TS', () => {

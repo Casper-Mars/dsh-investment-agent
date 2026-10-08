@@ -174,7 +174,7 @@ async function bootRegistry(
     },
   } as never) as unknown as { dispose: () => Promise<void> }
   const tools = (app as unknown as { tools: ToolBox }).tools
-  await vi.waitFor(() => expect(tools.schemas()).toHaveLength(18), {
+  await vi.waitFor(() => expect(tools.schemas()).toHaveLength(14), {
     timeout: 5000,
     interval: 10,
   })

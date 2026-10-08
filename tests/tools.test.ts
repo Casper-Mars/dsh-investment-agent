@@ -2,12 +2,11 @@
  * 工具层单元测试：覆盖 t100353 六条验收点。
  *
  * 验收点映射：
- *   1. 15 个工具全部经 defineTool 注册（createAllTools 长度 + 名称 + output.schema 合法性）
+ *   1. 14 个工具全部经 defineTool 注册（createAllTools 长度 + 名称 + output.schema 合法性）
  *   2. execute 走 domain、返回 lossless JSON 且符合 output schema
  *   3. 写类返回 {ok,...}，读类返回无 ok 字段
- *   4. sense_archive_commit 的 change_type / parent 校验
- *   5. 写操作按 symbol 隔离
- *   6. exec.signal 取消时不产生半写
+ *   4. 写操作按 symbol 隔离
+ *   5. exec.signal 取消时不产生半写
  *
  * 说明：直接调用 ToolDefinition.execute(args, exec) 断言返回形状；同时用
  * output.schema 的严格校验语义（借助 @deepseek-ai/dsh-tools 导出的
@@ -68,19 +67,18 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-describe('验收点 1：18 个工具注册 + 名称 + schema 合法', () => {
+describe('验收点 1：14 个工具注册 + 名称 + schema 合法', () => {
   const expected = [
     'ledger_init', 'ledger_list', 'ledger_query', 'ledger_trade',
     'strategy_get', 'strategy_set',
     'predict_make', 'predict_verify', 'predict_get',
     'review_check', 'review_report', 'review_get', 'review_metrics', 'review_retrospect',
-    'sense_archive_commit', 'sense_archive_list', 'sense_archive_rollback', 'sense_archive_get',
   ]
-  it('createAllTools 返回 18 个工具，名称齐全无重复', () => {
-    // §4 契约表 16 个 + §10.8 策略域 2 个 = 18 个。
-    expect(tools.length).toBe(18)
+  it('createAllTools 返回 14 个工具，名称齐全无重复', () => {
+    // §4 契约表 12 个 + §10.8 策略域 2 个 = 14 个。
+    expect(tools.length).toBe(14)
     const names = tools.map((t) => t.name)
-    expect(new Set(names).size).toBe(18)
+    expect(new Set(names).size).toBe(14)
     for (const n of expected) expect(names).toContain(n)
   })
 
@@ -307,66 +305,7 @@ describe('验收点 2+3：reviews 域', () => {
   })
 })
 
-describe('验收点 4：sense_archive_commit 校验 change_type / parent', () => {
-  it('patch 缺 parent 报错（设计 §4.4）', async () => {
-    await expect(
-      run('sense_archive_commit', { change_type: 'patch', rationale: 'r', code: 'c' }),
-    ).rejects.toThrow(/parent/)
-  })
-
-  it('patch 带不存在的 parent 报错', async () => {
-    await expect(
-      run('sense_archive_commit', { change_type: 'patch', rationale: 'r', code: 'c', parent_version: 'v999' }),
-    ).rejects.toThrow(/parent/)
-  })
-
-  it('keep 在无 current 时报错（不产生新版本）', async () => {
-    await expect(
-      run('sense_archive_commit', { change_type: 'keep', rationale: 'r', code: 'c' }),
-    ).rejects.toThrow(/current/)
-  })
-
-  it('首次 commit replace（无 parent，作为首版）成功并成为 current', async () => {
-    const v = await run('sense_archive_commit', { change_type: 'replace', rationale: '初版', code: 'sensor v1' })
-    expect(v.ok).toBe(true)
-    expect(v.version).toBe('v001')
-    expect(v.is_current).toBe(true)
-    expectMatchesOutputSchema('sense_archive_commit', v)
-  })
-
-  it('patch 带 parent 成功，version 递增且 is_current', async () => {
-    await run('sense_archive_commit', { change_type: 'replace', rationale: 'r1', code: 'c1' })
-    const v = await run('sense_archive_commit', {
-      change_type: 'patch', rationale: 'r2', code: 'c2', parent_version: 'v001',
-    })
-    expect(v.ok).toBe(true)
-    expect(v.version).toBe('v002')
-    expect(v.is_current).toBe(true)
-  })
-
-  it('list / get / rollback 完整链路', async () => {
-    await run('sense_archive_commit', { change_type: 'replace', rationale: 'r1', code: 'c1' })
-    await run('sense_archive_commit', { change_type: 'patch', rationale: 'r2', code: 'c2', parent_version: 'v001' })
-
-    const list = await run('sense_archive_list')
-    expect(list.versions).toHaveLength(2)
-    expect(list.versions[0].change_type).toBe('replace')
-    expect(list.versions[1].change_type).toBe('patch')
-    expectMatchesOutputSchema('sense_archive_list', list)
-
-    const get = await run('sense_archive_get', { version: 'v001' })
-    expect(get.rationale).toBe('r1')
-    expect(get.code).toBe('c1')
-    expect(get.meta.version).toBe('v001')
-    expectMatchesOutputSchema('sense_archive_get', get)
-
-    const rb = await run('sense_archive_rollback', { version: 'v001' })
-    expect(rb).toEqual({ ok: true, current: 'v001' })
-    expectMatchesOutputSchema('sense_archive_rollback', rb)
-  })
-})
-
-describe('验收点 5：写操作按 symbol 隔离', () => {
+describe('验收点 4：写操作按 symbol 隔离', () => {
   it('不同标的的 ledger / predict / review 互不可见', async () => {
     // symbol A
     await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 2, init_cash: 100000 })
@@ -385,7 +324,7 @@ describe('验收点 5：写操作按 symbol 隔离', () => {
   })
 })
 
-describe('验收点 6：exec.signal 取消时不产生半写', () => {
+describe('验收点 5：exec.signal 取消时不产生半写', () => {
   it('ledger_init 已取消时抛错且不落数据', async () => {
     await expect(
       run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 2, init_cash: 100000 }, true),
@@ -394,14 +333,5 @@ describe('验收点 6：exec.signal 取消时不产生半写', () => {
     // 未产生半写：list 仍为空
     const list = await run('ledger_list')
     expect(list.symbols).toEqual([])
-  })
-
-  it('sense_archive_commit 已取消时抛错且不产生版本', async () => {
-    await expect(
-      run('sense_archive_commit', { change_type: 'replace', rationale: 'r', code: 'c' }, true),
-    ).rejects.toThrow(/取消/)
-
-    const list = await run('sense_archive_list')
-    expect(list.versions).toEqual([])
   })
 })

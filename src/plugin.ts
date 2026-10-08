@@ -6,13 +6,13 @@
  *   - `name`：插件唯一标识 `investment-advisor`
  *   - `inject`：依赖服务 `['tools', 'skills', 'ptcRuntime', 'fs']`（**契约固定，不变**）
  *   - `apply(ctx)`：
- *       1. 经 `ctx.tools.register` 注册 18 个模型工具
- *          （4 ledger + 2 strategy + 3 predicts + 5 reviews + 4 sense_archives，详见
+ *       1. 经 `ctx.tools.register` 注册 14 个模型工具
+ *          （4 ledger + 2 strategy + 3 predicts + 5 reviews，详见
  *          `src/tools/index.ts`）。工具模块图较重，故在 `apply` 内以
  *          `import('./tools/index.js')` **惰性加载**后注册（参照 dsh-tasks）；
  *          注销器绑定 `ctx.effect`，fiber 卸载（含 HMR 重载）时自动注销；
- *       2. 经 `ctx.skills.register` 注册 6 个技术面 SKILL
- *          （trend-analysis / grid-strategy / stop-rule / strategy-authorship / sense-authorship / task-authorship）；
+ *       2. 经 `ctx.skills.register` 注册 5 个技术面 SKILL
+ *          （trend-analysis / grid-strategy / stop-rule / strategy-authorship / task-authorship）；
  *       3. 经 `ctx.inject(['systemPrompt'], cb)` **动态注入** advisor.md 人设
  *          （详见 `src/prompts/index.ts`）。
  *
@@ -81,15 +81,15 @@ export const inject: string[] = ['tools', 'skills', 'ptcRuntime', 'fs']
  * 加载策略（参照 dsh-tasks）：工具实现模块（`./tools/index.js`，含
  *   `@deepseek-ai/dsh-tools` 依赖，模块图较重）在 `apply` 内**惰性加载**，而非
  *   静态 import —— 静态引入会拖慢插件 fiber 的激活时序。惰性加载让插件本体
- *   立刻就绪、18 个工具随后注册；工具与 SKILL 的注销器均绑定 `ctx.effect`，
+ *   立刻就绪、14 个工具随后注册；工具与 SKILL 的注销器均绑定 `ctx.effect`，
  *   fiber 卸载（含 HMR 重载）时逆序自动注销。
  *
  * 步骤：
- *   1. 在 `ctx.effect` 内**惰性加载**并注册 18 个模型工具；注销器绑定到 effect，
+ *   1. 在 `ctx.effect` 内**惰性加载**并注册 14 个模型工具；注销器绑定到 effect，
  *      插件 fiber 卸载（含 HMR 重载）时自动注销。`tools` 经顶层 `inject` 保证
  *      就绪，但此处仍以 `ctx.get('tools')` 软取，使插件在「未提供 tools 服务的
  *      最小上下文」（如装载测试）下安全降级，不中断插件装载。
- *   2. 在 `ctx.effect` 内注册 6 个技术面 SKILL；注销器绑定到 effect，
+ *   2. 在 `ctx.effect` 内注册 5 个技术面 SKILL；注销器绑定到 effect，
  *      插件 fiber 卸载（含 HMR 重载）时自动注销。`skills` 经顶层 `inject`
  *      保证就绪，但此处仍以 `ctx.get('skills')` 软取，使插件在「未提供 skills
  *      服务的最小上下文」（如装载测试）下安全降级，不中断插件装载。
@@ -102,7 +102,7 @@ export function apply(ctx: Context): void {
     `[dsh-finance] 插件加载：name=${name} inject=[${inject.join(', ')}]`,
   )
 
-  // ---- 18 个模型工具（惰性 import，异步注册，注销器绑定 ctx.effect） ----
+  // ---- 14 个模型工具（惰性 import，异步注册，注销器绑定 ctx.effect） ----
   ctx.effect(() => {
     let cancelled = false
     let disposeTools: (() => void) | undefined
