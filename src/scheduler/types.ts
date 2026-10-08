@@ -180,6 +180,21 @@ export interface TaskProcess {
   readonly exitCode: number | null;
   /** 强制终止进程（用于超时强杀，§9.3）。 */
   kill(signal?: NodeJS.Signals): void;
+  /**
+   * 订阅「进程完全结束」信号（可选，向后兼容扩展）。
+   *
+   * 回调在「子进程退出（`exit` 已触发）且全部 stdio 流均已关闭」后触发，
+   * 对应 `child_process.ChildProcess` 的 `'close'` 事件。此时 {@link exitCode}
+   * 已确定（不再可能为表示「尚未退出」的中间态）。
+   *
+   * **这是 runner 判定退出码的可靠信号**（相对于 `stdout` 流的 `'close'`
+   * 事件——后者与子进程 `'exit'` 事件是竞争的，真实 Node 下并不保证
+   * `stdout 'close'` 一定晚于 `'exit'`，读到 `exitCode` 可能仍是 `null`）。
+   *
+   * 实现者（如 `createNodeSpawner`）应挂到真实的 `child.on('close', ...)`；
+   * 可选成员——纯 mock 可省略，runner 需提供回退路径（退回 stdout/stderr close）。
+   */
+  onClose?(cb: () => void): void;
 }
 
 /**
