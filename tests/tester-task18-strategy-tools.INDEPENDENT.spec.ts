@@ -16,7 +16,7 @@
  *   3. 行为（未初始化报错 / 首版 / 未设定读报错 / 版本递增与冲突 / 落盘）
  *   4. 中断语义（exec.signal aborted → 抛错且不落盘）
  *   5. schema 严格性（多余字段 / 缺失字段 → validateJsonSchemaValue 判失败）
- *   6. 契约未变（顶层 inject 四项 / cordis.patch.yml 无 diff / README 工具表 14）
+ *   6. 契约未变（顶层 inject 三项 / cordis.patch.yml 无 diff / README 工具表 14）
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
@@ -299,13 +299,13 @@ describe('必验点 5：schema 严格性（多余/缺失字段 → 校验失败�
 })
 
 describe('必验点 6：契约未变', () => {
-  it('顶层 inject 四项；cordis.patch.yml 无策略域变更；README 工具表 14', () => {
+  it('顶层 inject 三项；cordis.patch.yml 无策略域变更；README 工具表 14', () => {
     const pluginSrc = readFileSync(join(__dirname, '..', 'src', 'plugin.ts'), 'utf8')
-    // inject 数组仍为四项（契约固定）
-    expect(pluginSrc).toMatch(/export const inject: string\[\] = \['tools', 'skills', 'ptcRuntime', 'fs'\]/)
+    // inject 数组仍为三项（契约固定）
+    expect(pluginSrc).toMatch(/export const inject: string\[\] = \['tools', 'skills', 'fs'\]/)
 
     const patchSrc = readFileSync(join(__dirname, '..', 'cordis.patch.yml'), 'utf8')
-    expect(patchSrc).toMatch(/inject: \['tools', 'skills', 'ptcRuntime', 'fs'\]/)
+    expect(patchSrc).toMatch(/inject: \['tools', 'skills', 'fs'\]/)
 
     const readme = readFileSync(join(__dirname, '..', 'src', 'tools', 'README.md'), 'utf8')
     // 工具表为 14（标题声明 14 个）

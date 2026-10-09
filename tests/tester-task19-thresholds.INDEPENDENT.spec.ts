@@ -260,8 +260,8 @@ describe('strategy_set 不再写 thresholds.json', () => {
   })
 })
 
-describe('契约未变：cordis.patch.yml inject 四项', () => {
-  it('cordis.patch.yml inject 与 plugin.inject 一致（四项）', () => {
+describe('契约未变：cordis.patch.yml inject 三项', () => {
+  it('cordis.patch.yml inject 与 plugin.inject 一致（三项）', () => {
     const patch = readFileSync(join(process.cwd(), 'cordis.patch.yml'), 'utf8')
     const m = /inject:\s*\[([^\]]*)\]/.exec(patch)
     expect(m).toBeTruthy()
@@ -270,7 +270,7 @@ describe('契约未变：cordis.patch.yml inject 四项', () => {
       .map((s) => s.trim().replace(/['"]/g, ''))
       .filter(Boolean)
     ev('cordis.patch.yml inject', items)
-    expect(items).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
+    expect(items).toEqual(['tools', 'skills', 'fs'])
   })
 })
 

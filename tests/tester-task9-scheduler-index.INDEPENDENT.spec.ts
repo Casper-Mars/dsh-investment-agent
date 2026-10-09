@@ -255,14 +255,14 @@ describe('T9-A 交付物与顶层契约', () => {
     const src = readFileSync(join(PROJECT_ROOT, 'src/plugin.ts'), 'utf8')
     // 接入点：apply() 末尾 try { applyScheduler(ctx) } catch
     expect(src).toMatch(/applyScheduler\s*\(\s*ctx\s*\)/)
-    // 顶层 inject 字面量仍是四项原样
+    // 顶层 inject 字面量仍是三项原样
     expect(src).toMatch(
-      /inject:\s*string\[\]\s*=\s*\[\s*'tools'\s*,\s*'skills'\s*,\s*'ptcRuntime'\s*,\s*'fs'\s*\]/,
+      /inject:\s*string\[\]\s*=\s*\[\s*'tools'\s*,\s*'skills'\s*,\s*'fs'\s*\]/,
     )
   })
 
-  it('验收7：运行时 plugin.inject 契约 = [tools, skills, ptcRuntime, fs]', () => {
-    expect(pluginNs.inject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
+  it('验收7：运行时 plugin.inject 契约 = [tools, skills, fs]', () => {
+    expect(pluginNs.inject).toEqual(['tools', 'skills', 'fs'])
     expect(pluginNs.name).toBe('investment-advisor')
   })
 

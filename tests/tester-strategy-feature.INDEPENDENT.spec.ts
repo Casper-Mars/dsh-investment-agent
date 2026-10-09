@@ -15,7 +15,7 @@
  *   4. 运行时可见性（真实插件装载：工具 21 / SKILL 5）
  *   5. 旧功能全量回归（ledger_* / predict_* / review_*）
  *   6. Prompt/Skill 文本（advisor 6 步 + 措辞；3 skill 无残留；strategy-authorship 注册且 frontmatter 合法）
- *   7. 契约未变（顶层 inject 四项；cordis.patch.yml 无 diff；无新依赖）
+ *   7. 契约未变（顶层 inject 三项；cordis.patch.yml 无 diff；无新依赖）
  *   8. typecheck/build/test 全绿（由外部命令复核，见 REPORT）
  *
  * 约束：不改 src/** 与既有测试；一律临时 dataRoot；结束清理。
@@ -400,7 +400,7 @@ describe('3. review_retrospect 端到端：触发检讨由策略文档阈值决�
 
 describe('4. 运行时可见性：真实插件装载路径', () => {
   it('顶层 inject 契约 + 真实装载后工具 21 / SKILL 5', async () => {
-    expect(topLevelInject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
+    expect(topLevelInject).toEqual(['tools', 'skills', 'fs'])
 
     const registeredSkills: Array<{ name: string }> = []
     const skillsService = {
@@ -415,7 +415,6 @@ describe('4. 运行时可见性：真实插件装载路径', () => {
     const app = new Context()
     app.provide('systemPrompt', systemPromptStub())
     app.provide('skills', skillsService as never)
-    app.provide('ptcRuntime', { name: 'ptcRuntime' } as never)
     app.provide('fs', { name: 'fs' } as never)
 
     const toolsFiber = (await app.plugin(ToolRuntime as never)) as unknown as {
@@ -586,11 +585,11 @@ describe('6. Prompt / Skill 文本', () => {
  * ================================================================== */
 
 describe('7. 契约未变', () => {
-  it('顶层 inject 四项 + cordis.patch.yml inject 一致', () => {
-    expect(topLevelInject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
+  it('顶层 inject 三项 + cordis.patch.yml inject 一致', () => {
+    expect(topLevelInject).toEqual(['tools', 'skills', 'fs'])
 
     const patch = readFileSync(join(process.cwd(), 'cordis.patch.yml'), 'utf8')
-    expect(patch).toContain("inject: ['tools', 'skills', 'ptcRuntime', 'fs']")
+    expect(patch).toContain("inject: ['tools', 'skills', 'fs']")
     console.log('[EVIDENCE 7a] inject contract unchanged')
   })
 

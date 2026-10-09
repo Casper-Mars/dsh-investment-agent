@@ -162,7 +162,6 @@ async function bootDistPlugin(dataRoot: string) {
   const sk = makeSkillsStub()
   app.provide('systemPrompt', sp.service)
   app.provide('skills', sk.service)
-  app.provide('ptcRuntime', { name: 'ptcRuntime' } as never)
   app.provide('fs', { name: 'fs' } as never)
 
   const toolsFiber = (await app.plugin(ToolRuntime as never)) as unknown as {
@@ -244,9 +243,9 @@ describe('Task-14 复验 A：版本声明与解析一致（4 处 0.2.0-rc.2）',
 })
 
 describe('Task-14 复验 B：真实构建产物（dist-server）装载与运行时装配', () => {
-  it('B1·dist-server 导出三要素：name=investment-advisor，inject=[tools,skills,ptcRuntime,fs]', () => {
+  it('B1·dist-server 导出三要素：name=investment-advisor，inject=[tools,skills,fs]', () => {
     expect(pluginNs.name).toBe('investment-advisor')
-    expect(pluginNs.inject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
+    expect(pluginNs.inject).toEqual(['tools', 'skills', 'fs'])
     expect(typeof pluginNs.apply).toBe('function')
     console.log(
       `[EVIDENCE B1] dist-server: name=${pluginNs.name} inject=[${pluginNs.inject.join(', ')}]`,

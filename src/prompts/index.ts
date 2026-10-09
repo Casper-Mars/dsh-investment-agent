@@ -5,7 +5,7 @@
  *   1. 读取 `src/prompts/advisor.md`（随构建产物发布到 `dist-server/prompts/advisor.md`）；
  *   2. 组装为 `systemPrompt` 的一个 `PromptSection`（唯一 name、指定 order）；
  *   3. 经 `ctx.inject(['systemPrompt'], cb)` **动态声明依赖**后注入 —— 顶层插件
- *      `inject` 保持 `['tools','skills','ptcRuntime','fs']` 不变（Task 1 契约）。
+ *      `inject` 保持 `['tools','skills','fs']` 不变（Task 1 契约）。
  *
  * 路径策略：`new URL('./advisor.md', import.meta.url)` 在源码态
  *   （`src/prompts/index.ts`）与编译态（`dist-server/prompts/index.js`）下

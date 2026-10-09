@@ -9,7 +9,7 @@
  *   AC3 降级 skip：workspaceRegistry 缺失 / resolveByPath reject / attachSession 失败
  *        → 记日志、不抛、不中断装载。
  *   AC4 ensure 只执行一次：apply 流程下 agents.create 仅调用一次（D1 竞态回归）。
- *   AC5 顶层 inject 仍为 ['tools','skills','ptcRuntime','fs']；cordis.patch.yml 未改。
+ *   AC5 顶层 inject 仍为 ['tools','skills','fs']；cordis.patch.yml 未改。
  *
  * 另补两个 Developer 未覆盖的盲区：
  *   - ensure 结果为 skipped（create 抛错）时 → 不触发归属（resolveByPath 不被调用）；
@@ -297,15 +297,15 @@ describe('盲区补充：skipped 不触发归属 + cwd 一致性', () => {
 })
 
 describe('AC5 顶层 inject 与 cordis.patch.yml 未改', () => {
-  it('顶层 inject 仍为四项固定契约', () => {
-    expect(topLevelInject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
+  it('顶层 inject 仍为三项固定契约', () => {
+    expect(topLevelInject).toEqual(['tools', 'skills', 'fs'])
   })
 
-  it('cordis.patch.yml 的 inject 与顶层 inject 一致（四项不变）', () => {
+  it('cordis.patch.yml 的 inject 与顶层 inject 一致（三项不变）', () => {
     const patchPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'cordis.patch.yml')
     const patch = readFileSync(patchPath, 'utf-8')
-    // 断言关键行存在：inject 四项
-    expect(patch).toContain("inject: ['tools', 'skills', 'ptcRuntime', 'fs']")
+    // 断言关键行存在：inject 三项
+    expect(patch).toContain("inject: ['tools', 'skills', 'fs']")
     expect(patch).toContain('id: dsh-finance')
     expect(patch).toContain('name: dsh-finance')
   })

@@ -23,7 +23,7 @@
  *   5. 真实装载后 ctx.skills 恰好注册 5 个，名称与 SKILL_NAMES 一致（含注销）
  *   6. index.ts / README.md / plugin.ts 计数表述为 5
  *   7. task-authorship 正文标的无关（无写死价格 / 阈值）
- *   8. 顶层 inject 契约仍为 [tools, skills, ptcRuntime, fs]
+ *   8. 顶层 inject 契约仍为 [tools, skills, fs]
  * ==================================================================
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -282,7 +282,6 @@ describe('[验收5] 真实装载后 ctx.skills 恰好注册 5 个', () => {
     const app = new Context()
     app.provide('systemPrompt', systemPromptStub as never)
     app.provide('skills', skillsService as never)
-    app.provide('ptcRuntime', { name: 'ptcRuntime' } as never)
     app.provide('fs', { name: 'fs' } as never)
 
     const toolsFiber = (await app.plugin(ToolRuntime as never)) as unknown as {
@@ -368,11 +367,11 @@ describe('[验收7] task-authorship 正文标的无关', () => {
  * ================================================================== */
 
 describe('[验收8] 顶层 inject 契约不变', () => {
-  it('src/plugin.ts 的 inject = [tools, skills, ptcRuntime, fs]', () => {
-    expect(srcInject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
+  it('src/plugin.ts 的 inject = [tools, skills, fs]', () => {
+    expect(srcInject).toEqual(['tools', 'skills', 'fs'])
   })
 
-  it('dist-server 产物 inject = [tools, skills, ptcRuntime, fs]', () => {
-    expect(pluginNs.inject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
+  it('dist-server 产物 inject = [tools, skills, fs]', () => {
+    expect(pluginNs.inject).toEqual(['tools', 'skills', 'fs'])
   })
 })

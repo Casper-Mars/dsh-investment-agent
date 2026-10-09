@@ -4,7 +4,7 @@
  * 本文件负责声明 Cordis 插件三要素（`name` / `apply` / `inject`）并在
  * `apply(ctx)` 内装配运行时贡献：
  *   - `name`：插件唯一标识 `investment-advisor`
- *   - `inject`：依赖服务 `['tools', 'skills', 'ptcRuntime', 'fs']`（**契约固定，不变**）
+ *   - `inject`：依赖服务 `['tools', 'skills', 'fs']`（**契约固定，不变**）
  *   - `apply(ctx)`：
  *       1. 经 `ctx.tools.register` 注册 14 个模型工具
  *          （4 ledger + 2 strategy + 3 predicts + 5 reviews，详见
@@ -19,15 +19,11 @@
  * 依赖服务说明（已在 harness 源码核实）：
  *   - `tools`      —— dsh 工具注册表（`ctx.tools`，defineTool 注册面向模型的工具）
  *   - `skills`     —— dsh 技能注册表（`ctx.skills`，注册面向模型的 SKILL 操作指南）
- *   - `ptcRuntime` —— PTC（Programmatic Tool Calling，程序化工具调用）执行接缝
- *     （`ctx.ptcRuntime`）。接口/服务来自 `@deepseek-ai/dsh-ptc-runtime`，后端由
- *     `@deepseek-ai/dsh-ptc-runtime-node` 实现（每个 run 起全新 Node 进程，受会话
- *     文件沙箱策略约束，带执行时限/输出上限/V8 堆上限）。
  *   - `fs`         —— cordis 标准服务（`node:fs` 的文件系统访问）
  *
  * 注意：`systemPrompt` **不**加入顶层 `inject`，而是在 `apply` 内以
  *   `ctx.inject(['systemPrompt'], cb)` 动态声明依赖 —— 保证顶层契约
- *   `['tools','skills','ptcRuntime','fs']` 与 `cordis.patch.yml` 保持一致。
+ *   `['tools','skills','fs']` 与 `cordis.patch.yml` 保持一致。
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { registerAllSkills } from './skills/index.js'
@@ -69,11 +65,11 @@ export const name = 'investment-advisor'
 /**
  * 依赖服务。
  *
- * 契约要求固定为 `['tools', 'skills', 'ptcRuntime', 'fs']`，均为 dsh/cordis
- * 合法可注入服务。其中 `tools` / `skills` / `ptcRuntime` 由 harness 提供，
+ * 契约要求固定为 `['tools', 'skills', 'fs']`，均为 dsh/cordis
+ * 合法可注入服务。其中 `tools` / `skills` 由 harness 提供，
  * `fs` 为 cordis 标准服务。
  */
-export const inject: string[] = ['tools', 'skills', 'ptcRuntime', 'fs']
+export const inject: string[] = ['tools', 'skills', 'fs']
 
 /**
  * 安装金融投资专家 Agent 能力。

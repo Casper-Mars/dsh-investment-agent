@@ -266,7 +266,7 @@ describe('验收 5：advisor 人设 section 契约', () => {
 
 describe('插件 apply 接入', () => {
   it('顶层 inject 契约不变', () => {
-    expect(topLevelInject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
+    expect(topLevelInject).toEqual(['tools', 'skills', 'fs'])
   })
 
   function makeMockCtx() {

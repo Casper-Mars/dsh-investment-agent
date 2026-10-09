@@ -31,7 +31,7 @@ import {
 import { inject, name as pluginName, PINNED_SESSION_ID } from '../src/plugin.js'
 import { PINNED_SESSION_ID as PINNED_ID_FROM_SESSION } from '../src/session.js'
 
-const EXPECTED_TOP_INJECT = ['tools', 'skills', 'ptcRuntime', 'fs']
+const EXPECTED_TOP_INJECT = ['tools', 'skills', 'fs']
 
 /** 待处置的 plugin fiber（用例结束后卸载，避免 timer 泄漏）。 */
 const cleanupFibers: Array<{ dispose: () => Promise<unknown> | unknown }> = []
@@ -412,7 +412,7 @@ describe('独立复验 ③ 真实 cordis Context（装配/生命周期）', () =
 // ④ 顶层契约不变（AC6）
 // ---------------------------------------------------------------------------
 describe('独立复验 ④ 顶层契约不变（AC6）', () => {
-  it('顶层 inject 仍为 [tools, skills, ptcRuntime, fs]', () => {
+  it('顶层 inject 仍为 [tools, skills, fs]', () => {
     expect(inject).toEqual(EXPECTED_TOP_INJECT)
   })
 
@@ -420,7 +420,7 @@ describe('独立复验 ④ 顶层契约不变（AC6）', () => {
     const patch = readFileSync(fileURLToPath(new URL('../cordis.patch.yml', import.meta.url)), 'utf8')
     expect(patch).toContain('id: dsh-finance')
     expect(patch).toContain('name: dsh-finance')
-    expect(patch).toContain("inject: ['tools', 'skills', 'ptcRuntime', 'fs']")
+    expect(patch).toContain("inject: ['tools', 'skills', 'fs']")
   })
 
   it('PINNED_SESSION_ID 单一来源（plugin.ts 与 session.ts 一致，值 = 插件名）', () => {

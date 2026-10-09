@@ -5,12 +5,12 @@
  * 漏接 `registerAllTools`，导致工具对模型不可用。本测试锁定该修复：
  *
  *   1. 真实装载：`new Context()` → 提供 `systemPrompt`（ToolRuntime 依赖）与
- *      `skills` / `ptcRuntime` / `fs` 桩 → `plugin(ToolRuntime)` 提供真实
+ *      `skills` / `fs` 桩 → `plugin(ToolRuntime)` 提供真实
  *      `ctx.tools` → 以**真实插件**（`src/plugin.ts` 的 name/inject/apply）
  *      驱动装载 → 断言 `ctx.tools` 恰好暴露 21 个工具（名称/分组逐一相符）。
  *   2. 注销绑定：dispose 插件 fiber 后 21 个工具全部消失（经 `ctx.effect` 注销）。
  *   3. 安全降级：`ctx.tools` 不可用的最小上下文下 `apply` 不抛错、不注册。
- *   4. 顶层 `inject` 契约保持 `['tools','skills','ptcRuntime','fs']` 不变。
+ *   4. 顶层 `inject` 契约保持 `['tools','skills','fs']` 不变。
  *
  * 采用真实 ToolRuntime registry 管线（与 tester-tools-runtime.spec.ts 一致），
  * 走 defineTool 完整校验链路，而非 mock。
@@ -95,10 +95,8 @@ async function bootPlugin(dataRoot: string) {
 
   const app = new Context()
   app.provide('systemPrompt', systemPromptStub())
-  // 插件顶层 inject 的其余服务：以最小桩满足依赖（runner 因 ptcRuntime
-  // 无 `run` 而安全降级，不会启动调度 timer）。
+  // 插件顶层 inject 的其余服务：以最小桩满足依赖。
   app.provide('skills', { name: 'skills', register: () => () => {} } as never)
-  app.provide('ptcRuntime', { name: 'ptcRuntime' } as never)
   app.provide('fs', { name: 'fs' } as never)
 
   const toolsFiber = (await app.plugin(ToolRuntime as never)) as unknown as {
@@ -124,8 +122,8 @@ async function bootPlugin(dataRoot: string) {
 }
 
 describe('t100363 插件装配：21 个工具经 apply 注册', () => {
-  it('顶层 inject 契约保持 [tools, skills, ptcRuntime, fs]', () => {
-    expect(topLevelInject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
+  it('顶层 inject 契约保持 [tools, skills, fs]', () => {
+    expect(topLevelInject).toEqual(['tools', 'skills', 'fs'])
   })
 
   it('真实装载后 ctx.tools 恰好暴露 21 个工具，名称/分组逐一相符', async () => {

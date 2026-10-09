@@ -14,7 +14,7 @@
  *   ② 读路径绝不越界读取（baseDir 之外放诱饵，越界 symbol/version 读不到）
  *   ③ 合法值回归 E2E（588000 / 000001 / v001；ledger_init→set v001→get→set v002）
  *   ④ 入口覆盖审计（静态源码复核：所有 join() 外部输入均经守卫）
- *   ⑤ 契约复核（inject 四项 + cordis.patch.yml 不变）
+ *   ⑤ 契约复核（inject 三项 + cordis.patch.yml 不变）
  */
 import { describe, it, expect, afterEach } from 'vitest'
 import {
@@ -341,13 +341,13 @@ describe('④ 入口覆盖审计', () => {
 })
 
 // ---------------------------------------------------------------------------
-// ⑤ 契约复核（inject 四项 + cordis.patch.yml）
+// ⑤ 契约复核（inject 三项 + cordis.patch.yml）
 // ---------------------------------------------------------------------------
 describe('⑤ 契约复核', () => {
-  it('plugin.ts 顶层 inject 四项不变', () => {
+  it('plugin.ts 顶层 inject 三项不变', () => {
     const src = readFileSync(join(__dirname, '..', 'src', 'plugin.ts'), 'utf8')
     expect(src).toContain(
-      "export const inject: string[] = ['tools', 'skills', 'ptcRuntime', 'fs']",
+      "export const inject: string[] = ['tools', 'skills', 'fs']",
     )
   })
 
@@ -356,7 +356,7 @@ describe('⑤ 契约复核', () => {
       join(__dirname, '..', 'cordis.patch.yml'),
       'utf8',
     )
-    expect(patch).toContain("inject: ['tools', 'skills', 'ptcRuntime', 'fs']")
+    expect(patch).toContain("inject: ['tools', 'skills', 'fs']")
     expect(patch).toContain('name: dsh-finance')
   })
 })

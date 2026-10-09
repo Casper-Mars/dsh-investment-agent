@@ -265,9 +265,9 @@ describe('[4] advisor 人设注入 system-prompt', () => {
  * ================================================================== */
 
 describe('[5] 顶层 inject 契约', () => {
-  it('严格等于 [tools, skills, ptcRuntime, fs]，不含 systemPrompt', () => {
-    expect(topLevelInject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
-    expect(topLevelInject).toHaveLength(4)
+  it('严格等于 [tools, skills, fs]，不含 systemPrompt', () => {
+    expect(topLevelInject).toEqual(['tools', 'skills', 'fs'])
+    expect(topLevelInject).toHaveLength(3)
     expect(topLevelInject).not.toContain('systemPrompt')
   })
 
@@ -282,7 +282,7 @@ describe('[5] 顶层 inject 契约', () => {
       tools: { register: () => () => {} },
     } as unknown as Context
     apply(ctx)
-    expect(topLevelInject).toEqual(['tools', 'skills', 'ptcRuntime', 'fs'])
+    expect(topLevelInject).toEqual(['tools', 'skills', 'fs'])
   })
 })
 

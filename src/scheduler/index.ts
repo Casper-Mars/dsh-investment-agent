@@ -16,7 +16,7 @@
  *   6. 惰性 import `./tools.js` 注册 7 个 `task_*` 工具（注销器绑定 `ctx.effect`）；
  *   7. `ctx.effect` 自持 start/stop（幂等 `started` 守卫，多会话不重复 start）。
  *
- * 顶层 `inject = ['tools','skills','ptcRuntime','fs']` **保持不变**（agents/tools 经
+ * 顶层 `inject = ['tools','skills','fs']` **保持不变**（agents/tools 经
  * `ctx.inject` / `ctx.get` 软取，不加入顶层 inject）。
  */
 import { dirname, join, resolve } from 'node:path'
