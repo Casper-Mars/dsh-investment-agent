@@ -20,6 +20,13 @@
  * + `timedOut` 标志，确保「超时 timer 一旦触发，进程后续任何退出都归因超时」，不落回
  * 「正常退出」。
  *
+ * stdout 上限语义（防 OOM）：`maxStdoutBytes`（默认 {@link DEFAULT_MAX_STDOUT_BYTES} =
+ * 1 MiB，可注入覆盖）。任务程序是 agent 生成的动态代码（不可信输入），stdout 后端为
+ * pipe（无背压刹车）。若失控输出，runner 累积缓冲会无上限增长 → 宿主主进程 OOM。
+ * 故累积到上限即**封顶缓冲**（{@link accumulateStdout} 保证 `stdoutBuf` 不越界）+
+ * `kill('SIGTERM')` 强杀 + 归 `failed`（`failureKind='exec'`，与超时强杀对称）。同样以
+ * `overflowed` 标志 + 单一 `settled` 守卫保证「超限结算后，进程后续退出/流 close 不改结局」。
+ *
  * 退出感知：types.ts 的 {@link TaskProcess} 契约暴露 stdout/stderr（`NodeJS.ReadableStream`）、
  * exitCode（getter）、kill 与 onClose（可靠退出信号订阅，可选）。runner 以 {@link TaskProcess.onClose}
  * 作为「进程结束（exit + 全部 stdio 已关闭）→ 可读 exitCode」的可靠信号：对应 child_process
@@ -74,6 +81,15 @@ export interface RunnerOptions {
   readonly timeBudget?: TimeBudget
   /** 任务执行超时上限（毫秒），默认 60s。§9.3 */
   readonly taskTimeoutMs?: number
+  /**
+   * stdout 累积上限（近似按 UTF-16 码元/字节计），默认 {@link DEFAULT_MAX_STDOUT_BYTES}
+   * （1 MiB = 1_048_576）。可注入以便单测用小上限驱动超限分支。
+   *
+   * 任务程序是 agent 生成的动态代码（不可信输入），stdout 后端为 pipe（`on('data')`
+   * 持续 flowing，无背压刹车）。失控输出（如死循环 console.log）在超时窗口内可增长
+   * 到数百 MB/GB → 宿主主进程 OOM。超限即封顶缓冲 + SIGTERM 强杀 + 归 failed/exec。
+   */
+  readonly maxStdoutBytes?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -84,6 +100,16 @@ export interface RunnerOptions {
  * 默认任务执行超时（60 秒）。§9.3
  */
 export const DEFAULT_TASK_TIMEOUT_MS = 60_000
+
+/**
+ * 默认 stdout 累积上限（1 MiB = 1_048_576）。
+ *
+ * 任务程序是 agent 生成的动态代码（不可信输入），stdout 后端为 pipe（`on('data')`
+ * 持续 flowing，无背压刹车）。若任务失控输出（如死循环 console.log），在 60s 超时
+ * 窗口内可增长到数百 MB/GB → 宿主主进程 OOM。此处设硬上限：累积到上限即封顶缓冲、
+ * SIGTERM 强杀并归 failed（`failureKind='exec'`），立即止损（对齐超时强杀语义）。
+ */
+export const DEFAULT_MAX_STDOUT_BYTES = 1_048_576
 
 /** 执行任务程序的 node 可执行名（真实 `child_process.spawn` 的 command）。§4.3 */
 const NODE_BIN = 'node'
@@ -192,6 +218,50 @@ export function parseLastJsonLine(stdout: string): TaskScriptResult | null {
 }
 
 // ---------------------------------------------------------------------------
+// 内部：stdout 封顶累积（防 OOM）
+// ---------------------------------------------------------------------------
+
+/** {@link accumulateStdout} 的结果：封顶后的缓冲 + 是否已越限。 */
+export interface StdoutAccumulation {
+  /** 累积后的 stdout 文本（长度不会超过 `maxBytes`）。 */
+  readonly buffer: string
+  /** 本次追加是否导致越限（越限后调用方应立即止损：强杀 + 结算 failed）。 */
+  readonly overflowed: boolean
+}
+
+/**
+ * 将 `chunk` 追加到 `prev`，并**保证返回值长度不超过 `maxBytes`**（防 OOM 竞态）。
+ *
+ * 任务程序 stdout 可能无上限疯长；若先无界拼接再判断，则单次超大 chunk（或高频小
+ * chunk 累积）仍会在判断前撑爆内存。故这里在**拼接前**先判断：越限时只保留「到上限
+ * 为止的前缀」，绝不把超限部分写入缓冲。
+ *
+ * 计量方式：近似按 UTF-16 码元（`String.length`）计——防 OOM 为主，无需精确 UTF-8
+ * 字节（多字节字符可能使真实字节数略高于上限，但已有硬上限兜底，量级安全）。
+ *
+ * @param prev     已累积的文本。
+ * @param chunk    本次新增文本（已由调用方按 UTF-8 解码）。
+ * @param maxBytes 上限（近似按码元计）。
+ * @returns 封顶后的缓冲 + 是否越限。
+ */
+export function accumulateStdout(
+  prev: string,
+  chunk: string,
+  maxBytes: number,
+): StdoutAccumulation {
+  // 已达上限：不再累积（返回越限，让调用方立即止损）。
+  if (prev.length >= maxBytes) {
+    return { buffer: prev, overflowed: true }
+  }
+  // 加上本 chunk 会越限：只收下到上限为止的前缀，绝不越过上限。
+  if (prev.length + chunk.length > maxBytes) {
+    const room = maxBytes - prev.length
+    return { buffer: prev + chunk.slice(0, room), overflowed: true }
+  }
+  return { buffer: prev + chunk, overflowed: false }
+}
+
+// ---------------------------------------------------------------------------
 // Runner 主体
 // ---------------------------------------------------------------------------
 
@@ -209,18 +279,21 @@ export class TaskRunner {
   private readonly timeBudget: TimeBudget
   /** 任务执行超时（毫秒）。 */
   private readonly taskTimeoutMs: number
+  /** stdout 累积上限（近似按 UTF-16 码元/字节计，见 {@link DEFAULT_MAX_STDOUT_BYTES}）。 */
+  private readonly maxStdoutBytes: number
 
   constructor(options: RunnerOptions = {}) {
     this.spawner = options.spawner ?? createNodeSpawner()
     this.timeBudget = options.timeBudget ?? createNodeTimeBudget()
     this.taskTimeoutMs = options.taskTimeoutMs ?? DEFAULT_TASK_TIMEOUT_MS
+    this.maxStdoutBytes = options.maxStdoutBytes ?? DEFAULT_MAX_STDOUT_BYTES
   }
 
   /**
    * 执行任务程序并判读结局。
    *
-   * 流程：spawn（失败 → failed/spawn）→ 累积 stdout → 等退出（onClose）或超时强杀 →
-   * 解析最后非空行 → 映射结局（woke / quiet / failed）。
+   * 流程：spawn（失败 → failed/spawn）→ 累积 stdout（超限即封顶强杀）→ 等退出（onClose）
+   * 或超时/超限强杀 → 解析最后非空行 → 映射结局（woke / quiet / failed）。
    *
    * @param taskPath 任务入口文件绝对路径（对应 `TaskDef.task_path`）。
    * @param args     传给 `node` 的额外参数（可空）。
@@ -250,12 +323,36 @@ export class TaskRunner {
 
       // 超时一旦触发，进程后续任何退出都归因超时（吸取 loader 教训）。
       let timedOut = false
+      // stdout 超限标志：一旦置 true，后续 data 不再累积，且 onDone 不得改变结局。
+      let overflowed = false
       let stdoutBuf = ''
 
       // stdout：逐个 data chunk 拼接（UTF-8 自动按流解码，天然处理分片与无尾随换行）。
+      //
+      // 防 OOM：累积前先用 accumulateStdout 封顶（保证 stdoutBuf 长度不超过上限）；
+      // 一旦越限立即 SIGTERM 强杀并结算 failed/exec，与超时强杀语义对称。
       if (proc.stdout) {
         proc.stdout.on('data', (chunk: Buffer | string) => {
-          stdoutBuf += typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+          // 已越限：停止处理后续 chunk（finish 已结算，settled 守卫会挡掉，但显式返回更省）。
+          if (overflowed) return
+          const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+          const acc = accumulateStdout(stdoutBuf, text, this.maxStdoutBytes)
+          stdoutBuf = acc.buffer
+          if (!acc.overflowed) return
+
+          // 越限：置标志 → SIGTERM 强杀 → 结算 failed（exec）。
+          overflowed = true
+          try {
+            proc.kill('SIGTERM')
+          } catch {
+            /* 忽略 kill 抛错；onDone 会因 overflowed 归因超限，不落回正常解析 */
+          }
+          finish({
+            kind: 'failed',
+            reason: `[runner] 任务 stdout 超过上限（${this.maxStdoutBytes} 字节），已 SIGTERM 强杀: ${taskPath}`,
+            detail: `输出上限 ${this.maxStdoutBytes} 字节`,
+            failureKind: 'exec',
+          } as TaskRunOutcome)
         })
       }
       // stderr 仅作诊断，runner 不消费其内容（任务对 runner 是黑盒）。
@@ -288,6 +385,10 @@ export class TaskRunner {
       // 进程结束（stdout 流 close，此时 exitCode 已确定）——唯一入口做解析与三结局映射。
       const onDone = (): void => {
         this.timeBudget.clearTimeout(timeoutHandle)
+
+        // stdout 已超限结算：进程后续退出/流 close 不得改变结局（settled 守卫的显式兜底）。
+        // 强杀后进程通常以非零/信号退出，若不在此拦截会落入下方「异常退出」分支。
+        if (overflowed) return
 
         // 超时已触发：无论退出码如何，归因 failed（exec）。
         if (timedOut) {
@@ -362,7 +463,7 @@ export class TaskRunner {
 /**
  * 创建任务执行器的工厂函数（无副作用工厂，对齐 types.ts 可注入风格）。
  *
- * @param options 依赖注入配置（spawner / timeBudget / timeout）。缺省用真实 node 实现。
+ * @param options 依赖注入配置（spawner / timeBudget / timeout / maxStdoutBytes）。缺省用真实 node 实现。
  * @returns 就绪的 {@link TaskRunner} 实例。
  */
 export function createTaskRunner(options: RunnerOptions = {}): TaskRunner {

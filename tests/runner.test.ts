@@ -22,7 +22,9 @@ import {
   TaskRunner,
   createTaskRunner,
   parseLastJsonLine,
+  accumulateStdout,
   DEFAULT_TASK_TIMEOUT_MS,
+  DEFAULT_MAX_STDOUT_BYTES,
 } from '../src/scheduler/runner.js'
 
 // ---------------------------------------------------------------------------
@@ -305,5 +307,137 @@ describe('TaskRunner.run：超时强杀（时序正确）', () => {
 describe('工厂入口 createTaskRunner', () => {
   it('返回可用的 TaskRunner', () => {
     expect(createTaskRunner()).toBeInstanceOf(TaskRunner)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// stdout 上限（防 OOM）——白盒：封顶累积纯函数
+// ---------------------------------------------------------------------------
+
+describe('accumulateStdout：stdout 封顶累积（防 OOM）', () => {
+  it('未超限 → 原样累加，overflowed=false', () => {
+    expect(accumulateStdout('ab', 'cd', 10)).toEqual({ buffer: 'abcd', overflowed: false })
+  })
+
+  it('恰好等于上限 → 不判超限（边界含）', () => {
+    expect(accumulateStdout('ab', 'cd', 4)).toEqual({ buffer: 'abcd', overflowed: false })
+  })
+
+  it('越限 → 只保留到上限的前缀，overflowed=true 且不越界', () => {
+    const r = accumulateStdout('ab', 'cdef', 4)
+    expect(r).toEqual({ buffer: 'abcd', overflowed: true })
+    expect(r.buffer.length).toBeLessThanOrEqual(4)
+  })
+
+  it('已达上限再追加 → 不增长，overflowed=true', () => {
+    const r = accumulateStdout('abcd', 'ef', 4)
+    expect(r.buffer).toBe('abcd')
+    expect(r.overflowed).toBe(true)
+  })
+
+  it('反复追加（模拟疯狂输出）→ 缓冲永不越界', () => {
+    const LIMIT = 1024
+    let buf = ''
+    let overflows = 0
+    for (let i = 0; i < 1000; i++) {
+      const r = accumulateStdout(buf, 'x'.repeat(97), LIMIT)
+      buf = r.buffer
+      expect(buf.length).toBeLessThanOrEqual(LIMIT)
+      if (r.overflowed) overflows++
+    }
+    expect(overflows).toBeGreaterThan(0)
+    expect(buf.length).toBe(LIMIT)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// stdout 上限（防 OOM）——集成：注入疯狂输出 mock 进程
+// ---------------------------------------------------------------------------
+
+describe('TaskRunner.run：stdout 超限强杀（防 OOM）', () => {
+  it('默认上限为 1 MiB（DEFAULT_MAX_STDOUT_BYTES）', () => {
+    expect(DEFAULT_MAX_STDOUT_BYTES).toBe(1_048_576)
+  })
+
+  it('疯狂输出越限 → SIGTERM 强杀 + failed/exec（含上限数字）', async () => {
+    const proc = new FakeProcess()
+    const { spawner } = makeSpawner(proc)
+    const runner = new TaskRunner({ spawner, maxStdoutBytes: 1024 })
+
+    const pending = runner.run(TASK_PATH)
+    // 疯狂输出：每 chunk 512 字节，写 20 次（共 10 KiB，远超 1024 上限）。
+    for (let i = 0; i < 20; i++) proc.writeStdout('x'.repeat(512))
+    // 进程被强杀 → 模拟非正常退出（无退出码）。
+    proc.endStdout(null)
+
+    const outcome = await pending
+    expect(outcome.kind).toBe('failed')
+    expect((outcome as { failureKind?: string }).failureKind).toBe('exec')
+    expect((outcome as { reason: string }).reason).toContain('超过上限')
+    expect((outcome as { reason: string }).reason).toContain('1024')
+    expect((outcome as { detail?: string }).detail).toBe('输出上限 1024 字节')
+    expect(proc.killedSignals).toContain('SIGTERM')
+  })
+
+  it('单次大 chunk 直接越限 → 封顶缓冲不越界，强杀并归 failed', async () => {
+    const proc = new FakeProcess()
+    const { spawner } = makeSpawner(proc)
+    const runner = new TaskRunner({ spawner, maxStdoutBytes: 100 })
+
+    const pending = runner.run(TASK_PATH)
+    // 一个 5000 字节的巨型 chunk（远超 100 上限）：不得被整段存入缓冲。
+    proc.writeStdout('y'.repeat(5000))
+    proc.endStdout(0)
+
+    const outcome = await pending
+    expect(outcome.kind).toBe('failed')
+    expect((outcome as { failureKind?: string }).failureKind).toBe('exec')
+    expect(proc.killedSignals).toContain('SIGTERM')
+  })
+
+  it('超限强杀后进程再输出诱饵 JSON 并正常 close → 仍为 failed（不落回 quiet）', async () => {
+    const proc = new FakeProcess()
+    const { spawner } = makeSpawner(proc)
+    const runner = new TaskRunner({ spawner, maxStdoutBytes: 256 })
+
+    const pending = runner.run(TASK_PATH)
+    proc.writeStdout('z'.repeat(1000))
+    // 越限结算后，进程再吐一行合法结果 JSON 并以 0 退出（overflowed 兜底应忽略）。
+    proc.writeStdout('{"shouldWake":false}\n')
+    proc.endStdout(0)
+
+    const outcome = await pending
+    expect(outcome.kind).toBe('failed')
+    expect((outcome as { failureKind?: string }).failureKind).toBe('exec')
+  })
+
+  it('回归：小输出（未越限）行为不变 → quiet', async () => {
+    const proc = new FakeProcess()
+    const { spawner } = makeSpawner(proc)
+    const runner = new TaskRunner({ spawner, maxStdoutBytes: 1024 })
+
+    const pending = runner.run(TASK_PATH)
+    proc.writeStdout('log\n{"shouldWake":false}\n')
+    proc.endStdout(0)
+
+    await expect(pending).resolves.toMatchObject({ kind: 'quiet' })
+    expect(proc.killedSignals).toEqual([])
+  })
+
+  it('回归：小输出（未越限）woke 分支不受影响', async () => {
+    const proc = new FakeProcess()
+    const { spawner } = makeSpawner(proc)
+    const runner = new TaskRunner({ spawner, maxStdoutBytes: 1024 })
+
+    const pending = runner.run(TASK_PATH)
+    proc.writeStdout('{"shouldWake":true,"data":"BTC 突破 10w"}\n')
+    proc.endStdout(0)
+
+    await expect(pending).resolves.toMatchObject({
+      kind: 'woke',
+      data: 'BTC 突破 10w',
+      targets: [],
+    })
+    expect(proc.killedSignals).toEqual([])
   })
 })
