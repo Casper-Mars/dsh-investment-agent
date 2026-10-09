@@ -109,7 +109,7 @@ export class Ledger {
       floatPnl: 0,
     })
 
-    // 初始建仓亦记一条流水（side='buy'，price=init.cost），便于 cumReturn 累计。
+    // 初始建仓亦记一条流水（side='buy'，price=init.cost），便于累计收益口径（cum_return）核算。
     this.store.appendTrade(symbol, {
       id: newTradeId(),
       symbol,

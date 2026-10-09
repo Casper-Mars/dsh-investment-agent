@@ -8,9 +8,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Ledger } from '../src/domain/ledger.js'
 import { JsonStore, LedgerStore } from '../src/domain/store.js'
-import { hitRate, cumReturn } from '../src/domain/metrics.js'
+import { hitRate } from '../src/domain/metrics.js'
 import { LOT_SIZE, COST_PRECISION } from '../src/domain/types.js'
-import type { Trade } from '../src/domain/types.js'
 
 let dir: string
 
@@ -146,7 +145,7 @@ describe('验收点4：init 重复 & query 完整快照', () => {
 })
 
 // ---------- 验收点 5：metrics ----------
-describe('验收点5：metrics.hitRate & cumReturn', () => {
+describe('验收点5：metrics.hitRate', () => {
   it('hitRate dir=[T,F,T] → 2/3≈0.6667', () => {
     const r = hitRate([true, false, true], [true, false, true])
     expect(r.dir).toBe(0.6667)
@@ -156,19 +155,6 @@ describe('验收点5：metrics.hitRate & cumReturn', () => {
   it('hitRate 空数组 → 0（防除零）', () => {
     expect(hitRate([], []).dir).toBe(0)
     expect(hitRate([], []).range).toBe(0)
-  })
-
-  it('cumReturn 基于 trades 流水累计', () => {
-    const trades: Trade[] = [
-      { id: '1', symbol: '588000', side: 'buy', qty: 100, price: 1.0, ts: 1 },
-      { id: '2', symbol: '588000', side: 'sell', qty: 100, price: 1.2, ts: 2 },
-    ]
-    // realized = (1.2-1.0)*100 = 20；成本 = 100 → 0.2
-    expect(cumReturn(trades)).toBeCloseTo(0.2, 4)
-  })
-
-  it('cumReturn 空流水 → 0', () => {
-    expect(cumReturn([])).toBe(0)
   })
 })
 

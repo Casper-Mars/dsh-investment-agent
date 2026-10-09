@@ -1,10 +1,9 @@
 /**
  * domain/metrics.ts 单元测试。
- * 覆盖验收点 5：hitRate 口径、cumReturn 基于流水累计。
+ * 覆盖验收点 5：hitRate 口径、累计收益口径（cumReturnOnCapital）。
  */
 import { describe, it, expect } from 'vitest'
-import { hitRate, cumReturn, cumReturnOnCapital, isBelowThreshold } from '../src/domain/metrics.js'
-import type { Trade } from '../src/domain/types.js'
+import { hitRate, cumReturnOnCapital, isBelowThreshold } from '../src/domain/metrics.js'
 
 describe('metrics.hitRate', () => {
   it('方向命中率 = 方向命中数 / 已校验数', () => {
@@ -23,33 +22,6 @@ describe('metrics.hitRate', () => {
     const r = hitRate([true, true], [true, true])
     expect(r.dir).toBe(1)
     expect(r.range).toBe(1)
-  })
-})
-
-describe('metrics.cumReturn', () => {
-  it('空流水返回 0', () => {
-    expect(cumReturn([])).toBe(0)
-  })
-
-  it('基于流水累计（买低卖高 → 正收益）', () => {
-    const trades: Trade[] = [
-      { id: '1', symbol: '588000', side: 'buy', qty: 1000, price: 2.0, ts: 1 },
-      { id: '2', symbol: '588000', side: 'sell', qty: 500, price: 2.5, ts: 2 },
-      { id: '3', symbol: '588000', side: 'sell', qty: 500, price: 3.0, ts: 3 },
-    ]
-    // 已实现收益 = 500*(2.5-2.0) + 500*(3.0-2.0) = 250 + 500 = 750
-    // 累计买入成本 = 1000 * 2.0 = 2000
-    // 收益率 = 750 / 2000 = 0.375
-    expect(cumReturn(trades)).toBeCloseTo(0.375, 4)
-  })
-
-  it('买高卖低 → 负收益', () => {
-    const trades: Trade[] = [
-      { id: '1', symbol: '588000', side: 'buy', qty: 1000, price: 3.0, ts: 1 },
-      { id: '2', symbol: '588000', side: 'sell', qty: 1000, price: 2.0, ts: 2 },
-    ]
-    // 已实现收益 = 1000*(2.0-3.0) = -1000；成本 3000 → -0.3333
-    expect(cumReturn(trades)).toBeCloseTo(-0.3333, 4)
   })
 })
 

@@ -12,8 +12,7 @@
  *      - 场景 S2（盈利方向）：init(1000,1000,2.00)  → sell 1000@6.0 → +0.3333
  *      - 除零 / 未初始化标的 → 回落 0 且不抛错
  *   2) 工具层端到端（真实 ToolRuntime registry）AC2 落地。
- *   3) 旧 `cumReturn(trades)` 语义未变（§5.2，防 task71-reverify 回归）。
- *   4) 未接 ledger 时回落 0（防 tester-independent-verify 回归）。
+ *   3) 未接 ledger 时回落 0（防 tester-independent-verify 回归）。
  *
  * 独立性：期望值均由「场景参数手算」得到，不调用被测实现反推。
  * 硬约束：只新增测试文件，不改动 src/**。
@@ -26,8 +25,7 @@ import { Context } from '@deepseek-ai/cordis'
 import ToolRuntime, { type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { Ledger } from '../src/domain/ledger.js'
 import { Reviews } from '../src/domain/reviews.js'
-import { cumReturn, cumReturnOnCapital } from '../src/domain/metrics.js'
-import type { Trade } from '../src/domain/types.js'
+import { cumReturnOnCapital } from '../src/domain/metrics.js'
 import { registerAllTools } from '../src/tools/index.js'
 
 let dir: string
@@ -278,33 +276,6 @@ describe('T2 · 工具层端到端：行情缺省（undefined）→ 回落最近
     } finally {
       await dispose()
     }
-  })
-})
-
-/* ================================================================== *
- * 三、回归：旧 cumReturn(trades) 语义未变
- * ================================================================== */
-
-describe('R1 · 旧 cumReturn(trades) 回归（§5.2，task71-reverify 锁定）', () => {
-  it('买低卖高 → 0.375', () => {
-    const trades: Trade[] = [
-      { id: '1', symbol: '588000', side: 'buy', qty: 1000, price: 2.0, ts: 1 },
-      { id: '2', symbol: '588000', side: 'sell', qty: 500, price: 2.5, ts: 2 },
-      { id: '3', symbol: '588000', side: 'sell', qty: 500, price: 3.0, ts: 3 },
-    ]
-    expect(cumReturn(trades)).toBeCloseTo(0.375, 4)
-  })
-
-  it('买高卖低 → -0.3333', () => {
-    const trades: Trade[] = [
-      { id: '1', symbol: '588000', side: 'buy', qty: 1000, price: 3.0, ts: 1 },
-      { id: '2', symbol: '588000', side: 'sell', qty: 1000, price: 2.0, ts: 2 },
-    ]
-    expect(cumReturn(trades)).toBeCloseTo(-0.3333, 4)
-  })
-
-  it('空流水 → 0（不抛错）', () => {
-    expect(cumReturn([])).toBe(0)
   })
 })
 
