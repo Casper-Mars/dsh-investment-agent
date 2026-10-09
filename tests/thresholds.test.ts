@@ -9,7 +9,7 @@
  *
  * 也覆盖 parseStrategyDoc 的纯函数语义（无 front-matter / 嵌套 / 未闭合 / 流式集合）。
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -145,6 +145,33 @@ describe('getThresholds 优先级', () => {
     })
     expect(() => ctx.getThresholds('588000')).not.toThrow()
     expect(ctx.getThresholds('588000')).toEqual(DEFAULT_THRESHOLDS)
+  })
+
+  it('front-matter 解析失败 → 输出 warn 告警日志', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    ctx.strategy.set('588000', {
+      text: strategyText('thresholds: [1,2'),
+      rationale: 'r',
+    })
+    ctx.getThresholds('588000')
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('588000 策略文档 front-matter 解析失败'),
+    )
+    warn.mockRestore()
+  })
+
+  it('thresholds 字段形态非法（写成标量）→ 输出 warn 告警日志', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    ctx.strategy.set('588000', {
+      // 合法 YAML，但 thresholds 的值是标量（数字）而非对象。
+      text: strategyText('thresholds: 3'),
+      rationale: 'r',
+    })
+    ctx.getThresholds('588000')
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('thresholds 字段形态非法'),
+    )
+    warn.mockRestore()
   })
 })
 

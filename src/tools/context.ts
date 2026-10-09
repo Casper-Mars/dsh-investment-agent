@@ -141,11 +141,30 @@ export function createToolContext(opts: ToolContextOptions = {}): ToolContext {
         const doc = strategy.get(symbol)
         if (doc) {
           const parsed = parseStrategyDoc(doc.text)
-          const t = thresholdsFromFrontmatter(parsed.structured.thresholds)
+          // front-matter 解析失败时记录告警（否则阈值静默回落默认值，故障难排查）。
+          if (parsed.parseError) {
+            console.warn(
+              `[dsh-finance][strategy] ${symbol} 策略文档 front-matter 解析失败，阈值回落默认值：${parsed.parseError}`,
+            )
+          }
+          // thresholds 字段存在但形态非法（非对象，如写成数组/标量）时同样告警。
+          const rawThresholds = parsed.structured.thresholds
+          if (
+            rawThresholds !== undefined &&
+            (rawThresholds === null || typeof rawThresholds !== 'object' || Array.isArray(rawThresholds))
+          ) {
+            console.warn(
+              `[dsh-finance][strategy] ${symbol} 策略文档 thresholds 字段形态非法（应为对象），已忽略并回落默认值：${JSON.stringify(rawThresholds)}`,
+            )
+          }
+          const t = thresholdsFromFrontmatter(rawThresholds)
           if (t) return t
         }
-      } catch {
-        // 策略文档不可读/解析异常：降级到旧表。
+      } catch (err) {
+        // 策略文档不可读/解析异常：记录后降级到旧表。
+        console.warn(
+          `[dsh-finance][strategy] ${symbol} 策略文档读取异常，阈值回落默认值：${err instanceof Error ? err.message : String(err)}`,
+        )
       }
 
       // ② 旧 ledger/<symbol>/thresholds.json（@deprecated 兼容回落）。
