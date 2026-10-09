@@ -73,7 +73,6 @@ export class Ledger {
 
   constructor(dataRoot: string) {
     this.store = new LedgerStore(new JsonStore(dataRoot))
-    void this.store
   }
 
   /** 新增标的 + 初始持仓/成本/资金；symbol 重复则报错。 */
