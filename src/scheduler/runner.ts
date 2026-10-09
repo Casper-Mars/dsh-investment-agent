@@ -416,6 +416,8 @@ export class TaskRunner {
         // §9.1「执行结果：输出不可解析 → failed」+ §4.4：exit 0 但末行无有效
         // `{shouldWake,data?}` JSON（或结构非法）→ failed，failureKind='parse'
         //（不再归 skipped；skipped 仅用于编排层「读任务程序 / 唤醒投递」等降级分支）。
+        // 注：runner 自身不持有 logger，只产出 outcome；解析失败的可诊断日志由
+        // 调度层 fire 统一记录（outcome.kind==='failed' → log('error', reason + detail)）。
         const parsed = parseLastJsonLine(stdoutBuf)
         if (parsed === null) {
           finish({

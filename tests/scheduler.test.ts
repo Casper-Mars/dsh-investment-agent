@@ -556,6 +556,60 @@ describe('依赖注入（全可注入）', () => {
     s.start()
     expect(log).toHaveBeenCalled()
   })
+
+  it('解析失败（failureKind=parse）流经 fire 时输出可诊断错误日志（含任务 id + reason/detail）', async () => {
+    // §9.1：runner 产出 failed/parse 结局，日志由调度层 fire 统一记录。
+    // 兜底断言：解析失败必须可诊断（任务标识 + 具体违约 + 入口路径），而非仅靠代码审查。
+    const store = new FakeStore([makeTask('t')])
+    const runner = new FakeRunner()
+    const clock = new FakeClock(BASE)
+    const timer = new FakeTimer(clock)
+    const log = vi.fn()
+
+    const reason = '[runner] 任务输出不可解析（无有效结果 JSON）: /tasks/t/task.ts'
+    const detail =
+      'stdout 最后非空行无有效 `{shouldWake,data?}` 单行 JSON（或 shouldWake 非 boolean / data 非 string）'
+    runner.defaultOutcome = () => ({
+      kind: 'failed',
+      failureKind: 'parse',
+      reason,
+      detail,
+    } as TaskRunOutcome)
+
+    const s = createScheduler({ store, runner, timer, clock, log })
+    s.start()
+
+    // 推进时钟触发 fire，让 failed/parse 结局流经调度层日志分支。
+    const earliest = timer.timers.reduce(
+      (min, t) => (t.at < min ? t.at : min),
+      Number.POSITIVE_INFINITY,
+    )
+    clock.set(new Date(earliest))
+    timer.fireDue(earliest)
+
+    // runner.run 为 Promise 化的 fire → 等待异步日志落地。
+    await vi.waitFor(() => {
+      expect(runner.calls).toContain('/tasks/t/task.ts')
+    })
+
+    // 断言：调度层以 error 级记录失败，内容含任务 id 与 reason/detail 关键片段。
+    const errorCalls = log.mock.calls.filter(([level]) => level === 'error')
+    expect(errorCalls.length).toBeGreaterThan(0)
+
+    const messages = errorCalls.map(([, msg]) => String(msg))
+    const parseMsg = messages.find((m) => m.includes('执行失败'))
+    expect(parseMsg).toBeDefined()
+
+    // 任务标识（id）可诊断。
+    expect(parseMsg).toContain('任务 t')
+    expect(parseMsg).toContain('执行失败')
+    // reason 关键片段（含入口路径）。
+    expect(parseMsg).toContain('/tasks/t/task.ts')
+    expect(parseMsg).toContain('无有效结果 JSON')
+    // detail 关键片段（区分三种具体违约）。
+    expect(parseMsg).toContain('shouldWake 非 boolean')
+    expect(parseMsg).toContain('data 非 string')
+  })
 })
 
 describe('Scheduler 导出形状', () => {
