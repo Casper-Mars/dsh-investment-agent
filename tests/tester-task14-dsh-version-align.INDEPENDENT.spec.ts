@@ -15,7 +15,7 @@
  *   2) 运行在**真实 @deepseek-ai/dsh-tools@0.2.0-rc.2**（node_modules 已解析
  *      0.2.0-rc.2）+ 真实 @deepseek-ai/cordis 4.0.4 的 Context 之上，并在测试
  *      内**运行时读取** node_modules 版本号作为「确实以 0.2.0-rc.2 运行」的证据。
- *   3) skills 与 systemPrompt 服务以**捕获式桩**提供，逐项核对 5 个 SKILL 与
+ *   3) skills 与 systemPrompt 服务以**捕获式桩**提供，逐项核对 6 个 SKILL 与
  *      人设 section 的注册结果（非空桩）。
  *
  * 仅新增本测试文件，不改动 src/** 与 package.json。
@@ -69,12 +69,13 @@ const EXPECTED = {
   ],
 } as const
 const ALL_EXPECTED = Object.values(EXPECTED).flat()
-/** 5 个技术面 SKILL（注册顺序：趋势研判 → 网格策略 → 止损纪律 → 策略创作 → 任务程序创作）。 */
+/** 6 个技术面 SKILL（注册顺序：趋势研判 → 网格策略 → 止损纪律 → 策略创作 → 分析与决策 → 任务程序创作）。 */
 const EXPECTED_SKILLS = [
   'trend-analysis',
   'grid-strategy',
   'stop-rule',
   'strategy-authorship',
+  'analysis-decision',
   'task-authorship',
 ] as const
 /** 人设 section 契约（src/prompts/index.ts）。 */
@@ -105,7 +106,7 @@ function makeSystemPromptStub() {
   }
 }
 
-/** skills 捕获式桩：记录 register 调用（用于逐项核对 5 个 SKILL）。 */
+/** skills 捕获式桩：记录 register 调用（用于逐项核对 6 个 SKILL）。 */
 function makeSkillsStub() {
   const registered: Array<{
     name: string
@@ -299,7 +300,7 @@ describe('Task-14 复验 B：真实构建产物（dist-server）装载与运行�
     }
   })
 
-  it('B4·★ skills 5 个正常注册（名称/顺序逐一核对）', async () => {
+  it('B4·★ skills 6 个正常注册（名称/顺序逐一核对）', async () => {
     const b = await bootDistPlugin(makeTmpDataRoot())
     try {
       const names = b.sk.registered.map((s) => s.name)

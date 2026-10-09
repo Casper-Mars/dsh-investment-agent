@@ -1,5 +1,5 @@
 /**
- * Agent SKILL 层入口 —— 技术面 5 个运行时 SKILL 的**唯一注册出口**。
+ * Agent SKILL 层入口 —— 技术面 6 个运行时 SKILL 的**唯一注册出口**。
  *
  * 职责（对应 Task 5 §A / §C）：
  *   1. 从 `src/skills/<name>/SKILL.md` 读取 Markdown（随构建产物发布到
@@ -25,7 +25,7 @@ import { parseSkillFile, type ParsedSkillFile } from './frontmatter.js'
 /**
  * 技术面 SKILL 名清单（kebab-case）。
  *
- * 目次顺序即注册顺序：趋势研判 → 网格策略 → 止损纪律 → 策略创作 → 任务程序创作。
+ * 目次顺序即注册顺序：趋势研判 → 网格策略 → 止损纪律 → 策略创作 → 分析与决策 → 任务程序创作。
  * 目录名与 frontmatter 的 `name` 必须与之一致（skill-filesystem 发现规范）。
  */
 export const SKILL_NAMES = [
@@ -33,6 +33,7 @@ export const SKILL_NAMES = [
   'grid-strategy',
   'stop-rule',
   'strategy-authorship',
+  'analysis-decision',
   'task-authorship',
 ] as const
 
@@ -72,13 +73,13 @@ export function createSkillRegistration(name: SkillName): SkillRegistration {
   }
 }
 
-/** 组装全部 5 个 SKILL 注册对象。 */
+/** 组装全部 6 个 SKILL 注册对象。 */
 export function createAllSkillRegistrations(): SkillRegistration[] {
   return SKILL_NAMES.map((name) => createSkillRegistration(name))
 }
 
 /**
- * 将 5 个技术面 SKILL 注册到当前上下文（唯一注册出口）。
+ * 将 6 个技术面 SKILL 注册到当前上下文（唯一注册出口）。
  *
  * @param ctx 插件上下文（需 `inject` 含 `'skills'`，`ctx.skills` 就绪）。
  * @returns 注销器：按注册**逆序**注销全部 SKILL（由调用方绑定到 `ctx.effect`）。
