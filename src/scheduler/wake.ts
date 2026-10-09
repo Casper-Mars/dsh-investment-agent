@@ -31,13 +31,20 @@
 import type { Clock, AgentLike, AgentRegistryLike } from './types.js'
 import { RISK_DISCLAIMER } from '../tools/constants.js'
 import { createNoticeMessage, type NoticeUserMessage } from '../message-source.js'
+import { PINNED_SESSION_ID } from '../session.js'
 
 // ---------------------------------------------------------------------------
 // 常量
 // ---------------------------------------------------------------------------
 
-/** 固定会话 id（§8.1「investment-advisor」）。 */
-export const WAKE_TARGET_ID = 'investment-advisor' as const
+/**
+ * 固定会话 id（§8.1「investment-advisor」）。
+ *
+ * 别名：复用 {@link PINNED_SESSION_ID}（`src/session.ts`）作为单一事实来源，
+ * 避免会话 id 字面量在多处重复硬编码（DRY）。保留本别名以兼容既有 import /
+ * `scheduler/index.ts` 的 re-export。
+ */
+export const WAKE_TARGET_ID = PINNED_SESSION_ID
 
 /** 缺省唤醒正文预算（字符数，§9.2 / §9.3）。data 超出时截断保留前 N 字符。 */
 export const DEFAULT_WAKE_TEXT_BUDGET = 2000
