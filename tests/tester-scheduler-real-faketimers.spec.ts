@@ -42,7 +42,7 @@ describe('真 Node 定时器：同步 throw 不 uncaughtException、仍重设 ti
 
   it('runner.run 同步 throw → 不 uncaughtException，任务仍重设 timer', async () => {
     const runner = {
-      run(): Promise<TaskRunOutcome> {
+      run(_taskId: string, _taskPath: string): Promise<TaskRunOutcome> {
         throw new Error('sync-throw')
       },
     }
@@ -77,7 +77,7 @@ describe('真 Node 定时器：同步 throw 不 uncaughtException、仍重设 ti
     const aCalls: number[] = []
     const bCalls: number[] = []
     const runner = {
-      run(taskPath: string): Promise<TaskRunOutcome> {
+      run(taskId: string, taskPath: string): Promise<TaskRunOutcome> {
         if (taskPath.endsWith('/a/task.ts')) {
           aCalls.push(1)
           throw new Error('sync-throw-a')

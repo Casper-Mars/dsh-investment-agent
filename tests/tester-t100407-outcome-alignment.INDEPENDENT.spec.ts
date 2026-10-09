@@ -122,7 +122,7 @@ function boot(dataRoot: string): FakeCtx {
   applyScheduler(ctx, { dataRoot, logger: noopLog })
   return ctx
 }
-function orch(): { run: (p: string) => Promise<any> } {
+function orch(): { run: (taskId: string, taskPath: string) => Promise<any> } {
   return (H.cap.options as { runner: any }).runner
 }
 
@@ -157,7 +157,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('tasks/noentry/task.ts')
+    const out = await orch().run('noentry', 'tasks/noentry/task.ts')
 
     expect(out.kind).toBe('skipped')
     expect(out.kind).not.toBe('failed')
@@ -180,7 +180,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('tasks/noentry2/task.ts')
+    const out = await orch().run('noentry2', 'tasks/noentry2/task.ts')
 
     expect(out.kind).toBe('skipped')
     // 观察点：可读性校验前移到依赖安装之前，故缺程序时连依赖都不装。
@@ -205,7 +205,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     }
 
     boot(dataRoot)
-    const out = await orch().run('tasks/ok/task.ts')
+    const out = await orch().run('ok', 'tasks/ok/task.ts')
 
     expect(out.kind).toBe('quiet')
     expect(runCalls).toEqual([resolve(dataRoot, 'tasks/ok/task.ts')])
@@ -227,7 +227,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('tasks/noentry3/task.ts')
+    const out = await orch().run('noentry3', 'tasks/noentry3/task.ts')
 
     // 校验先于安装：即使 loader 会抛，也不触发安装；缺程序 → skipped（不误归 failed/install）。
     expect(out.kind).toBe('skipped')
@@ -251,7 +251,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('tasks/direntry/task.ts')
+    const out = await orch().run('direntry', 'tasks/direntry/task.ts')
 
     expect(out.kind).toBe('skipped')
     expect(String(out.reason)).toContain('任务程序文件缺失或不可读')
@@ -277,7 +277,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
 
     try {
       boot(dataRoot)
-      const out = await orch().run('tasks/unreadable/task.ts')
+      const out = await orch().run('unreadable', 'tasks/unreadable/task.ts')
       expect(out.kind).toBe('skipped')
       expect(String(out.reason)).toContain('任务程序文件缺失或不可读')
       expect(out.detail).toBe(abs)

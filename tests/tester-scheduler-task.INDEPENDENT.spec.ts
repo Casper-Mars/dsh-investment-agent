@@ -76,7 +76,7 @@ class SlowRunner {
   throwSync = new Map<string, boolean>()
   defaultOutcome: () => TaskRunOutcome = () => ({ kind: 'quiet', reason: 'ok' })
 
-  run(taskPath: string): Promise<TaskRunOutcome> {
+  run(taskId: string, taskPath: string): Promise<TaskRunOutcome> {
     const at = Date.now()
     this.calls.push({ path: taskPath, at })
     if (this.throwSync.get(taskPath)) {
@@ -146,7 +146,7 @@ describe('隐患1：链式自调度时刻计算基准', () => {
     // 但 fire 是同步启动 runner（Promise），finally 在微任务里执行。
     // 我们用一个自定义 runner：run 返回后，在返回前手动把 clock 前移 2 分钟。
     const customRunner = {
-      run(taskPath: string): Promise<TaskRunOutcome> {
+      run(taskId: string, taskPath: string): Promise<TaskRunOutcome> {
         // 模拟执行耗时跨越 2 个触发分钟。
         clock.advanceMinutes(2)
         return Promise.resolve({ kind: 'quiet', reason: 'ok' } as TaskRunOutcome)
@@ -181,7 +181,7 @@ describe('隐患1：链式自调度时刻计算基准', () => {
     const clock = new FakeClock(BASE)
     const timer = new FakeTimer(clock)
     const customRunner = {
-      run(): Promise<TaskRunOutcome> {
+      run(taskId: string, taskPath: string): Promise<TaskRunOutcome> {
         clock.advanceMinutes(1) // 每次执行耗时 1 分钟
         return Promise.resolve({ kind: 'quiet', reason: 'ok' } as TaskRunOutcome)
       },

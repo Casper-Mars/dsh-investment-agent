@@ -56,15 +56,21 @@ export interface TaskListSource {
 }
 
 /**
- * 任务执行抽象（可注入）。对齐 runner.ts 的 {@link TaskRunner.run} 签名。
+ * 任务执行抽象（可注入）。由 scheduler 携带 taskId + taskPath 调用。
+ *
+ * 与 runner.ts 的 {@link TaskRunner.run} 不同：真实执行器只认 taskPath；编排适配层
+ * （index.ts 的 orchestratedRunner）额外需要 taskId 用于依赖安装与按 id 定位唤醒投递。
+ * 故此处契约收紧为 `run(taskId, taskPath)`，把 scheduler 在 `fire(id, schedule, taskPath)`
+ * 中**已持有**的 taskId 直接透传，避免编排层再按 taskPath 反查（冗余 + 同 path 歧义）。
  */
 export interface TaskRunnerLike {
   /**
    * 执行任务程序并返回单次运行结局。
+   * @param taskId 任务 id（对应该次调度装配时的 `TaskDef.id`）。
    * @param taskPath 任务入口文件路径（对应 `TaskDef.task_path`）。
    * @returns 单次运行结局；scheduler 只消费、不投递。
    */
-  run(taskPath: string): Promise<TaskRunOutcome>
+  run(taskId: string, taskPath: string): Promise<TaskRunOutcome>
 }
 
 /**
@@ -328,7 +334,7 @@ export class Scheduler {
    * 任务到点触发：执行 runner → 链式重设下次触发。
    *
    * 关键正确性（§7.2「链式自调度」/ §7.1「异常隔离」）：
-   *   - **先触发再重算**：调用 `runner.run(taskPath)`，无论成功/失败/reject，
+   *   - **先触发再重算**：调用 `runner.run(id, taskPath)`，无论成功/失败/reject，
    *     都在 `finally` 中重新计算该任务的下一次触发时刻并重设 timer。
    *   - **runner reject 被 catch**：`run` 返回 rejected Promise 时被捕获，不抛到
    *     调度链；该任务仍被重设 timer（下个周期继续尝试）。
@@ -347,7 +353,7 @@ export class Scheduler {
     // 转为 rejected Promise 走下方 catch / finally，避免同步异常穿透调度链、阻塞其它 timer。
     let runPromise: Promise<TaskRunOutcome>
     try {
-      runPromise = Promise.resolve(this.runner.run(taskPath))
+      runPromise = Promise.resolve(this.runner.run(id, taskPath))
     } catch (err) {
       runPromise = Promise.reject(err)
     }

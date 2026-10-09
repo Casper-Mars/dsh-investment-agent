@@ -84,7 +84,7 @@ class FakeClock implements Clock {
 /** 记录 run 调用、恒返回 quiet 的执行器替身（scheduler 只消费 outcome）。 */
 class FakeRunner {
   calls: string[] = []
-  run(taskPath: string): Promise<TaskRunOutcome> {
+  run(taskId: string, taskPath: string): Promise<TaskRunOutcome> {
     this.calls.push(taskPath)
     return Promise.resolve({ kind: 'quiet', reason: 'ok' })
   }

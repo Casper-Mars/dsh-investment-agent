@@ -85,7 +85,7 @@ class FakeRunner {
   outcomes = new Map<string, () => TaskRunOutcome | Promise<TaskRunOutcome>>()
   defaultOutcome: () => TaskRunOutcome = () => ({ kind: 'quiet', reason: 'ok' })
 
-  run(taskPath: string): Promise<TaskRunOutcome> {
+  run(taskId: string, taskPath: string): Promise<TaskRunOutcome> {
     this.calls.push(taskPath)
     const fn = this.outcomes.get(taskPath)
     const result = fn ? fn() : this.defaultOutcome()

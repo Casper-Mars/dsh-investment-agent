@@ -6,9 +6,9 @@
  *      注入优先级：构造注入 > 环境变量 `DSH_FINANCE_DATA_DIR` > 默认 `<cwd>/.dsh-finance/data`），
  *      并显式派生任务清单目录 `join(dataRoot, 'tasks')`——**不依赖 `process.cwd()`**；
  *   2. `createTaskStore(tasksDir)` 建任务清单 store；
- *   3. 组装「编排 runner」（本层真正难点）：满足 `TaskRunnerLike`（`run(taskPath)` 不携带
- *      taskId），在 `run()` 内完成设计文档 §4.3 完整链路——
- *      `由 taskPath 反查 taskId → 任务程序可读性校验 → loader 依赖就绪 → runner 独立进程执行 →
+ *   3. 组装「编排 runner」（本层真正难点）：满足 `TaskRunnerLike`（`run(taskId, taskPath)`），
+ *      在 `run()` 内完成设计文档 §4.3 完整链路——
+ *      `任务程序可读性校验 → loader 依赖就绪 → runner 独立进程执行 →
  *      解析 outcome → shouldWake=true 时 waker.wake(taskId, data) 投递`；
  *   4. `createScheduler({ store, runner: 编排runner })`（多任务独立调度引擎）；
  *   5. 经 `ctx.inject(['agents'], cb)` 动态注入 agents 构造**可变引用** waker（拿不到则降级
@@ -127,9 +127,9 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
   const store: TaskStore = createTaskStore(tasksDir)
 
   // ---- 3) 编排 runner：loader → runner → waker 的完整 §4.3 链路 ----
-  // scheduler.ts 的 Scheduler 只注入 TaskRunnerLike（run(taskPath) 不携带 taskId），
-  // 且拿到 woke outcome 后「只消费不投递」。这里构造一个满足 TaskRunnerLike 的编排
-  // runner，在 run() 内补上「taskId 反查 + 依赖安装 + woke 投递」。
+  // scheduler.ts 的 Scheduler 注入 TaskRunnerLike（`run(taskId, taskPath)`，taskId 由
+  // `fire(id, schedule, taskPath)` 直接透传），且拿到 woke outcome 后「只消费不投递」。
+  // 这里构造一个满足 TaskRunnerLike 的编排 runner，在 run() 内补上「依赖安装 + woke 投递」。
   const loader: TaskLoader = createTaskLoader()
   const taskRunner: TaskRunner = createTaskRunner()
 
@@ -138,32 +138,21 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
   let waker: Waker | undefined
 
   const orchestratedRunner: TaskRunnerLike = {
-    async run(taskPath: string): Promise<TaskRunOutcome> {
-      // 3a) 由 taskPath 反查 taskId（store.list 找 task_path === taskPath）。
-      //     scheduler 传进来的 taskPath 即 TaskDef.task_path 原文（相对路径），
-      //     这里用 store 的 list() 现查，避免装配期快照过期（tools 写库后 reload）。
-      let taskId: string | undefined
-      let taskDef: { readonly id: string; readonly task_path: string } | undefined
-      try {
-        const { tasks } = store.list()
-        const found = tasks.find((t) => t.task_path === taskPath)
-        if (found) {
-          taskId = found.id
-          taskDef = found
-        }
-      } catch (err) {
-        log('error', `[dsh-finance/scheduler] 反查任务失败（${taskPath}）: ${String(err)}`)
-      }
-
-      if (!taskId || !taskDef) {
-        // 找不到对应任务：跳过（不抛、不中断调度链）。
-        const reason = `[scheduler/orchestrator] 未找到 task_path=${taskPath} 对应的任务，跳过`
-        log('warn', reason)
-        return { kind: 'skipped', reason }
-      }
-
-      // 3b) 任务程序绝对路径 + 任务目录（含 package.json）。
-      const absTaskPath = resolve(dataRoot, taskDef.task_path)
+    async run(taskId: string, taskPath: string): Promise<TaskRunOutcome> {
+      // 3a) 直接采用 scheduler 透传的 taskId / taskPath，**不再**用 store.list() 反查。
+      //     取舍（「定义过期」风险评估）：
+      //       - scheduler 在装配/重载时（reload → scheduleTask）已从 store 读到该任务的
+      //         id 与 task_path，二者与本次 fire 严格一致（fire 的 id/taskPath 即装配时存入
+      //         scheduled map 的那一份）；
+      //       - tools 层任何写库都会同步触发 scheduler.reload()，重新装配拿到最新定义；
+      //         执行期间发生的 reload 由 epoch 代际守卫（scheduler.rescheduleAfterFire）
+      //         拦截旧 fire，旧定义不会继续带病调度；
+      //       - 因此 fire 时由 scheduler 携带的 id/path 与本次调度同源，去除现查是安全的；
+      //         同时消除了「每次 fire 一次全量目录读 + 解析」的冗余，以及「两个任务共用同一
+      //         task_path 时 store.find 只取第一个」导致按 taskId 串扰（冷却/投递错配）的隐患。
+      //     旧契约因不携带 taskId 才需反查；现契约已携带，故删除反查及其「未找到 → skipped」
+      //     分支。taskPath 即 TaskDef.task_path 原文（相对路径）。
+      const absTaskPath = resolve(dataRoot, taskPath)
       const taskDir = dirname(absTaskPath)
 
       // 3c) 任务程序入口可读性校验（§9.1「读任务程序：程序文件缺失 / 读取失败 → skipped」）。

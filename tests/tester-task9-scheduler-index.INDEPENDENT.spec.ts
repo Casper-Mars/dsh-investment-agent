@@ -8,7 +8,7 @@
  *   1) **装配层隔离**：以最小结构替身 mock ctx（get / inject / effect），
  *      真实 store（tmp 目录）+ 通过 `vi.mock` 注入的 loader / runner / waker
  *      **替身工厂**，直接抓到 `applyScheduler` 内部构造的「编排 runner」
- *      （`createScheduler({runner})` 的入参），对其 `run(taskPath)` 逐链路验证。
+ *      （`createScheduler({runner})` 的入参），对其 `run(taskId, taskPath)` 逐链路验证。
  *   2) **不脱离真实**：默认 loader / runner / waker 仍走真实实现，仅在需要
  *      确定性时替换为替身；另有一组**真实 node 子进程**端到端（真实 spawn +
  *      真实 stdout 解析 + 真实投递），验证编排 runner 真能跑出四结局。
@@ -233,7 +233,7 @@ function boot(dataRoot: string, services: Record<string, unknown> = {}): FakeCtx
 }
 
 /** 抓取 applyScheduler 内部构造的「编排 runner」。 */
-function orch(): { run: (taskPath: string) => Promise<any> } {
+function orch(): { run: (taskId: string, taskPath: string) => Promise<any> } {
   return (H.cap.options as { runner: any }).runner
 }
 
@@ -342,7 +342,7 @@ describe('T9-B 装配链完整性：store → 编排runner → scheduler → 工
 // ---------------------------------------------------------------------------
 
 describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', () => {
-  it('C1 taskId 反查：按 task_path 命中 TaskDef.id，并传正确 taskDir/absPath 给 loader/runner', async () => {
+  it('C1 taskId 透传：直接采用入参 taskId，并传正确 taskDir/absPath 给 loader/runner', async () => {
     const dataRoot = mkTmp()
     writeTask(dataRoot, {
       id: 'alpha',
@@ -367,14 +367,17 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     }
 
     boot(dataRoot)
-    const out = await orch().run('tasks/alpha/task.mjs')
+    const out = await orch().run('alpha', 'tasks/alpha/task.mjs')
 
     expect(out.kind).toBe('quiet')
     expect(loadCalls).toEqual([['alpha', resolve(dataRoot, 'tasks/alpha')]])
     expect(runCalls).toEqual([resolve(dataRoot, 'tasks/alpha/task.mjs')])
   })
 
-  it('C2 taskId 反查失败：无匹配 task_path → skipped，不触达 loader/runner', async () => {
+  // t100411 起：编排层不再按 task_path 反查 taskId（删除了「未找到 → skipped」分支），
+  // 直接采用 scheduler 透传的入参。本例即「无清单记录」场景：旧实现会因反查失败而 skipped，
+  // 新实现改用入参 id 直接跑；这里因入口文件缺失才按 §9.1 → skipped，且不触达 loader/runner。
+  it('C2 反查已移除：无清单记录不再因反查失败 skipped；入口缺失 → skipped，不触达 loader/runner', async () => {
     const dataRoot = mkTmp()
     const load = vi.fn(async () => {})
     const run = vi.fn(async () => ({ kind: 'quiet', reason: 'x' }))
@@ -382,7 +385,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('tasks/ghost/task.mjs')
+    const out = await orch().run('ghost', 'tasks/ghost/task.mjs')
 
     expect(out.kind).toBe('skipped')
     expect(load).not.toHaveBeenCalled()
@@ -408,7 +411,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('tasks/beta/task.mjs')
+    const out = await orch().run('beta', 'tasks/beta/task.mjs')
 
     expect(out.kind).toBe('failed')
     expect(out.failureKind).toBe('install')
@@ -430,7 +433,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('tasks/noloader/task.mjs')
+    const out = await orch().run('noloader', 'tasks/noloader/task.mjs')
     expect(out.kind).toBe('failed')
     expect(out.failureKind).toBe('install')
     expect(run).not.toHaveBeenCalled()
@@ -452,7 +455,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('tasks/nopkg/task.mjs')
+    const out = await orch().run('nopkg', 'tasks/nopkg/task.mjs')
     expect(out.kind).toBe('failed')
     expect(out.failureKind).toBe('install')
     expect(run).not.toHaveBeenCalled()
@@ -477,9 +480,9 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const o1 = await orch().run('tasks/gamma/task.mjs')
-    const o2 = await orch().run('tasks/gamma/task.mjs')
-    const o3 = await orch().run('tasks/gamma/task.mjs')
+    const o1 = await orch().run('gamma', 'tasks/gamma/task.mjs')
+    const o2 = await orch().run('gamma', 'tasks/gamma/task.mjs')
+    const o3 = await orch().run('gamma', 'tasks/gamma/task.mjs')
 
     expect(o1.kind).toBe('quiet')
     expect(o2.kind).toBe('skipped')
@@ -521,7 +524,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     expect(ctx.injects[0].deps).toEqual(['agents'])
     ctx.injects[0].cb({ get: (n: string) => (n === 'agents' ? registry : undefined) })
 
-    const out = await orch().run('tasks/delta/task.mjs')
+    const out = await orch().run('delta', 'tasks/delta/task.mjs')
 
     expect(out.kind).toBe('woke')
     expect(out.targets).toContain('investment-advisor')
@@ -552,7 +555,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     // (a) agents 服务不可用 → inject 回调里 waker 置 undefined
     let ctx = boot(dataRoot)
     ctx.injects[0].cb({ get: () => undefined })
-    const a = await orch().run('tasks/eps/task.mjs')
+    const a = await orch().run('eps', 'tasks/eps/task.mjs')
     expect(a.kind).toBe('skipped')
     expect(String(a.reason)).toMatch(/waker|agents|降级/)
 
@@ -567,7 +570,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     }
     ctx = boot(dataRoot)
     ctx.injects[0].cb({ get: (n: string) => (n === 'agents' ? { get: () => ({ id: 'x', followup() {} }) } : undefined) })
-    const b = await orch().run('tasks/eps/task.mjs')
+    const b = await orch().run('eps', 'tasks/eps/task.mjs')
     expect(b.kind).toBe('skipped')
 
     // (c) wake 抛错 → 降级 skipped（不穿透）
@@ -578,7 +581,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     }
     ctx = boot(dataRoot)
     ctx.injects[0].cb({ get: (n: string) => (n === 'agents' ? { get: () => ({ id: 'x', followup() {} }) } : undefined) })
-    const c = await orch().run('tasks/eps/task.mjs')
+    const c = await orch().run('eps', 'tasks/eps/task.mjs')
     expect(c.kind).toBe('skipped')
   })
 
@@ -601,7 +604,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('tasks/noentry/task.ts')
+    const out = await orch().run('noentry', 'tasks/noentry/task.ts')
 
     expect(out.kind).toBe('skipped')
     expect(out.kind).not.toBe('failed')
@@ -744,19 +747,19 @@ describe('T9-F 编排 runner 真实端到端（真实 spawn + 真实投递）', 
     const ctx = boot(dataRoot)
     ctx.injects[0].cb({ get: (n: string) => (n === 'agents' ? registry : undefined) })
 
-    const quiet = await orch().run('tasks/rq/task.mjs')
+    const quiet = await orch().run('rq', 'tasks/rq/task.mjs')
     expect(quiet.kind).toBe('quiet')
 
-    const woke = await orch().run('tasks/rw/task.mjs')
+    const woke = await orch().run('rw', 'tasks/rw/task.mjs')
     expect(woke.kind).toBe('woke')
     expect(woke.targets).toContain('investment-advisor')
     expect(JSON.stringify(followup.mock.calls[0][0])).toContain('REAL-PROC-CONTENT')
 
-    const parseFailed = await orch().run('tasks/rs/task.mjs')
+    const parseFailed = await orch().run('rs', 'tasks/rs/task.mjs')
     expect(parseFailed.kind).toBe('failed')
     expect(parseFailed.failureKind).toBe('parse')
 
-    const failed = await orch().run('tasks/rf/task.mjs')
+    const failed = await orch().run('rf', 'tasks/rf/task.mjs')
     expect(failed.kind).toBe('failed')
     expect(failed.failureKind).toBe('exec')
   }, 30000)

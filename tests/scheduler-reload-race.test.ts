@@ -2,7 +2,7 @@
  * scheduler/scheduler.ts —— 「reload 与正在执行的 fire 竞态」回归测试（P1）。
  *
  * 缺陷（修复前）：
- *   任务 fire() 开头即 `this.scheduled.delete(id)`，随后 `runner.run(taskPath)`
+ *   任务 fire() 开头即 `this.scheduled.delete(id)`，随后 `runner.run(id, taskPath)`
  *   异步执行（后台进程可达数十秒）。执行期间若调用 reload()（agent 调 task_update /
  *   create / enable 等写类工具即触发）→ clearAll() + rebuildFromStore() → 为同 id
  *   装 timer A 并 `scheduled.set(id, A)`；旧 fire 的 finally 又调 rescheduleAfterFire()
@@ -87,7 +87,7 @@ class DeferredRunner {
   calls: string[] = []
   private pending: Array<(o: TaskRunOutcome) => void> = []
 
-  run(taskPath: string): Promise<TaskRunOutcome> {
+  run(taskId: string, taskPath: string): Promise<TaskRunOutcome> {
     this.calls.push(taskPath)
     return new Promise<TaskRunOutcome>((resolve) => {
       this.pending.push(resolve)

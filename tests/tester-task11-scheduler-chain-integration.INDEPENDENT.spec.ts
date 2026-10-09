@@ -168,7 +168,7 @@ function boot(dataRoot: string, services: Record<string, unknown> = {}): FakeCtx
 }
 
 /** 抓取 applyScheduler 内部构造的「编排 runner」。 */
-function orch(): { run: (taskPath: string) => Promise<any> } {
+function orch(): { run: (taskId: string, taskPath: string) => Promise<any> } {
   return (H.cap.options as { runner: any }).runner
 }
 
@@ -433,7 +433,7 @@ describe('T11-C2 契约：failureKind 归因矩阵（真实 runner/loader + 注�
     H.runnerImpl.value = createTaskRunner({ spawner: sp.spawner })
 
     boot(dataRoot)
-    const out = await orch().run(TASK_PATH)
+    const out = await orch().run('alpha', TASK_PATH)
     expect(out.kind).toBe('failed')
     expect(out.failureKind).toBe('install')
     expect(sp.spawn).not.toHaveBeenCalled()
@@ -447,7 +447,7 @@ describe('T11-C2 契约：failureKind 归因矩阵（真实 runner/loader + 注�
     H.runnerImpl.value = createTaskRunner({ spawner: sp.spawner })
 
     boot(dataRoot)
-    const out = await orch().run(TASK_PATH)
+    const out = await orch().run('alpha', TASK_PATH)
     expect(out.kind).toBe('failed')
     expect(out.failureKind).toBe('install')
     expect(sp.spawn).not.toHaveBeenCalled()
@@ -461,7 +461,7 @@ describe('T11-C2 契约：failureKind 归因矩阵（真实 runner/loader + 注�
     H.runnerImpl.value = createTaskRunner({ spawner: sp.spawner })
 
     boot(dataRoot)
-    const out = await orch().run(TASK_PATH)
+    const out = await orch().run('alpha', TASK_PATH)
     expect(out.kind).toBe('failed')
     expect(out.failureKind).toBe('spawn')
   })
@@ -477,7 +477,7 @@ describe('T11-C2 契约：failureKind 归因矩阵（真实 runner/loader + 注�
     H.runnerImpl.value = createTaskRunner({ spawner: sp.spawner })
 
     boot(dataRoot)
-    const out = await orch().run(TASK_PATH)
+    const out = await orch().run('alpha', TASK_PATH)
     expect(out.kind).toBe('failed')
     expect(out.failureKind).toBe('exec')
   })
@@ -493,7 +493,7 @@ describe('T11-C2 契约：failureKind 归因矩阵（真实 runner/loader + 注�
     H.runnerImpl.value = createTaskRunner({ spawner: sp.spawner })
 
     boot(dataRoot)
-    const out = await orch().run(TASK_PATH)
+    const out = await orch().run('alpha', TASK_PATH)
     expect(out.kind).toBe('failed')
     expect(out.failureKind).toBe('parse')
   })
@@ -509,7 +509,7 @@ describe('T11-C2 契约：failureKind 归因矩阵（真实 runner/loader + 注�
     H.runnerImpl.value = createTaskRunner({ spawner: sp.spawner })
 
     boot(dataRoot)
-    const out = await orch().run(TASK_PATH)
+    const out = await orch().run('alpha', TASK_PATH)
     expect(out.kind).toBe('failed')
     expect(out.failureKind).toBe('parse')
   })
@@ -527,7 +527,7 @@ describe('T11-C2 契约：failureKind 归因矩阵（真实 runner/loader + 注�
 
     boot(dataRoot)
     // 不触发 agents 动态注入 → 内部 waker 保持 undefined。
-    const out = await orch().run(TASK_PATH)
+    const out = await orch().run('alpha', TASK_PATH)
     expect(out.kind).toBe('skipped')
     expect(String(out.reason)).toMatch(/waker|agents|降级/)
   })
@@ -554,7 +554,7 @@ describe('T11-C2 契约：failureKind 归因矩阵（真实 runner/loader + 注�
           : undefined,
     })
 
-    const out = await orch().run(TASK_PATH)
+    const out = await orch().run('alpha', TASK_PATH)
     expect(out.kind).toBe('skipped')
   })
 })
