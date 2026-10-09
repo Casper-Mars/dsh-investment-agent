@@ -157,7 +157,6 @@ function systemPromptStub() {
 
 async function bootRegistry(
   dataRoot: string,
-  quotes: { realtime: (s: string) => Promise<{ price: number; status: string }> },
 ): Promise<{ tools: ToolBox; dispose: () => Promise<void> }> {
   const app = new Context()
   app.provide('systemPrompt', systemPromptStub())
@@ -168,7 +167,7 @@ async function bootRegistry(
     name: 'dsh-finance-tools',
     inject: ['tools'],
     apply(ctx: Context) {
-      registerAllTools(ctx, { dataRoot, quotes })
+      registerAllTools(ctx, { dataRoot })
     },
   } as never) as unknown as { dispose: () => Promise<void> }
   const tools = (app as unknown as { tools: ToolBox }).tools
@@ -203,12 +202,9 @@ type MetricsValue = {
   history: unknown[]
 }
 
-describe('T1 · 工具层端到端：review_metrics 透出非零 cum_return（行情源给价 3.0）', () => {
-  it('ledger_init → ledger_trade(卖出) → review_metrics → cum_return=-0.9615', async () => {
-    const quotes = {
-      realtime: async () => ({ price: 3.0, status: 'trading' }),
-    }
-    const { tools, dispose } = await bootRegistry(dir, quotes)
+describe('T1 · 工具层端到端：review_metrics 透出非零 cum_return（price 入参给价 3.0）', () => {
+  it('ledger_init → ledger_trade(卖出) → review_metrics(price=3.0) → cum_return=-0.9615', async () => {
+    const { tools, dispose } = await bootRegistry(dir)
     try {
       const init = await call(tools, 'ledger_init', {
         symbol: '588000',
@@ -226,11 +222,11 @@ describe('T1 · 工具层端到端：review_metrics 透出非零 cum_return（�
       })
       expect(sell.isError).toBe(false)
 
-      const res = await call(tools, 'review_metrics', { symbol: '588000' })
+      const res = await call(tools, 'review_metrics', { symbol: '588000', price: 3.0 })
       expect(res.isError).toBe(false)
       const m = res.value as MetricsValue
       console.log(
-        `[EVIDENCE AC2-TOOL] cum_return=${m.cum_return}（行情供给现价 3.0，期望 -0.9615）`,
+        `[EVIDENCE AC2-TOOL] cum_return=${m.cum_return}（price 入参供给现价 3.0，期望 -0.9615）`,
       )
       expect(m.cum_return).not.toBe(0)
       expect(m.cum_return).toBeCloseTo(-0.9615, 4)
@@ -240,15 +236,10 @@ describe('T1 · 工具层端到端：review_metrics 透出非零 cum_return（�
   })
 })
 
-describe('T2 · 工具层端到端：行情缺省（undefined）→ 回落最近成交价仍非零', () => {
-  it('quotes 返回 undefined → resolvePrice 回落 → cum_return=-0.9615', async () => {
-    // 模拟行情不可用：realtime 抛错，resolvePrice 捕获后回落（缺省=最近成交价）。
-    const quotes = {
-      realtime: async () => {
-        throw new Error('feed down')
-      },
-    }
-    const { tools, dispose } = await bootRegistry(dir, quotes)
+describe('T2 · 工具层端到端：price 缺省 → 回落最近成交价仍非零', () => {
+  it('不传 price → 回落最近成交价 → cum_return=-0.9615', async () => {
+    // 工具层不持有行情源：不传 price 时，domain 回落用最近一笔成交价作为现价代理。
+    const { tools, dispose } = await bootRegistry(dir)
     try {
       await call(tools, 'ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 2.0, init_cash: 50000 })
       await call(tools, 'ledger_trade', { symbol: '588000', side: 'sell', qty: 500, price: 3.0 })
@@ -256,7 +247,7 @@ describe('T2 · 工具层端到端：行情缺省（undefined）→ 回落最近
       const res = await call(tools, 'review_metrics', { symbol: '588000' })
       expect(res.isError).toBe(false)
       const m = res.value as MetricsValue
-      console.log(`[EVIDENCE AC2-TOOL] 行情缺省回落 cum_return=${m.cum_return}（期望 -0.9615）`)
+      console.log(`[EVIDENCE AC2-TOOL] price 缺省回落 cum_return=${m.cum_return}（期望 -0.9615）`)
       expect(m.cum_return).not.toBe(0)
       expect(m.cum_return).toBeCloseTo(-0.9615, 4)
     } finally {
@@ -265,8 +256,7 @@ describe('T2 · 工具层端到端：行情缺省（undefined）→ 回落最近
   })
 
   it('未初始化标的经工具层 → cum_return=0 且非 isError', async () => {
-    const quotes = { realtime: async () => ({ price: 10, status: 'trading' }) }
-    const { tools, dispose } = await bootRegistry(dir, quotes)
+    const { tools, dispose } = await bootRegistry(dir)
     try {
       const res = await call(tools, 'review_metrics', { symbol: '999999' })
       expect(res.isError).toBe(false)

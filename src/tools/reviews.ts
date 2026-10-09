@@ -176,6 +176,11 @@ export function createReviewMetricsTool(ctx: ToolContext): ToolDefinition {
       '读取某标的的累计统计（方向命中率 / 区间命中率 / 累计收益率 + 逐日历史）。只读操作。',
     parameters: {
       symbol: { type: 'string', required: true, description: '标的代码' },
+      price: {
+        type: 'number',
+        description:
+          '现价，用于计算累计收益率 cum_return 的期末市值；缺省则用最近成交价代理',
+      },
     },
     output: {
       schema: reviewMetricsResultSchema,
@@ -190,7 +195,7 @@ export function createReviewMetricsTool(ctx: ToolContext): ToolDefinition {
       ],
     },
     async execute(args) {
-      const price = await ctx.resolvePrice(args.symbol)
+      const price = args.price
       const m = ctx.reviews.review_metrics(args.symbol, price)
       const result: ReviewMetricsResult = {
         dir_hit_rate: m.dirHitRate,
@@ -211,6 +216,11 @@ export function createReviewRetrospectTool(ctx: ToolContext): ToolDefinition {
       '当标的表现劣于阈值时定位根因并给出改进建议（方向命中率 / 累计收益率 / 阈值配置）。只读操作。',
     parameters: {
       symbol: { type: 'string', required: true, description: '标的代码' },
+      price: {
+        type: 'number',
+        description:
+          '现价，用于计算累计收益率 cum_return 的期末市值；缺省则用最近成交价代理',
+      },
     },
     output: {
       schema: reviewRetrospectResultSchema,
@@ -228,7 +238,7 @@ export function createReviewRetrospectTool(ctx: ToolContext): ToolDefinition {
     },
     async execute(args) {
       const thresholds = ctx.getThresholds(args.symbol)
-      const price = await ctx.resolvePrice(args.symbol)
+      const price = args.price
       const m = ctx.reviews.review_metrics(args.symbol, price)
       const r = ctx.reviews.review_retrospect(args.symbol, thresholds, {
         dirHitRate: m.dirHitRate,

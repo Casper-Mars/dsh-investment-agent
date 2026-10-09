@@ -270,8 +270,8 @@ export class Reviews {
    * 并据 ledger 流水 + 现价计算 cum_return（验收口径 t100357 AC2）。
    *
    * @param symbol 标的。
-   * @param price 现价（可选）。缺省时用最近一笔成交价作为现价代理；
-   *   无台账/无流水时 cum_return 回落 0。
+   * @param price 现价（可选，由工具层 `price` 入参带入，agent 从感知汇报带入）。
+   *   缺省时用最近一笔成交价作为现价代理；无台账/无流水时 cum_return 回落 0。
    */
   review_metrics(symbol: string, price?: number): ReviewMetricsResult {
     const cached = this.getMetrics(symbol)
@@ -315,8 +315,8 @@ export class Reviews {
 
   /**
    * 计算当前累计收益率（验收口径）。
-   * 从台账流水+持仓+账户计算 cum_return，现价优先取入参 price，
-   * 缺省用最近一笔成交价；无台账/无流水时回落 0。
+   * 现价由工具层 `price` 入参带入（agent 从感知汇报带入）；缺省用最近一笔成交价代理。
+   * 从台账流水+持仓+账户计算 cum_return；无台账/无流水时回落 0。
    */
   private computeCumReturn(symbol: string, price?: number): number {
     if (!this.ledger) return 0

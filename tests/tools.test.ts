@@ -331,6 +331,38 @@ describe('验收点 2+3：reviews 域', () => {
     expect(Array.isArray(r.improvements)).toBe(true)
     expectMatchesOutputSchema('review_retrospect', r)
   })
+
+  it('review_metrics 接受可选 price：传 price 用该价计 cum_return，缺省回落最近成交价', async () => {
+    await run('ledger_init', {
+      symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 2.0, init_cash: 50000,
+    })
+    // 卖出 500@3.0 → 剩余持仓 500；最近成交价 = 3.0；realized = (3.0-2.0)×500 = 500
+    await run('ledger_trade', { symbol: '588000', side: 'sell', qty: 500, price: 3.0 })
+
+    // 传 price=4.0：期末市值 = 500×4.0 = 2000；期初资金 52000；realized 500
+    // cum_return = (2000 + 500 - 52000) / 52000 = -49500/52000
+    const withPrice = await run('review_metrics', { symbol: '588000', price: 4.0 })
+    expect(withPrice.cum_return).toBeCloseTo(-49500 / 52000, 4)
+    expectMatchesOutputSchema('review_metrics', withPrice)
+
+    // 缺省 price：回落最近成交价 3.0 → 期末市值 500×3.0 = 1500
+    // cum_return = (1500 + 500 - 52000) / 52000 = -50000/52000
+    const noPrice = await run('review_metrics', { symbol: '588000' })
+    expect(noPrice.cum_return).toBeCloseTo(-50000 / 52000, 4)
+    expectMatchesOutputSchema('review_metrics', noPrice)
+  })
+
+  it('review_retrospect 接受可选 price（传/不传均可执行）', async () => {
+    await run('ledger_init', {
+      symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 2.0, init_cash: 50000,
+    })
+    await run('ledger_trade', { symbol: '588000', side: 'sell', qty: 500, price: 3.0 })
+    const r = await run('review_retrospect', { symbol: '588000', price: 4.0 })
+    expect(r).not.toHaveProperty('ok')
+    expect(typeof r.root_cause).toBe('string')
+    expect(Array.isArray(r.improvements)).toBe(true)
+    expectMatchesOutputSchema('review_retrospect', r)
+  })
 })
 
 describe('验收点 4：写操作按 symbol 隔离', () => {
