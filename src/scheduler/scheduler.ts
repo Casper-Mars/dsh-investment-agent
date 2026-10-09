@@ -166,6 +166,21 @@ export class Scheduler {
   private started = false
 
   /**
+   * 调度代际（generation / epoch）。
+   *
+   * 每次「清空 / 全量重建」（stop、reload 均经 {@link clearAll}）自增一次。
+   * {@link fire} 在触发瞬间记录本次触发所属代际，{@link rescheduleAfterFire} 仅在
+   * 「触发代际 === 当前代际」时才装下一次 timer。
+   *
+   * 用途（修复 P1 竞态）：`fire()` 触发后 runner 异步执行期间，若发生 `reload()`
+   * （agent 调写类工具触发），reload 已为同 id 重建了新 timer；旧 fire 的 `finally`
+   * 因代际已变而**不再补 timer**，避免同 id 双份活跃 timer（泄漏 + 双份触发，且随
+   * 每次 reload 指数增长）。代际守卫同时天然覆盖「reload 时该任务被禁用 / 移除」的边缘
+   * ——旧 fire 不会为一个已不再调度的任务重新装上 timer。
+   */
+  private epoch = 0
+
+  /**
    * 每个已调度任务的运行时状态。
    *
    * Key 为任务 id（同一 id 唯一，reload 时按 id 对齐/移除）。持有：
@@ -236,6 +251,8 @@ export class Scheduler {
 
   /** 清空所有已排定的 timer 句柄（不动 `started` 标志）。 */
   private clearAll(): void {
+    // 代际自增：任何「清空 / 重建」都令此前 in-flight fire 的补 timer 失效（见 epoch 字段说明）。
+    this.epoch++
     for (const entry of this.scheduled.values()) {
       this.timer.clearTimer(entry.handle)
     }
@@ -320,6 +337,9 @@ export class Scheduler {
    *   - 重设前先清理旧句柄（该句柄已触发，但为防 timer 实现重复回调，稳妥清掉）。
    */
   private fire(id: string, schedule: CronSchedule, taskPath: string): void {
+    // 记录本次触发所属代际：finally 中仅在代际未变（执行期间未 stop/reload）时才补 timer。
+    const fireEpoch = this.epoch
+
     // 旧句柄已触发，从 map 移除（触发的这套由本次 finally 重新装配）。
     this.scheduled.delete(id)
 
@@ -352,20 +372,34 @@ export class Scheduler {
         this.log('error', `[scheduler] 任务 ${id} 触发异常（已隔离）: ${String(err)}`)
       })
       .finally(() => {
-        // 链式自调度：无论成功/失败，都重算并重设该任务的下一次触发（除非已 stop）。
-        this.rescheduleAfterFire(id, schedule, taskPath)
+        // 链式自调度：无论成功/失败，都重算并重设该任务的下一次触发
+        //（除非已 stop，或执行期间发生过 reload —— 由 rescheduleAfterFire 的代际守卫拦截）。
+        this.rescheduleAfterFire(id, schedule, taskPath, fireEpoch)
       })
   }
 
   /**
    * 触发后重设该任务的下一次触发 timer（链式自调度）。
    *
-   * 若 stop 已发生（`started===false`），不再重设 timer（避免 stop 后残留 timer）。
+   * 两个守卫，任一命中即不补 timer：
+   *   - 若 stop 已发生（`started===false`），不再重设 timer（避免 stop 后残留 timer）。
+   *   - **代际守卫（竞态修复核心）**：若 `fireEpoch !== this.epoch`，说明本次 fire 执行
+   *     期间发生过 stop/reload（{@link clearAll} 已令代际自增），该任务已被重建或移除；
+   *     此时**不得**再补 timer——否则会与 rebuild 新装的 timer 并存（同 id 双份触发 /
+   *     泄漏），或复活一个已被禁用 / 删除的任务。
+   *
    * 重算过程（next 计算）抛错时被捕获，记录错误后终止该任务的链（不崩溃调度引擎，
    * 也不影响其它任务）；此时该任务不再被调度，直到下一次 reload 重新装配。
    */
-  private rescheduleAfterFire(id: string, schedule: CronSchedule, taskPath: string): void {
+  private rescheduleAfterFire(
+    id: string,
+    schedule: CronSchedule,
+    taskPath: string,
+    fireEpoch: number,
+  ): void {
     if (!this.started) return
+    // 代际守卫：执行期间发生过 stop/reload → 旧 fire 不得再补 timer（见方法说明）。
+    if (fireEpoch !== this.epoch) return
     try {
       const now = this.clock.now()
       const nextAt = this.cron.next(schedule, now)
