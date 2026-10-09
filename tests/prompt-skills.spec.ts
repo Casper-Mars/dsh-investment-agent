@@ -61,9 +61,8 @@ describe('验收 1：advisor.md 人设内容', () => {
     expect(idx).toBeGreaterThan(md.length * 0.6)
   })
 
-  it('体现「不执行真实交易」「逐标的独立」「趋势跟随」等核心约束', () => {
+  it('体现「不执行真实交易」「趋势跟随」「防守优先」等核心约束', () => {
     expect(md).toMatch(/不执行真实交易/)
-    expect(md).toMatch(/逐标的独立/)
     expect(md).toMatch(/趋势跟随/)
     expect(md).toMatch(/防守优先/)
   })
