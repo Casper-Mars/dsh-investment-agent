@@ -1,17 +1,17 @@
 /**
- * scheduler/runner.ts —— 任务程序执行器（起独立 Node 进程 + stdout 解析 + 四结局映射）。
+ * scheduler/runner.ts —— 任务程序执行器（起独立 Node 进程 + stdout 解析 + 三结局映射）。
  *
  * 唯一权威设计文档：《感知层详细设计（dsh-finance 插件）》 v0.7。
  *
  * 职责（§5「执行模型」/ AC-5「独立 Node 进程、无 bindings 白名单」/ AC-7「返回值契约」）：
  * 任务程序对定时层是**黑盒**——runner 对任务内容一无所知，只负责「起独立进程 →
- * 捕获 stdout 最后一行 JSON → 解析为结果 → 映射四结局」。任务程序是 agent 生成的一段
+ * 捕获 stdout 最后一行 JSON → 解析为结果 → 映射三结局」。任务程序是 agent 生成的一段
  * 动态 TS/JS，跑在独立 Node 进程，可自由 import（不注入任何 bindings 白名单）。
  *
  * 用户已拍板的关键决策（不可改）：
  *   1. **stdout 解析**：按换行切分，取**最后一个非空行** `JSON.parse`（任务可能输出多
  *      行日志，中间日志行忽略，只认最后非空行作为结果 JSON，尾随空行跳过）。
- *   2. **四结局结构**：返回 types.ts 的 {@link TaskRunOutcome} 联合（非自定义结构）。
+ *   2. **三结局结构**：返回 types.ts 的 {@link TaskRunOutcome} 联合（非自定义结构）。
  *   3. **执行方式**：runner 只管执行 + 解析，不做依赖安装（loader 职责，由上层 scheduler
  *      编排 loader→runner 顺序）。
  *
@@ -30,7 +30,7 @@
  *
  * 可注入设计（对齐 types.ts 的 Spawner/TaskProcess）：
  *   - **spawner 可注入**：复用 types.ts 的 {@link Spawner}，默认用真实 `node` spawn；
- *     测试注入 mock 验证「stdout 解析 / 四结局映射 / 超时强杀」，不必真跑 node。
+ *     测试注入 mock 验证「stdout 解析 / 三结局映射 / 超时强杀」，不必真跑 node。
  *   - **计时预算可注入**：超时判定依赖 {@link TimeBudget} 抽象（`setTimeout`/`clearTimeout`），
  *     测试用 vitest fake timers 驱动真实超时时序。
  *
@@ -151,7 +151,7 @@ function createNodeTimeBudget(): TimeBudget {
  *   - 按 `\n` 切分；`trim()` 后为空的行（纯空白、尾随空行）跳过。
  *   - 只在**最后一个 trim 非空的行**上 `JSON.parse`。
  *   - 无任何非空行 / JSON 解析失败 / 结果非对象 / `shouldWake` 非 boolean →
- *     返回 `null`（调用方映射为 `skipped`，`parse` 违约语义）。
+ *     返回 `null`（调用方映射为 `failed`，`failureKind='parse'` 违约语义）。
  *   - `shouldWake===true` 但 `data` 非 string → 返回 `null`（契约违约）。
  *   - `shouldWake===true` 且 `data` 是 string → 返回 `{ shouldWake:true, data }`。
  *   - `shouldWake===false`（不管多余字段）→ 返回 `{ shouldWake:false }`。
@@ -200,7 +200,7 @@ export function parseLastJsonLine(stdout: string): TaskScriptResult | null {
  *
  * 通过 {@link createTaskRunner} 创建（依赖可注入），亦可用 `new TaskRunner(options)`。
  * 职责单一：对单个任务入口起独立 Node 进程，捕获 stdout 最后一行 JSON，映射为
- * {@link TaskRunOutcome} 四结局。不含依赖安装（loader 职责）。
+ * {@link TaskRunOutcome} 三结局（quiet / woke / failed）。不含依赖安装（loader 职责）。
  */
 export class TaskRunner {
   /** 进程生成器（注入）。 */
@@ -220,15 +220,15 @@ export class TaskRunner {
    * 执行任务程序并判读结局。
    *
    * 流程：spawn（失败 → failed/spawn）→ 累积 stdout → 等退出（onClose）或超时强杀 →
-   * 解析最后非空行 → 映射四结局（woke / quiet / skipped / failed）。
+   * 解析最后非空行 → 映射结局（woke / quiet / failed）。
    *
    * @param taskPath 任务入口文件绝对路径（对应 `TaskDef.task_path`）。
    * @param args     传给 `node` 的额外参数（可空）。
-   * @returns 单次运行结局（quiet / woke / skipped / failed）。
+   * @returns 单次运行结局（quiet / woke / failed）。
    */
   run(taskPath: string, args?: readonly string[]): Promise<TaskRunOutcome> {
     return new Promise<TaskRunOutcome>((resolve) => {
-      // 单一 settled 守卫：四结局互斥，一旦结算，后续任何事件（exit/超时）都被挡掉。
+      // 单一 settled 守卫：三结局互斥，一旦结算，后续任何事件（exit/超时）都被挡掉。
       let settled = false
       const finish = (outcome: TaskRunOutcome): void => {
         if (settled) return
@@ -285,7 +285,7 @@ export class TaskRunner {
         } as TaskRunOutcome)
       }, this.taskTimeoutMs)
 
-      // 进程结束（stdout 流 close，此时 exitCode 已确定）——唯一入口做解析与四结局映射。
+      // 进程结束（stdout 流 close，此时 exitCode 已确定）——唯一入口做解析与三结局映射。
       const onDone = (): void => {
         this.timeBudget.clearTimeout(timeoutHandle)
 
@@ -311,14 +311,18 @@ export class TaskRunner {
           return
         }
 
-        // 退出码 0：解析 stdout 最后非空行 → 映射四结局。
+        // 退出码 0：解析 stdout 最后非空行 → 映射结局。
+        // §9.1「执行结果：输出不可解析 → failed」+ §4.4：exit 0 但末行无有效
+        // `{shouldWake,data?}` JSON（或结构非法）→ failed，failureKind='parse'
+        //（不再归 skipped；skipped 仅用于编排层「读任务程序 / 唤醒投递」等降级分支）。
         const parsed = parseLastJsonLine(stdoutBuf)
         if (parsed === null) {
           finish({
-            kind: 'skipped',
-            reason: `[runner] 任务输出无有效结果 JSON: ${taskPath}`,
+            kind: 'failed',
+            reason: `[runner] 任务输出不可解析（无有效结果 JSON）: ${taskPath}`,
             detail:
               'stdout 最后非空行无有效 `{shouldWake,data?}` 单行 JSON（或 shouldWake 非 boolean / data 非 string）',
+            failureKind: 'parse',
           } as TaskRunOutcome)
           return
         }

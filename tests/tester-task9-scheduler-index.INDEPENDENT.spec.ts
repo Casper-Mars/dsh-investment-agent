@@ -183,8 +183,20 @@ function mkTmp(): string {
   return d
 }
 
-/** 写一条任务清单记录到 `<dataRoot>/tasks/<id>.json`。 */
+/** 写一条任务清单记录到 `<dataRoot>/tasks/<id>.json`（并补齐任务入口文件）。 */
 function writeTask(dataRoot: string, def: Record<string, unknown>): void {
+  const dir = join(dataRoot, 'tasks')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, `${String(def.id)}.json`), JSON.stringify(def), 'utf8')
+  // §9.1：编排 runner 会校验任务程序入口文件存在性；默认补齐入口文件，避免被误判为
+  // skipped（内容无关，runner 已被替身接管）。
+  const abs = resolve(dataRoot, String(def.task_path))
+  mkdirSync(dirname(abs), { recursive: true })
+  writeFileSync(abs, '// test task entry\n', 'utf8')
+}
+
+/** 仅写任务清单 JSON，不创建入口文件（供「入口文件缺失 → skipped」用例）。 */
+function writeTaskNoEntry(dataRoot: string, def: Record<string, unknown>): void {
   const dir = join(dataRoot, 'tasks')
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, `${String(def.id)}.json`), JSON.stringify(def), 'utf8')
@@ -569,6 +581,34 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     const c = await orch().run('tasks/eps/task.mjs')
     expect(c.kind).toBe('skipped')
   })
+
+  it('C7 入口文件缺失：任务目录 + package.json 存在但 task.ts 缺失 → skipped（非 failed），不执行 runner', async () => {
+    const dataRoot = mkTmp()
+    // 任务目录与 package.json 存在（loader 校验通过），但入口 task.ts 缺失。
+    writeTaskNoEntry(dataRoot, {
+      id: 'noentry',
+      name: 'NE',
+      cron: '0 9 * * *',
+      task_path: 'tasks/noentry/task.ts',
+      enabled: true,
+    })
+    mkdirSync(resolve(dataRoot, 'tasks/noentry'), { recursive: true })
+    writeFileSync(resolve(dataRoot, 'tasks/noentry/package.json'), '{}', 'utf8')
+
+    // loader 替身成功（目录 + package.json 就绪）；runner 替身不应被触达。
+    H.loaderImpl.value = { installTaskDeps: vi.fn(async () => {}) }
+    const run = vi.fn(async () => ({ kind: 'quiet', reason: 'should-not-run' }))
+    H.runnerImpl.value = { run }
+
+    boot(dataRoot)
+    const out = await orch().run('tasks/noentry/task.ts')
+
+    expect(out.kind).toBe('skipped')
+    expect(out.kind).not.toBe('failed')
+    expect(String(out.reason)).toMatch(/任务程序文件缺失/)
+    expect(out.detail).toBe(resolve(dataRoot, 'tasks/noentry/task.ts'))
+    expect(run).not.toHaveBeenCalled()
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -678,7 +718,7 @@ describe('T9-F 编排 runner 真实端到端（真实 spawn + 真实投递）', 
     { id: 'rf', taskPath: 'tasks/rf/task.mjs', body: `process.exit(3)` },
   ]
 
-  it('真实执行四结局：quiet / woke(投递) / skipped(解析) / failed(非零退出)', async () => {
+  it('真实执行结局：quiet / woke(投递) / failed(解析) / failed(非零退出)', async () => {
     const dataRoot = mkTmp()
     for (const p of programs) {
       writeTask(dataRoot, {
@@ -712,8 +752,9 @@ describe('T9-F 编排 runner 真实端到端（真实 spawn + 真实投递）', 
     expect(woke.targets).toContain('investment-advisor')
     expect(JSON.stringify(followup.mock.calls[0][0])).toContain('REAL-PROC-CONTENT')
 
-    const skipped = await orch().run('tasks/rs/task.mjs')
-    expect(skipped.kind).toBe('skipped')
+    const parseFailed = await orch().run('tasks/rs/task.mjs')
+    expect(parseFailed.kind).toBe('failed')
+    expect(parseFailed.failureKind).toBe('parse')
 
     const failed = await orch().run('tasks/rf/task.mjs')
     expect(failed.kind).toBe('failed')

@@ -5,8 +5,8 @@
  *
  * 覆盖任务卡验收点：
  * - stdout 最后非空行解析（多行日志 + 尾随空行）
- * - 四结局映射：woke / quiet / skipped / failed（含 failureKind）
- * - 契约违约 → skipped（shouldWake 非 boolean / data 非 string / JSON 无效）
+ * - 结局映射：woke / quiet / failed（含 failureKind；skipped 为编排层降级，非 runner 产出）
+ * - 契约违约 → failed/parse（shouldWake 非 boolean / data 非 string / JSON 无效）
  * - taskTimeoutMs 默认 60000 可注入，超时 SIGTERM 强杀，时序正确（timedOut 归因）
  * - spawner 可注入（mock，不真跑 node）
  * - 独立 Node 进程、无 bindings 白名单（真实 spawner 走 node + 无 --import 注入）
@@ -109,7 +109,7 @@ describe('parseLastJsonLine：最后非空行解析', () => {
   })
 })
 
-describe('TaskRunner.run：四结局映射', () => {
+describe('TaskRunner.run：结局映射', () => {
   it('shouldWake=true → woke（data 原样 + targets 空数组）', async () => {
     const proc = new FakeProcess()
     const { spawner, spawn } = makeSpawner(proc)
@@ -141,7 +141,7 @@ describe('TaskRunner.run：四结局映射', () => {
     await expect(pending).resolves.toMatchObject({ kind: 'quiet' })
   })
 
-  it('stdout 无有效 JSON → skipped（kind=skipped，含 detail 表达 parse 违约）', async () => {
+  it('stdout 无有效 JSON → failed（failureKind=parse，含 detail 表达 parse 违约）', async () => {
     const proc = new FakeProcess()
     const { spawner } = makeSpawner(proc)
     const runner = new TaskRunner({ spawner })
@@ -151,11 +151,12 @@ describe('TaskRunner.run：四结局映射', () => {
     proc.endStdout(0)
 
     const outcome = await pending
-    expect(outcome.kind).toBe('skipped')
+    expect(outcome.kind).toBe('failed')
+    expect((outcome as { failureKind?: string }).failureKind).toBe('parse')
     expect((outcome as { detail?: string }).detail).toBeTruthy()
   })
 
-  it('shouldWake 非 boolean → skipped', async () => {
+  it('shouldWake 非 boolean → failed（failureKind=parse）', async () => {
     const proc = new FakeProcess()
     const { spawner } = makeSpawner(proc)
     const runner = new TaskRunner({ spawner })
@@ -164,10 +165,10 @@ describe('TaskRunner.run：四结局映射', () => {
     proc.writeStdout('{"shouldWake":"yes","data":"x"}\n')
     proc.endStdout(0)
 
-    await expect(pending).resolves.toMatchObject({ kind: 'skipped' })
+    await expect(pending).resolves.toMatchObject({ kind: 'failed', failureKind: 'parse' })
   })
 
-  it('shouldWake=true 但 data 非 string → skipped', async () => {
+  it('shouldWake=true 但 data 非 string → failed（failureKind=parse）', async () => {
     const proc = new FakeProcess()
     const { spawner } = makeSpawner(proc)
     const runner = new TaskRunner({ spawner })
@@ -176,7 +177,7 @@ describe('TaskRunner.run：四结局映射', () => {
     proc.writeStdout('{"shouldWake":true}\n')
     proc.endStdout(0)
 
-    await expect(pending).resolves.toMatchObject({ kind: 'skipped' })
+    await expect(pending).resolves.toMatchObject({ kind: 'failed', failureKind: 'parse' })
   })
 
   it('非零退出码 → failed（failureKind=exec）', async () => {

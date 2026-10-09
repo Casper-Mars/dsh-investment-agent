@@ -49,7 +49,8 @@ export interface TaskDef {
  * - 唤醒分支：`{ shouldWake: true; data: string }`，`data` 逐字作为唤醒正文。
  * - 静默分支：`{ shouldWake: false }`。
  *
- * §9 明确：`shouldWake` 必须为 boolean，非 boolean（或缺省）→ 解析失败 → `skipped`。
+ * §9 明确：`shouldWake` 必须为 boolean，非 boolean（或缺省）→ 解析失败 → `failed`
+ * （`failureKind='parse'`；`skipped` 仅用于编排层降级分支，非 runner 产出）。
  */
 export type TaskScriptResult =
   | { readonly shouldWake: true; readonly data: string }

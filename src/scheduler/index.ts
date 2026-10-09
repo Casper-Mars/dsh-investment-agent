@@ -8,8 +8,8 @@
  *   2. `createTaskStore(tasksDir)` 建任务清单 store；
  *   3. 组装「编排 runner」（本层真正难点）：满足 `TaskRunnerLike`（`run(taskPath)` 不携带
  *      taskId），在 `run()` 内完成设计文档 §4.3 完整链路——
- *      `由 taskPath 反查 taskId → loader 依赖就绪 → runner 独立进程执行 → 解析 outcome →
- *      shouldWake=true 时 waker.wake(taskId, data) 投递`；
+ *      `由 taskPath 反查 taskId → 任务程序可读性校验 → loader 依赖就绪 → runner 独立进程执行 →
+ *      解析 outcome → shouldWake=true 时 waker.wake(taskId, data) 投递`；
  *   4. `createScheduler({ store, runner: 编排runner })`（多任务独立调度引擎）；
  *   5. 经 `ctx.inject(['agents'], cb)` 动态注入 agents 构造**可变引用** waker（拿不到则降级
  *      waker=undefined，唤醒走 skipped，不中断）；
@@ -19,6 +19,7 @@
  * 顶层 `inject = ['tools','skills','fs']` **保持不变**（agents/tools 经
  * `ctx.inject` / `ctx.get` 软取，不加入顶层 inject）。
  */
+import { accessSync, constants, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { DATA_ROOT_ENV, DEFAULT_DATA_DIR } from '../tools/context.js'
@@ -165,7 +166,23 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
       const absTaskPath = resolve(dataRoot, taskDef.task_path)
       const taskDir = dirname(absTaskPath)
 
-      // 3c) loader 依赖就绪（编排责任，设计 §4.3「到点 → 依赖就绪 → 执行」）。
+      // 3c) 任务程序入口可读性校验（§9.1「读任务程序：程序文件缺失 / 读取失败 → skipped」）。
+      //     必须在依赖安装**之前**判定：缺程序（缺失 / 非普通文件如目录 / 不可读）→ 直接
+      //     skipped、不安装依赖——否则依赖安装失败会掩盖「无程序可跑」，把本应 skipped 的
+      //     标的任务误归 failed/install。
+      //     通过条件为「存在且为**可读普通文件**」；任一不满足（statSync 抛错 / 非普通文件 /
+      //     accessSync 不可读）→ skipped，不启动独立进程（否则 node 非零退出会被误归
+      //     failed/exec）。对「正常存在的 task.ts」零影响：照常放行进入依赖安装与执行。
+      try {
+        const st = statSync(absTaskPath)
+        if (!st.isFile()) throw new Error(`非普通文件: ${absTaskPath}`)
+        accessSync(absTaskPath, constants.R_OK)
+      } catch {
+        log('warn', `[scheduler/orchestrator] 任务 ${taskId} 任务程序文件缺失或不可读: ${absTaskPath}`)
+        return { kind: 'skipped', reason: '任务程序文件缺失或不可读', detail: absTaskPath }
+      }
+
+      // 3d) loader 依赖就绪（编排责任，设计 §4.3「到点 → 依赖就绪 → 执行」）。
       try {
         await loader.installTaskDeps(taskId, taskDir)
       } catch (err) {
@@ -180,7 +197,7 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
         }
       }
 
-      // 3d) runner 独立进程执行。
+      // 3e) runner 独立进程执行。
       let outcome: TaskRunOutcome
       try {
         outcome = await taskRunner.run(absTaskPath)
@@ -191,7 +208,7 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
         return { kind: 'failed', reason: `执行异常: ${detail}`, detail, failureKind: 'exec' }
       }
 
-      // 3e) 仅 woke 需要投递；waker 未就绪/降级 → skipped。
+      // 3f) 仅 woke 需要投递；waker 未就绪/降级 → skipped。
       if (outcome.kind !== 'woke') return outcome
 
       if (!waker) {
@@ -200,7 +217,7 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
         return { kind: 'skipped', reason, detail: 'agents 服务不可用，唤醒降级' }
       }
 
-      // 3f) waker.wake(taskId, data) 投递，回填 targets；delivered:false → skipped（§9.1）。
+      // 3g) waker.wake(taskId, data) 投递，回填 targets；delivered:false → skipped（§9.1）。
       let delivery
       try {
         delivery = waker.wake(taskId, outcome.data)

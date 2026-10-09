@@ -23,7 +23,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, dirname, resolve } from 'node:path'
 import { PassThrough } from 'node:stream'
 
 // ---------------------------------------------------------------------------
@@ -133,11 +133,16 @@ function mkTmp(): string {
   return d
 }
 
-/** 写一条任务清单记录到 `<dataRoot>/tasks/<id>.json`。 */
+/** 写一条任务清单记录到 `<dataRoot>/tasks/<id>.json`（并补齐任务入口文件）。 */
 function writeTask(dataRoot: string, def: Record<string, unknown>): void {
   const dir = join(dataRoot, 'tasks')
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, `${String(def.id)}.json`), JSON.stringify(def), 'utf8')
+  // §9.1：编排 runner 会校验任务程序入口文件存在性；默认补齐入口文件，避免被误判为
+  // skipped（内容无关，真实 TaskRunner 已由 mock Spawner 接管）。
+  const abs = resolve(dataRoot, String(def.task_path))
+  mkdirSync(dirname(abs), { recursive: true })
+  writeFileSync(abs, '// test task entry\n', 'utf8')
 }
 
 let activeCtx: FakeCtx | null = null
@@ -477,7 +482,7 @@ describe('T11-C2 契约：failureKind 归因矩阵（真实 runner/loader + 注�
     expect(out.failureKind).toBe('exec')
   })
 
-  it('parse：stdout 末行无有效 JSON（契约违约）→ skipped（非 failed）', async () => {
+  it('parse：stdout 末行无有效 JSON（契约违约）→ failed / failureKind=parse', async () => {
     const dataRoot = setupTask()
     const inst = makeInstallSpawner({ exitCode: 0, killed: false, reason: 'exit' })
     const sp = makeSpawner((p) => {
@@ -489,11 +494,11 @@ describe('T11-C2 契约：failureKind 归因矩阵（真实 runner/loader + 注�
 
     boot(dataRoot)
     const out = await orch().run(TASK_PATH)
-    expect(out.kind).toBe('skipped')
-    expect(out.failureKind).toBeUndefined()
+    expect(out.kind).toBe('failed')
+    expect(out.failureKind).toBe('parse')
   })
 
-  it('parse：shouldWake 非 boolean（契约违约）→ skipped', async () => {
+  it('parse：shouldWake 非 boolean（契约违约）→ failed / failureKind=parse', async () => {
     const dataRoot = setupTask()
     const inst = makeInstallSpawner({ exitCode: 0, killed: false, reason: 'exit' })
     const sp = makeSpawner((p) => {
@@ -505,7 +510,8 @@ describe('T11-C2 契约：failureKind 归因矩阵（真实 runner/loader + 注�
 
     boot(dataRoot)
     const out = await orch().run(TASK_PATH)
-    expect(out.kind).toBe('skipped')
+    expect(out.kind).toBe('failed')
+    expect(out.failureKind).toBe('parse')
   })
 
   it('wake：waker 未就绪（agents 不可用）→ skipped（不中断调度链）', async () => {

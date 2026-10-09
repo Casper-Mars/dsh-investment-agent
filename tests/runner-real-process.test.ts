@@ -56,7 +56,7 @@ function kindOf(o: TaskRunOutcome): string {
 
 const LOOP = 20
 
-describe('真实进程 end-to-end：四结局（createNodeSpawner）', () => {
+describe('真实进程 end-to-end：三结局（createNodeSpawner）', () => {
   it('(a) 多行日志 + 末行唤醒 JSON → woke（循环 N 次无竞争）', async () => {
     // 最关键的模式：打印一行结果 JSON 后立即 process.exit —— 正是此前间歇性
     // 触发 exitCode 竞争的「打印结果即退出」用例。
@@ -87,14 +87,15 @@ describe('真实进程 end-to-end：四结局（createNodeSpawner）', () => {
     }
   })
 
-  it('(c) 非法 JSON → skipped', async () => {
+  it('(c) 非法 JSON（exit 0 无有效结果）→ failed/parse', async () => {
     const body = [
       "console.log('only plain log')",
       "console.log('done')",
     ].join('\n')
 
     const outcome = await runReal(body)
-    expect(kindOf(outcome)).toBe('skipped')
+    expect(kindOf(outcome)).toBe('failed')
+    expect((outcome as { failureKind?: string }).failureKind).toBe('parse')
   })
 
   it('(d) process.exit(3) 非零退出 → failed/exec', async () => {
