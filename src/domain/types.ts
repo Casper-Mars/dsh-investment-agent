@@ -42,6 +42,10 @@ export interface PositionSnapshot {
   avgCost: number
   cash: number
   realizedPnl: number
+  /**
+   * 浮动盈亏 =(现价−平均成本)×持仓数量，保留 4 位小数。
+   * 由 Ledger.query 传入现价时即时计算；未提供现价时为 0。
+   */
   floatPnl: number
 }
 

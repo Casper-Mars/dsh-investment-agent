@@ -174,3 +174,46 @@ describe('ledger.list', () => {
     expect(b).toMatchObject({ symbol: '000001', type: 'stock', qty: 200 })
   })
 })
+
+describe('ledger.query 浮动盈亏 float_pnl（t100405）', () => {
+  beforeEach(() => {
+    ledger.init('588000', {
+      type: 'etf',
+      qty: 1000,
+      cost: 2.0,
+      cash: 100000,
+    })
+  })
+
+  it('不传 price → floatPnl = 0（未提供现价、无法计算）', () => {
+    expect(ledger.query('588000').floatPnl).toBe(0)
+    // 显式 undefined 亦同。
+    expect(ledger.query('588000', undefined).floatPnl).toBe(0)
+  })
+
+  it('传 price（持仓）→ floatPnl = (price − avgCost) × qty', () => {
+    // (2.5 − 2.0) × 1000 = 500
+    expect(ledger.query('588000', 2.5).floatPnl).toBe(500)
+    // 亏损分支：(1.8 − 2.0) × 1000 = −200
+    expect(ledger.query('588000', 1.8).floatPnl).toBe(-200)
+  })
+
+  it('传 price（持仓）→ 结果保留 4 位小数', () => {
+    // (2.123456789 − 2.0) × 1000 = 123.456789 → 123.4568
+    expect(ledger.query('588000', 2.123456789).floatPnl).toBe(123.4568)
+  })
+
+  it('传 price（空仓 qty=0）→ floatPnl = 0', () => {
+    const r = ledger.trade('588000', { side: 'sell', qty: 1000, price: 2.5 })
+    expect(r.ok).toBe(true)
+    const snap = ledger.query('588000', 3.0)
+    expect(snap.qty).toBe(0)
+    expect(snap.floatPnl).toBe(0)
+  })
+
+  it('float_pnl 为即时计算，不改变账户持久化值', () => {
+    // 传 price 查询后，再次不传 price 仍为 0（不污染 accounts.floatPnl）。
+    expect(ledger.query('588000', 5.0).floatPnl).toBe(3000)
+    expect(ledger.query('588000').floatPnl).toBe(0)
+  })
+})

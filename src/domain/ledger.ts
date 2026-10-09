@@ -135,23 +135,34 @@ export class Ledger {
     })
   }
 
-  /** 完整快照（含 cash/realized/float）。 */
-  query(symbol: string): PositionSnapshot {
+  /**
+   * 完整快照（含 cash/realized/float）。
+   *
+   * 浮动盈亏为**即时计算**：显式传入现价 `price` 时按
+   * `float_pnl = (price − avg_cost) × qty` 计算并保留 4 位小数；
+   * 未传入（undefined）时按「未提供现价、无法计算」记为 0。
+   * 该值不写入 accounts 持久化（init/buy/sell 仍写占位 0）。
+   */
+  query(symbol: string, price?: number): PositionSnapshot {
     const sym = this.store.getSymbol(symbol)
     if (!sym) {
       throw new Error(`[ledger] 标的 ${symbol} 不存在`)
     }
     const pos = this.store.getPosition(symbol)
     const acc = this.store.getAccount(symbol)
+    const qty = pos?.qty ?? 0
+    const avgCost = pos?.avgCost ?? 0
+    // float_pnl=(现价−平均成本)×持仓数量，保留 4 位小数；未传现价则无法计算，记 0。
+    const floatPnl = typeof price === 'number' ? round((price - avgCost) * qty, 4) : 0
     return {
       symbol,
       type: sym.type,
       name: sym.name,
-      qty: pos?.qty ?? 0,
-      avgCost: pos?.avgCost ?? 0,
+      qty,
+      avgCost,
       cash: acc?.cash ?? 0,
       realizedPnl: acc?.realizedPnl ?? 0,
-      floatPnl: acc?.floatPnl ?? 0,
+      floatPnl,
     }
   }
 

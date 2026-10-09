@@ -137,6 +137,34 @@ describe('验收点 2+3：ledger 域 —— 返回形态 + schema 对齐', () =>
     expectMatchesOutputSchema('ledger_query', v)
   })
 
+  it('ledger_query：不传 price → float_pnl = 0', async () => {
+    await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 2, init_cash: 100000 })
+    const v = await run('ledger_query', { symbol: '588000' })
+    expect(v.float_pnl).toBe(0)
+    expectMatchesOutputSchema('ledger_query', v)
+  })
+
+  it('ledger_query：传 price（持仓）→ float_pnl = (price−avg_cost)×qty，保留 4 位小数', async () => {
+    await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 2, init_cash: 100000 })
+    // (2.5 − 2.0) × 1000 = 500
+    const v1 = await run('ledger_query', { symbol: '588000', price: 2.5 })
+    expect(v1.float_pnl).toBe(500)
+    expectMatchesOutputSchema('ledger_query', v1)
+    // 4 位小数：(2.123456789 − 2.0) × 1000 = 123.456789 → 123.4568
+    const v2 = await run('ledger_query', { symbol: '588000', price: 2.123456789 })
+    expect(v2.float_pnl).toBe(123.4568)
+    expectMatchesOutputSchema('ledger_query', v2)
+  })
+
+  it('ledger_query：传 price（空仓 qty=0）→ float_pnl = 0', async () => {
+    await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 2, init_cash: 100000 })
+    await run('ledger_trade', { symbol: '588000', side: 'sell', qty: 1000, price: 2.5 })
+    const v = await run('ledger_query', { symbol: '588000', price: 3 })
+    expect(v.qty).toBe(0)
+    expect(v.float_pnl).toBe(0)
+    expectMatchesOutputSchema('ledger_query', v)
+  })
+
   it('ledger_trade：写类返回 {ok,trade_id,new_qty,avg_cost}，卖出重算', async () => {
     await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 2, init_cash: 100000 })
     const v = await run('ledger_trade', { symbol: '588000', side: 'buy', qty: 100, price: 2.2 })

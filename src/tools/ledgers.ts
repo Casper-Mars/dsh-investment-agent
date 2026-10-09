@@ -135,6 +135,11 @@ export function createLedgerQueryTool(ctx: ToolContext): ToolDefinition {
       '读取单个标的的完整台账快照（持仓 / 成本 / 现金 / 已实现盈亏 / 浮动盈亏）。只读操作。',
     parameters: {
       symbol: { type: 'string', required: true, description: '标的代码' },
+      price: {
+        type: 'number',
+        description:
+          '现价（可选），用于计算浮动盈亏 float_pnl=(现价−平均成本)×持仓数量；缺省则不计算（float_pnl=0）',
+      },
     },
     output: {
       schema: ledgerQueryResultSchema,
@@ -149,7 +154,7 @@ export function createLedgerQueryTool(ctx: ToolContext): ToolDefinition {
       ],
     },
     async execute(args) {
-      const snap = ctx.ledger.query(args.symbol)
+      const snap = ctx.ledger.query(args.symbol, args.price)
       return toLedgerPosition(snap)
     },
   })

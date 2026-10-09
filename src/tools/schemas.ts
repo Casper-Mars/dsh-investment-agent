@@ -104,7 +104,12 @@ export const ledgerQueryResultSchema = {
     avg_cost: { type: 'number', required: true, description: '加权平均成本' },
     cash: { type: 'number', required: true, description: '账户现金' },
     realized_pnl: { type: 'number', required: true, description: '已实现盈亏' },
-    float_pnl: { type: 'number', required: true, description: '浮动盈亏' },
+    float_pnl: {
+      type: 'number',
+      required: true,
+      description:
+        '浮动盈亏 =(现价−平均成本)×持仓数量，保留 4 位小数；未提供现价时为 0',
+    },
   },
 } as const
 
