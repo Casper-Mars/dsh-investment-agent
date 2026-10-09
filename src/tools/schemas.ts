@@ -230,7 +230,12 @@ export const metricSnapshotSchema = {
     date: { type: 'string', required: true, description: '统计截止交易日' },
     dir_hit_rate: { type: 'number', required: true, description: '方向命中率（0-1）' },
     range_hit_rate: { type: 'number', required: true, description: '区间命中率（0-1）' },
-    cum_return: { type: 'number', required: true, description: '累计收益率' },
+    cum_return: {
+      type: 'number',
+      required: true,
+      description:
+        '累计收益率；即时计算路径（无 metrics 缓存）下本字段恒为 0（历史逐日累计收益需逐日重放流水，成本高，暂不回填），勿误认为当日亏损，真实累计收益见顶层 cum_return；有缓存时为缓存快照的真实值',
+    },
   },
 } as const
 
@@ -241,7 +246,11 @@ export const reviewMetricsResultSchema = {
   properties: {
     dir_hit_rate: { type: 'number', required: true, description: '方向命中率（0-1）' },
     range_hit_rate: { type: 'number', required: true, description: '区间命中率（0-1）' },
-    cum_return: { type: 'number', required: true, description: '累计收益率' },
+    cum_return: {
+      type: 'number',
+      required: true,
+      description: '累计收益率（真实值，验收口径 cumReturnOnCapital；无台账/无流水时回落 0）',
+    },
     history: { type: 'array', items: metricSnapshotSchema, required: true, description: '逐日统计历史' },
   },
 } as const

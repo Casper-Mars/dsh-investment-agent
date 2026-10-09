@@ -140,6 +140,10 @@ describe('reviews.review_metrics', () => {
     expect(m.dirHitRate).toBeCloseTo(2 / 3, 4)
     expect(m.rangeHitRate).toBeCloseTo(2 / 3, 4)
     expect(m.history).toHaveLength(3)
+    // 即时计算路径（无 metrics 缓存）下逐日 history 的 cumReturn 恒为 0，
+    // 属语义澄清（需逐日重放流水才有真实逐日累计收益），并非当日真实亏损；
+    // 真实累计收益仅体现在顶层 m.cumReturn。
+    expect(m.history.every((h) => h.cumReturn === 0)).toBe(true)
   })
 
   it('方向与区间命中可不同（各自独立统计）', () => {

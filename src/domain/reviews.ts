@@ -290,6 +290,12 @@ export class Reviews {
 
     const cumReturn = this.computeCumReturn(symbol, price)
 
+    // 即时计算路径（无 metrics 缓存的降级路径）下的 history 语义澄清：
+    // 逐日 history 元素的 cumReturn 恒为 0——历史逐日累计收益需逐日重放流水，
+    // 成本高，暂不回填（P3 决策：仅做语义澄清，不做逐日回填）。
+    // 真实累计收益只体现在顶层 cumReturn（验收口径 cumReturnOnCapital，见 computeCumReturn）。
+    // 注意：因此消费方不应把 history[i].cumReturn === 0 误读为「当日真实亏损」。
+    // 若命中 metrics 缓存，则走上方缓存分支返回缓存快照中的 history（其中 cumReturn 为快照真实值）。
     const fullHistory: MetricSnapshot[] = recs.map((r) => ({
       symbol,
       date: r.date,
