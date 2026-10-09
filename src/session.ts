@@ -2,9 +2,10 @@
  * 会话层基础：固定会话标识 + `sessionPersistence` 服务的最小结构契约。
  *
  * 本文件提供「基础层」：固定常量、会话服务的最小结构契约。
- * 会话确保（Task-10：检查 → 恢复 → 新建）已实现于 `src/session-ensure.ts`；
- * 尚待实现：
- *   - Task-11：唤醒改为定点投递 + agent-scoped 装配
+ * 相关装配/投递均在别处实现（勿在此重复）：
+ *   - 会话确保（检查 → 恢复 → 新建）：`src/session-ensure.ts`；
+ *   - 唤醒定点投递（waker + 冷却 + 文本预算）：`src/scheduler/wake.ts`；
+ *   - agent-scoped 装配：`src/plugin.ts` 的 `apply`。
  *
  * 设计约束：
  *   - `PINNED_SESSION_ID` 是**与插件强相关的写死常量**（非配置项、非环境变量），
@@ -25,8 +26,8 @@
 /**
  * 固定会话标识：本插件专属的常驻会话 id。
  *
- * **非配置项**：不读取任何配置 / 环境变量，全局唯一稳定，为后续
- * Task-10/11 的「ensure / 定点投递」提供稳定锚点。
+ * **非配置项**：不读取任何配置 / 环境变量，全局唯一稳定，为
+ * 「会话确保 / 唤醒定点投递」提供稳定锚点。
  */
 export const PINNED_SESSION_ID = 'investment-advisor'
 
@@ -36,9 +37,9 @@ export type PinnedSessionId = string
 /**
  * `sessionPersistence` 服务的最小结构契约。
  *
- * 仅声明本插件后续会用到的只读 / 观察面；`create` / `open` 等写入面在
- * Task-10（ensure/新建）再补齐，当前基础层只需 `stat` / `list` 的观察能力，
- * 以支撑「服务缺失安全降级 + 引用常量」的验收。
+ * 仅声明本插件会用到的只读 / 观察面；`create` 等写入面由
+ * `src/session-ensure.ts`（ensure/新建）承载，基础层只需 `stat` / `list` / `open`
+ * 的观察能力，以支撑「服务缺失安全降级 + 引用常量」的验收。
  */
 export interface SessionPersistenceLike {
   /** 观察某一持久会话（不读日志、不占所有权）；不存在返回 `undefined`。 */
