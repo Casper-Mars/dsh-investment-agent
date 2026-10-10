@@ -43,6 +43,7 @@ import {
   type OpeningNoticeAgents,
   type SessionProjectionsLike,
 } from './opening-notice.js'
+import { ensureFinanceHomeDir } from './paths.js'
 
 /** 会话确保依赖的可注入面（供纯函数三分支单测注入 fake）。 */
 export interface SessionEnsureDeps {
@@ -378,9 +379,11 @@ export function applySessionEnsure(
 ): void {
   const log = options.logger ?? ((message: string) => console.log(message))
 
-  // cwd：取宿主工作目录（`process.cwd()`）。这是新建会话落地的工作目录来源；
-  // 不臆造其他路径、不新增配置项 / 环境变量。
-  const cwd = options.cwd ?? process.cwd()
+  // cwd：固定到 `~/.dsh-finance`（展开后的绝对路径，目录不存在时自动创建）。
+  // 这是新建会话落地的工作目录来源，也是 workspace 归属（canonical 路径）锚点；
+  // 若随 `process.cwd()` 漂移，每次从不同目录启动 dsh web 都会产生全新 workspace。
+  // `workspaceRegistry.create` 要求 path 为**已存在的目录**，故此处先 `ensureFinanceHomeDir()`。
+  const cwd = options.cwd ?? ensureFinanceHomeDir()
   const agentOptions = resolveAgentOptions(ctx)
 
   ctx.inject(['agents', 'sessionPersistence'], (sessionCtx) => {

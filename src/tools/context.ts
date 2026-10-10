@@ -3,13 +3,16 @@
  *
  * 14 个工具需共享同一份数据根目录。本工厂在构造时：
  *   1. 解析 dataRoot（构造注入优先，缺省回退到环境变量
- *      `DSH_FINANCE_DATA_DIR`，再回退到 `<cwd>/.dsh-finance/data`）；
+ *      `DSH_FINANCE_DATA_DIR`，再回退到 `~/.dsh-finance/data`）；
  *   2. 用该 dataRoot 实例化四个 domain 类（Ledger / Predicts / Reviews /
  *      StrategyRegistry）各一次；
  *   3. 工具闭包通过捕获这些实例共享同一数据源，保证「single dataRoot」。
  *
  * dataRoot 与 plugin 层衔接：plugin.ts 后续可经 `ctx.get('fs')` 解析插件
  * 自有 fs/data 目录后传入（本任务先用构造注入 + 默认值）。
+ *
+ * 默认值不再锚定 `process.cwd()`（历史漂移问题），固定到 {@link DEFAULT_DATA_DIR}
+ * 指向的 `~/.dsh-finance/data`。
  *
  * 依赖约束参照 dsh-tasks：工具层唯一可依赖外部包是 `@deepseek-ai/dsh-tools`
  * （defineTool），domain 层仅依赖 node:fs，不接触 dsh/cordis API。
@@ -21,11 +24,12 @@ import { Reviews } from '../domain/reviews.js'
 import { parseStrategyDoc, StrategyRegistry } from '../domain/strategy.js'
 import { JsonStore } from '../domain/store.js'
 import type { Thresholds } from '../domain/types.js'
+import { ensureFinanceDataDir } from '../paths.js'
 
 /** 环境变量：覆盖默认数据根目录。 */
 export const DATA_ROOT_ENV = 'DSH_FINANCE_DATA_DIR'
 
-/** 默认数据根目录（相对 cwd）。 */
+/** 默认数据根目录（固定 `~/.dsh-finance/data`，由 {@link ensureFinanceDataDir} 确保存在）。 */
 export const DEFAULT_DATA_DIR = '.dsh-finance/data'
 
 /** 默认阈值（标的未显式配置时回落）。 */
@@ -96,7 +100,8 @@ function resolveDataRoot(explicit?: string): string {
   if (explicit && explicit.trim() !== '') return resolve(explicit)
   const env = process.env[DATA_ROOT_ENV]
   if (env && env.trim() !== '') return resolve(env)
-  return resolve(process.cwd(), DEFAULT_DATA_DIR)
+  // 固定默认值：`~/.dsh-finance/data`（经 os.homedir() 展开，目录幂等创建）。
+  return ensureFinanceDataDir()
 }
 
 /**

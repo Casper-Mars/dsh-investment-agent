@@ -3,7 +3,7 @@
  *
  * `applyScheduler(ctx)`（由 `src/plugin.ts` 的 `apply` 调用）：
  *   1. 解析 dataRoot（复用 tools 层 {@link DATA_ROOT_ENV} / {@link DEFAULT_DATA_DIR} 的
- *      注入优先级：构造注入 > 环境变量 `DSH_FINANCE_DATA_DIR` > 默认 `<cwd>/.dsh-finance/data`），
+ *      注入优先级：构造注入 > 环境变量 `DSH_FINANCE_DATA_DIR` > 默认 `~/.dsh-finance/data`），
  *      并显式派生任务清单目录 `join(dataRoot, 'tasks')`——**不依赖 `process.cwd()`**；
  *   2. `createTaskStore(tasksDir)` 建任务清单 store；
  *   3. 组装「编排 runner」（本层真正难点）：满足 `TaskRunnerLike`（`run(taskId, taskPath)`），
@@ -23,6 +23,7 @@ import { accessSync, constants, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { DATA_ROOT_ENV, DEFAULT_DATA_DIR } from '../tools/context.js'
+import { ensureFinanceDataDir } from '../paths.js'
 import { createTaskStore, type TaskStore } from './store.js'
 import { createTaskLoader, LoaderError, type TaskLoader } from './loader.js'
 import { createTaskRunner, type TaskRunner } from './runner.js'
@@ -101,7 +102,8 @@ function resolveDataRoot(explicit?: string): string {
   if (explicit && explicit.trim() !== '') return resolve(explicit)
   const env = process.env[DATA_ROOT_ENV]
   if (env && env.trim() !== '') return resolve(env)
-  return resolve(process.cwd(), DEFAULT_DATA_DIR)
+  // 固定默认值：`~/.dsh-finance/data`（经 os.homedir() 展开，目录幂等创建）。
+  return ensureFinanceDataDir()
 }
 
 /**

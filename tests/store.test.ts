@@ -16,7 +16,7 @@ import {
   readFileSync,
   existsSync,
 } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { tmpdir, homedir } from 'node:os'
 import { join } from 'node:path'
 import { TaskStore, createTaskStore, defaultTasksDir } from '../src/scheduler/store.js'
 import type { TaskDef } from '../src/scheduler/types.js'
@@ -113,10 +113,10 @@ describe('依赖注入（dataDir 覆盖）', () => {
     expect(store.list().tasks.map((t) => t.id)).toEqual(['x'])
   })
 
-  it('createTaskStore 缺省使用 defaultTasksDir（cwd/data/tasks）', () => {
+  it('createTaskStore 缺省使用 defaultTasksDir（~/.dsh-finance/data/tasks）', () => {
     const store = createTaskStore()
-    // factory 缺省目录即 defaultTasksDir；此处仅验证函数引用一致，不落盘避免污染 cwd。
-    expect(defaultTasksDir()).toBe(join(process.cwd(), 'data', 'tasks'))
+    // factory 缺省目录即 defaultTasksDir；此处仅验证函数引用一致，不落盘避免污染主目录。
+    expect(defaultTasksDir()).toBe(join(homedir(), '.dsh-finance', 'data', 'tasks'))
     expect(store).toBeInstanceOf(TaskStore)
   })
 })

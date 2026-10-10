@@ -10,7 +10,8 @@
  *
  * 关键约束：
  * - **数据目录依赖注入**：`tasksDir`（或 `baseDir`）通过工厂参数注入，不写死绝对 /
- *   相对路径。默认值 `path.join(process.cwd(), 'data/tasks')`，可被覆盖。
+ *   相对路径。默认值 `~/.dsh-finance/data/tasks`（经 {@link resolveFinanceTasksDir}
+ *   展开，不再锚定 `process.cwd()`），可被覆盖。
  * - **id 防目录穿越**：所有 id 拼入路径前必须经 `assertSafeSegment(id, 'task-id')`
  *   校验（复用 `../domain/path-guard.js`，不自建守卫）。
  * - **损坏文件跳过**：`list()` 遍历目录时，遇到解析失败 / 结构非法的 JSON 跳过并继续，
@@ -31,6 +32,7 @@ import {
 import { join } from 'node:path'
 import type { TaskDef } from './types.js'
 import { assertSafeSegment } from '../domain/path-guard.js'
+import { resolveFinanceTasksDir } from '../paths.js'
 
 /** `list()` 的返回结构：有效任务 + 损坏（无法解析为 TaskDef）的文件名清单。 */
 export interface TaskListResult {
@@ -43,9 +45,9 @@ export interface TaskListResult {
 /** 任务清单文件扩展名（不含点）。 */
 const TASK_FILE_EXT = '.json'
 
-/** 默认任务清单目录：`<cwd>/data/tasks`（进程工作目录锚定，可被注入覆盖）。 */
+/** 默认任务清单目录：`~/.dsh-finance/data/tasks`（固定目录，可被注入覆盖）。 */
 export function defaultTasksDir(): string {
-  return join(process.cwd(), 'data', 'tasks')
+  return resolveFinanceTasksDir()
 }
 
 /**
