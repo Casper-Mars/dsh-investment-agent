@@ -29,6 +29,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { registerAllSkills } from './skills/index.js'
+import { ensureSkillAssetsRepo } from './skills/repo.js'
 import { applyAdvisorPrompt } from './prompts/index.js'
 import { applyScheduler } from './scheduler/index.js'
 import { applySessionEnsure } from './session-ensure.js'
@@ -151,6 +152,16 @@ export function apply(ctx: Context): void {
 
   // ---- advisor.md 人设（动态 inject systemPrompt，不改顶层 inject） ----
   applyAdvisorPrompt(ctx)
+
+  // ---- skill 资产仓库冷启动预置（幂等；数据目录内独立 git 仓库，§任务-1） ----
+  // 保留随包发布的「首版种子」（src/skills/<name>/SKILL.md → dist-server/skills/），
+  // 仅当其数据目录副本（<dataRoot>/skills）缺失或为空时预置；已就绪则完全 no-op。
+  // 预置失败（git 不可用 / 命令失败 / 无写权限）→ 记日志、降级不抛，不中断装载。
+  try {
+    ensureSkillAssetsRepo()
+  } catch (err: unknown) {
+    console.error('[dsh-finance] skill 资产仓库预置装配失败（降级）：', err)
+  }
 
   // ---- 固定会话确保（Task-10：检查 → 恢复 → 新建，§9.5） ----
   try {

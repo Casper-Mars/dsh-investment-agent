@@ -15,7 +15,7 @@
  * 本模块只依赖 `node:os` / `node:path` / `node:fs`，不新增第三方包、不接触 dsh/cordis API。
  */
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { mkdirSync } from 'node:fs'
 
 /** 固定根目录名（位于用户主目录下）。 */
@@ -70,4 +70,34 @@ export function ensureFinanceDataDir(): string {
  */
 export function resolveFinanceTasksDir(): string {
   return join(resolveFinanceHomeDir(), 'data', 'tasks')
+}
+
+/**
+ * 环境变量：覆盖默认数据根目录。
+ *
+ * 覆盖优先级（由 {@link resolveDataRoot} 落实）：构造注入 > 本环境变量 > 默认值。
+ * 定义于此（叶子模块，仅依赖 node:*）以便 skill 资产层等复用同一套解析，
+ * 无需向 `src/tools/` 反向依赖；`src/tools/context.ts` 重新导出以保持既有导入路径。
+ */
+export const DATA_ROOT_ENV = 'DSH_FINANCE_DATA_DIR'
+
+/**
+ * 解析数据根目录（**构造注入 > 环境变量 `DSH_FINANCE_DATA_DIR` > 默认值**）。
+ *
+ * - 显式注入非空字符串 → 以其 `resolve()` 后的绝对路径为准；
+ * - 否则取环境变量 `DSH_FINANCE_DATA_DIR`（非空）→ 同样 `resolve()`；
+ * - 否则回落到默认值 `~/.dsh-finance/data`（经 {@link ensureFinanceDataDir}
+ *   幂等创建目录后返回）。
+ *
+ * 说明：历史版本曾以 `process.cwd()` 锚定，导致「从不同目录启动 → 全新数据目录」
+ * 的漂移问题，已修复为固定到用户主目录。
+ *
+ * @param explicit 构造注入的 dataRoot（可选）。
+ * @returns dataRoot 绝对路径。
+ */
+export function resolveDataRoot(explicit?: string): string {
+  if (explicit && explicit.trim() !== '') return resolve(explicit)
+  const env = process.env[DATA_ROOT_ENV]
+  if (env && env.trim() !== '') return resolve(env)
+  return ensureFinanceDataDir()
 }

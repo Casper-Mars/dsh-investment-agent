@@ -17,17 +17,21 @@
  * 依赖约束参照 dsh-tasks：工具层唯一可依赖外部包是 `@deepseek-ai/dsh-tools`
  * （defineTool），domain 层仅依赖 node:fs，不接触 dsh/cordis API。
  */
-import { resolve } from 'node:path'
 import { Ledger } from '../domain/ledger.js'
 import { Predicts } from '../domain/predicts.js'
 import { Reviews } from '../domain/reviews.js'
 import { parseStrategyDoc, StrategyRegistry } from '../domain/strategy.js'
 import { JsonStore } from '../domain/store.js'
 import type { Thresholds } from '../domain/types.js'
-import { ensureFinanceDataDir } from '../paths.js'
+import { resolveDataRoot } from '../paths.js'
 
-/** 环境变量：覆盖默认数据根目录。 */
-export const DATA_ROOT_ENV = 'DSH_FINANCE_DATA_DIR'
+/**
+ * 环境变量：覆盖默认数据根目录。
+ *
+ * 定义于叶子模块 `src/paths.ts`（便于 skill 资产层复用同一解析），此处重新导出
+ * 以保持既有导入路径（`../src/tools/context.js`）不变。
+ */
+export { DATA_ROOT_ENV } from '../paths.js'
 
 /** 默认数据根目录（固定 `~/.dsh-finance/data`，由 {@link ensureFinanceDataDir} 确保存在）。 */
 export const DEFAULT_DATA_DIR = '.dsh-finance/data'
@@ -93,15 +97,6 @@ export interface ToolContext {
 export interface ToolContextOptions {
   /** 数据根目录（可选）；省略时依次取环境变量 → 默认值。 */
   dataRoot?: string
-}
-
-/** 解析数据根目录（构造注入 > 环境变量 > 默认值）。 */
-function resolveDataRoot(explicit?: string): string {
-  if (explicit && explicit.trim() !== '') return resolve(explicit)
-  const env = process.env[DATA_ROOT_ENV]
-  if (env && env.trim() !== '') return resolve(env)
-  // 固定默认值：`~/.dsh-finance/data`（经 os.homedir() 展开，目录幂等创建）。
-  return ensureFinanceDataDir()
 }
 
 /**
