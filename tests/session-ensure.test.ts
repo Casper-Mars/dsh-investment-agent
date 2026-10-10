@@ -18,10 +18,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import {
   ensurePinnedSession,
   resolveAgentOptions,
+  mountDefaultPresetSetup,
   applySessionEnsure,
   attachPinnedSessionToWorkspace,
   type SessionEnsureDeps,
   type EnsureAgentHandle,
+  type AgentPresetsLike,
   type WorkspaceRegistryLike,
 } from '../src/session-ensure.js'
 import { PINNED_SESSION_ID } from '../src/session.js'
@@ -645,5 +647,143 @@ describe('⑨ 开场 notice 接线（§9.7 v1.6，Task-15 AC1）：applySessionE
     await new Promise((r) => setTimeout(r, 30))
     expect(attachSpy).toHaveBeenCalledWith(PINNED_SESSION_ID)
     expect(followupSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('⑩ 默认 preset 挂载（Task-p100417：固定会话工具补全）', () => {
+  it('create 分支：带 agentPreset → meta.agentPreset + setup(mount defaultId)；工具不缺失', async () => {
+    const mountSpy = vi.fn(async () => ({ id: 'default' }))
+    const agentPresets: AgentPresetsLike = { defaultId: 'default', mount: mountSpy }
+    const capture: { meta?: unknown; setup?: unknown } = {}
+    const agents = {
+      get: vi.fn(() => undefined),
+      create: vi.fn(async (opts: { meta?: unknown; setup?: unknown }) => {
+        capture.meta = opts.meta
+        capture.setup = opts.setup
+        return { agent: { id: PINNED_SESSION_ID }, dispose: vi.fn(async () => {}) }
+      }),
+      resume: vi.fn(),
+    } as unknown as SessionEnsureDeps['agents']
+
+    const { outcome } = await ensurePinnedSession(
+      makeDeps({ agents, agentPresets, sessionPersistence: { stat: vi.fn(async () => undefined) } }),
+    )
+
+    expect(outcome.kind).toBe('created')
+    expect(capture.meta).toEqual({ cwd: '/home/user/project', agentPreset: 'default' })
+    expect(capture.setup).toBeTypeOf('function')
+
+    // setup 内部 mount 默认 preset（补全 base 工具）。
+    const fakeAgentCtx = {} as Context
+    await (capture.setup as (c: Context) => Promise<void>)(fakeAgentCtx)
+    expect(mountSpy).toHaveBeenCalledTimes(1)
+    expect(mountSpy).toHaveBeenCalledWith(fakeAgentCtx, 'default')
+  })
+
+  it('resume 分支：带 agentPreset → setup(mount)，重启后工具仍齐全', async () => {
+    const mountSpy = vi.fn(async () => ({ id: 'default' }))
+    const agentPresets: AgentPresetsLike = { defaultId: 'default', mount: mountSpy }
+    const capture: { setup?: unknown } = {}
+    const agents = {
+      get: vi.fn(() => undefined),
+      create: vi.fn(),
+      resume: vi.fn(async (opts: { setup?: unknown }) => {
+        capture.setup = opts.setup
+        return { agent: { id: PINNED_SESSION_ID }, dispose: vi.fn(async () => {}) }
+      }),
+    } as unknown as SessionEnsureDeps['agents']
+
+    const { outcome } = await ensurePinnedSession(
+      makeDeps({ agents, agentPresets, sessionPersistence: { stat: vi.fn(async () => ({ header: {} })) } }),
+    )
+
+    expect(outcome.kind).toBe('resumed')
+    expect(capture.setup).toBeTypeOf('function')
+    const fakeAgentCtx = {} as Context
+    await (capture.setup as (c: Context) => Promise<void>)(fakeAgentCtx)
+    expect(mountSpy).toHaveBeenCalledWith(fakeAgentCtx, 'default')
+  })
+
+  it('agentPresets 缺失 → 不设 meta.agentPreset、不挂 setup（降级，不影响 create）', async () => {
+    const createSpy = vi.fn(async () => ({ agent: { id: PINNED_SESSION_ID }, dispose: vi.fn(async () => {}) }))
+    const agents = {
+      get: vi.fn(() => undefined),
+      create: createSpy,
+      resume: vi.fn(),
+    } as unknown as SessionEnsureDeps['agents']
+
+    const { outcome } = await ensurePinnedSession(
+      makeDeps({ agents, agentPresets: undefined, sessionPersistence: { stat: vi.fn(async () => undefined) } }),
+    )
+
+    expect(outcome.kind).toBe('created')
+    const opts = createSpy.mock.calls[0][0] as { meta?: unknown; setup?: unknown }
+    expect(opts.meta).toEqual({ cwd: '/home/user/project' })
+    expect(opts.setup).toBeUndefined()
+  })
+
+  it('mount 抛错 → 记日志降级，不向上抛（会话仍正常 created）', async () => {
+    const warnings: string[] = []
+    const mountSpy = vi.fn(async () => { throw new Error('mount boom') })
+    const agentPresets: AgentPresetsLike = { defaultId: 'default', mount: mountSpy }
+    const capture: { setup?: unknown } = {}
+    const agents = {
+      get: vi.fn(() => undefined),
+      create: vi.fn(async (opts: { setup?: unknown }) => {
+        capture.setup = opts.setup
+        return { agent: { id: PINNED_SESSION_ID }, dispose: vi.fn(async () => {}) }
+      }),
+      resume: vi.fn(),
+    } as unknown as SessionEnsureDeps['agents']
+
+    const { outcome } = await ensurePinnedSession(
+      makeDeps({ agents, agentPresets, sessionPersistence: { stat: vi.fn(async () => undefined) }, logger: (m) => warnings.push(m) }),
+    )
+    expect(outcome.kind).toBe('created')
+    await (capture.setup as (c: Context) => Promise<void>)({} as Context)
+    expect(warnings.some((w) => w.includes('默认 preset 挂载失败'))).toBe(true)
+  })
+
+  it('applySessionEnsure 软取 agentPresets（不加入顶层 inject）并传入 ensure', async () => {
+    const mountSpy = vi.fn(async () => ({ id: 'default' }))
+    const agentPresets: AgentPresetsLike = { defaultId: 'default', mount: mountSpy }
+    const capture: { meta?: unknown; setup?: unknown } = {}
+    const agents = {
+      get: vi.fn(() => undefined),
+      create: vi.fn(async (opts: { meta?: unknown; setup?: unknown }) => {
+        capture.meta = opts.meta
+        capture.setup = opts.setup
+        return { agent: { id: PINNED_SESSION_ID }, dispose: vi.fn(async () => {}) }
+      }),
+      resume: vi.fn(),
+    }
+    const stat = vi.fn(async () => undefined)
+    const ctx = {
+      get(name: string) {
+        if (name === 'agentDefaultModel') return { currentSelection: () => ({ provider: 'p', model: 'm' }) }
+        if (name === 'agentPresets') return agentPresets
+        return undefined
+      },
+      inject(_deps: string[], cb: (c: Context) => void) {
+        cb({
+          get: (name: string) => {
+            if (name === 'agents') return agents
+            if (name === 'sessionPersistence') return { stat }
+            return undefined
+          },
+        } as unknown as Context)
+        return {} as never
+      },
+      effect(body: () => unknown) {
+        body()
+        return () => {}
+      },
+    } as unknown as Context
+
+    applySessionEnsure(ctx, { cwd: '/cwd' })
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(capture.meta).toEqual({ cwd: '/cwd', agentPreset: 'default' })
+    expect(capture.setup).toBeTypeOf('function')
   })
 })

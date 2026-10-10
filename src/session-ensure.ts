@@ -47,6 +47,8 @@ import { ensureFinanceHomeDir } from './paths.js'
 
 /** 会话确保依赖的可注入面（供纯函数三分支单测注入 fake）。 */
 export interface SessionEnsureDeps {
+  /** agent preset 组（挂载默认 preset 补齐 base 工具；缺失时降级不加 preset）。 */
+  agentPresets?: AgentPresetsLike
   /** 活跃 agent 注册表（`ctx.agents` 结构替身）。 */
   agents: {
     /** 查 live：命中返回 agent，否则 `undefined`。 */
@@ -55,12 +57,14 @@ export interface SessionEnsureDeps {
     create(options: {
       sessionId: PinnedSessionId
       agentOptions?: EnsureAgentOptions
-      meta?: { cwd?: string }
+      meta?: { cwd?: string; agentPreset?: string }
+      setup?: (agentCtx: Context) => void | Promise<void>
     }): Promise<EnsureAgentHandle>
     /** 恢复（已持久化但未 live）。 */
     resume(options: {
       resumeSessionId: PinnedSessionId
       agentOptions?: EnsureAgentOptions
+      setup?: (agentCtx: Context) => void | Promise<void>
     }): Promise<EnsureAgentHandle>
   }
   /** 会话持久化服务（`ctx.sessionPersistence` 结构替身）。 */
@@ -91,6 +95,52 @@ export interface EnsureAgentOptions {
 export interface EnsureAgentHandle {
   agent: EnsureAgent
   dispose(): Promise<void>
+}
+
+/**
+ * `agentPresets` 服务的最小结构替身（仅需 `defaultId` 与 `mount`）。
+ *
+ * 对齐来源（已核对 harness 源码）：
+ *   - `packages/preset/agent-preset-registry/src/index.ts` `AgentPresetRegistry`；
+ *   - `defaultId`（L74，config.default / selectedDefault）——无用户输入时的默认 preset；
+ *   - `mount(ctx, id?): Promise<AgentPreset>`（L257）——把 preset 挂到 agent scope；
+ *     `id` 省略即取默认（内部 `retain(id?)` 落 `this.defaultId`）。
+ *
+ * 结构等价、运行时以实际源码为准，不把 preset 包加入本插件硬依赖
+ *（与 `SessionPersistenceLike` 同一套路）。
+ */
+export interface AgentPresetsLike {
+  /** 默认 preset id（`config.selectedDefault ?? config.default`）。 */
+  readonly defaultId: string
+  /** 把 preset 挂到 agent scope；返回 `{ id }`（可缺省 id 时走默认）。 */
+  mount(agentCtx: Context, id?: string): Promise<unknown>
+}
+
+/**
+ * 构造把默认 preset 挂到 agent scope 的 `setup` 回调（与 harness `createWebhookSession`
+ * 的 `setup: async (agentCtx) => { await ctx.agentPresets.mount(agentCtx, preset.id) }`
+ * 同构）。
+ *
+ * 降级：`agentPresets.mount` 抛错时**不向上抛出**（记日志、继续），避免因 preset
+ * 不可用而中断会话创建/恢复；会话仍可正常装载（仅缺 preset 提供的 base 工具）。
+ *
+ * @param agentPresets `agentPresets` 服务结构替身。
+ * @param log 日志函数。
+ * @returns 若无 preset 服务则返回 `undefined`（不挂 `setup`、不设 `meta.agentPreset`）。
+ */
+export function mountDefaultPresetSetup(
+  agentPresets: AgentPresetsLike | undefined,
+  log: (message: string) => void,
+): ((agentCtx: Context) => Promise<void>) | undefined {
+  if (!agentPresets || typeof agentPresets.mount !== 'function') return undefined
+  const presetId = agentPresets.defaultId
+  return async (agentCtx: Context) => {
+    try {
+      await agentPresets.mount(agentCtx, presetId)
+    } catch (err: unknown) {
+      log(`[dsh-finance/session] 警告 默认 preset 挂载失败（降级，base 工具可能缺失）：${String(err)}`)
+    }
+  }
 }
 
 /** ensure 结果：会话保证就绪的结局（live 复用 / resume 恢复 / create 新建 / skip 降级）。 */
@@ -125,6 +175,11 @@ export async function ensurePinnedSession(
   const log = deps.logger ?? ((message: string) => console.log(message))
   const id = PINNED_SESSION_ID
 
+  // 默认 preset 的挂载 setup（无 preset 服务 → undefined，不挂 setup、不设 meta.agentPreset）。
+  const mountSetup = mountDefaultPresetSetup(deps.agentPresets, log)
+  // 仅当能构造出挂载 setup（preset 服务可用且带 mount）时，才写 meta.agentPreset。
+  const agentPreset = mountSetup === undefined ? undefined : deps.agentPresets?.defaultId
+
   let detail = ''
   try {
     // 1) live 命中 → 直接复用
@@ -148,6 +203,7 @@ export async function ensurePinnedSession(
       const handle = await deps.agents.resume({
         resumeSessionId: id,
         agentOptions: deps.agentOptions,
+        ...(mountSetup === undefined ? {} : { setup: mountSetup }),
       })
       return { outcome: { kind: 'resumed', id }, handle }
     }
@@ -163,7 +219,11 @@ export async function ensurePinnedSession(
     const handle = await deps.agents.create({
       sessionId: id,
       agentOptions: deps.agentOptions,
-      meta: { cwd: deps.cwd },
+      meta: {
+        cwd: deps.cwd,
+        ...(agentPreset === undefined ? {} : { agentPreset }),
+      },
+      ...(mountSetup === undefined ? {} : { setup: mountSetup }),
     })
     return { outcome: { kind: 'created', id }, handle }
   } catch (err: unknown) {
@@ -386,6 +446,18 @@ export function applySessionEnsure(
   const cwd = options.cwd ?? ensureFinanceHomeDir()
   const agentOptions = resolveAgentOptions(ctx)
 
+  // 默认 preset 服务软取（不加顶层 inject，契约固定三项）：headless / 最小上下文无
+  // `agentPresets`，软取失败 → 降级（不挂 preset、不设 meta.agentPreset），工具补全
+  // 由宿主挂载缺失时可能缺失，但不影响「会话确认 / 归属」主链路。
+  let agentPresets: AgentPresetsLike | undefined
+  if (typeof ctx.get === 'function') {
+    try {
+      agentPresets = ctx.get('agentPresets') as AgentPresetsLike | undefined
+    } catch {
+      agentPresets = undefined
+    }
+  }
+
   ctx.inject(['agents', 'sessionPersistence'], (sessionCtx) => {
     const agents = sessionCtx.get('agents') as SessionEnsureDeps['agents'] | undefined
     const sessionPersistence = sessionCtx.get('sessionPersistence') as
@@ -410,6 +482,7 @@ export function applySessionEnsure(
       void ensurePinnedSession({
         agents,
         sessionPersistence: { stat },
+        agentPresets,
         cwd,
         agentOptions,
         logger: log,

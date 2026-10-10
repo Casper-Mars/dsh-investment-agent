@@ -37,6 +37,7 @@ export { PINNED_SESSION_ID, type SessionPersistenceLike, type PinnedSessionId } 
 export {
   ensurePinnedSession,
   resolveAgentOptions,
+  mountDefaultPresetSetup,
   applySessionEnsure,
   attachPinnedSessionToWorkspace,
   type SessionEnsureDeps,
@@ -45,6 +46,7 @@ export {
   type EnsureAgentHandle,
   type EnsureOutcome,
   type AgentDefaultModelLike,
+  type AgentPresetsLike,
   type WorkspaceRegistryLike,
   type WorkspaceLike,
 } from './session-ensure.js'
