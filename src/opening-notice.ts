@@ -44,12 +44,24 @@ import {
   type SessionPersistenceLike,
 } from './session.js'
 
-/** 开场 notice 正文（固定文案，触发 `turn/start` 用）。 */
+/**
+ * 开场 notice 正文（固定文案，触发 `turn/start` 用）。
+ *
+ * 这是投递给「金融投资专家 agent」的首条 role:user 消息：既触发首个 turn/start
+ * （令固定会话脱离 blank），又作为有实质价值的引导性 prompt，让 agent 的第一条
+ * LLM 回复即为完整的冷启动开场引导（而非空转「确认在线」）。文案以「引导 agent
+ * 产出开场引导」的语气书写，agent 不应照抄本段指令，而应以投资专家口吻面向用户
+ * 输出三步冷启动引导。
+ */
 export const OPENING_NOTICE_TEXT =
-  '【投资顾问已就绪】固定会话已启动。交易日盘中我会推送感知研判；现在请简短回复一句，确认你已在线。'
+  '【开场引导任务】请以「金融投资专家」的口吻，向用户输出一段专业、可操作的开场引导（不要复述本段指令），引导用户完成冷启动三步：\n' +
+  '1. 建立标的台账：请用户报出一个标的代码（股票代码或名称），你将用 ledger_init 为其建立台账，作为后续研判、持仓与复盘的基础。\n' +
+  '2. 生成首版策略并部署盯盘：说明你将为每个标的产出首版策略文档（strategy_set），并按策略通过 task_create/task_update 部署任务程序主动盯盘，监控新闻、公告与股价异动。\n' +
+  '3. 盘后自动复盘：提醒用户可随时要求每日盘后自动复盘（review_check/review_report/review_metrics 统计命中率与收益），形成「分析→决策→复盘→进化」的闭环。\n' +
+  '结尾请明确请求用户先报一个标的代码，作为冷启动第一步。'
 
 /** notice 摘要长度上限（对齐 harness `CONTEXT_SUMMARY_MAX_CHARS`，简单截断）。 */
-export const OPENING_NOTICE_SUMMARY = '固定会话已启动，等待在线确认'
+export const OPENING_NOTICE_SUMMARY = '投资顾问开场引导：建立标的台账、生成策略并部署盯盘、盘后复盘进化'
 
 /** 支持 `followup` 投递的 agent 最小结构替身（与 `wake.ts` 的 `AgentLike` 同构）。 */
 export interface OpeningNoticeAgent {
