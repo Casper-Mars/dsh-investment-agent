@@ -18,13 +18,20 @@
 | 文件 | 说明 |
 |------|------|
 | `frontmatter.ts` | SKILL.md frontmatter 轻量解析器（无第三方 YAML 依赖） |
-| `index.ts` | 6 个 SKILL 的读取 / 解析 / 注册出口（`ctx.skills.register`） |
+| `index.ts` | 6 个 SKILL 的随包种子读取 / 解析出口（`SKILL_NAMES` / `loadSkillMarkdown` / `parseSkill`） |
+| `repo.ts` | 运行时数据目录 `<dataRoot>/skills` 的独立 git 仓库：冷启动幂等预置（种子落盘 + 首版 commit） |
+| `provider.ts` | 挂载 dsh 原生 `skill-filesystem` provider（指向 `<dataRoot>/skills`，开启 watch 热更新） |
+
+> 运行时注册：6 个 SKILL 不在本模块静态注册，而由 `provider.ts` 挂载的
+> `skill-filesystem` provider 从 `<dataRoot>/skills` 发现；改 `SKILL.md` 经 chokidar
+> watch → invalidate → 下次组装 prompt 生效（无需重启）。`index.ts` 的静态读取仅用于
+> `repo.ts` 的冷启动种子预置。
 
 ## SKILL.md 格式（符合 dsh skill-filesystem 发现规范）
 
 - 路径：`src/skills/<name>/SKILL.md`（目录 bundle），目录名 = frontmatter `name`（kebab-case）。
 - YAML frontmatter：**必填** `name` / `description`，**可选** `whenToUse`。
-- 注册时读取并解析 frontmatter 组装 `SkillRegistration`（`content` = 正文，`source='runtime'`，`invocation` 双开）。
+- 注册：由 `skill-filesystem` provider 从运行时数据目录 `<dataRoot>/skills` 发现（目录 bundle，`source='custom'`，`invocation` 双开）。
 
 ## 内容红线
 

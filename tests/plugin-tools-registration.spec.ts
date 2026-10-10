@@ -177,34 +177,39 @@ describe('t100363 插件装配：21 个工具经 apply 注册', () => {
     expect(() => apply(ctx)).not.toThrow()
   })
 
-  it('tools 服务缺省但 skills 可用时，skill 注册不受影响（互不干扰）', () => {
-    const registered: Array<{ name: string }> = []
-    // 真实 cordis 语义下，注入的就绪服务会同时暴露为 `ctx.<name>` 属性；
-    // `registerAllSkills` 走 `ctx.skills.register`（标准访问）。故 mock 需同时
-    // 提供 `ctx.skills` 属性与 `get('skills')`，才能真实还原装载环境。
-    const skillsService = {
-      name: 'skills',
-      register(s: { name: string }) {
-        registered.push(s)
-        return () => {}
-      },
-    }
-    const ctx = {
-      effect(body: () => unknown) {
-        const d = body()
-        return typeof d === 'function' ? (d as () => void) : () => {}
-      },
-      get(name: string) {
-        return name === 'skills' ? skillsService : undefined
-      },
-      // 还原 cordis：`ctx.tools` 缺省（未提供 tools 服务），但 `ctx.skills` 可用。
-      skills: skillsService,
-      inject: () => ({}),
-    } as unknown as Context
+  it('tools 服务缺省时 apply 仍安全降级（SKILL 已改由 skill-filesystem provider 承担）', () => {
+    // 防 ensureSkillAssetsRepo 回落到默认 `~/.dsh-finance`（污染 home）。
+    const prev = process.env.DSH_FINANCE_DATA_DIR
+    process.env.DSH_FINANCE_DATA_DIR = makeTmpDataRoot()
+    try {
+      const registered: Array<{ name: string }> = []
+      const skillsService = {
+        name: 'skills',
+        register(s: { name: string }) {
+          registered.push(s)
+          return () => {}
+        },
+      }
+      const ctx = {
+        effect(body: () => unknown) {
+          const d = body()
+          return typeof d === 'function' ? (d as () => void) : () => {}
+        },
+        get(name: string) {
+          return name === 'skills' ? skillsService : undefined
+        },
+        // `ctx.tools` 缺省（未提供 tools 服务），但 `ctx.skills` 可用。
+        skills: skillsService,
+        inject: () => ({}),
+      } as unknown as Context
 
-    expect(() => apply(ctx)).not.toThrow()
-    // 技术面 SKILL 共 6 个（trend-analysis / grid-strategy / stop-rule /
-    // strategy-authorship / analysis-decision / task-authorship）。
-    expect(registered).toHaveLength(6)
+      expect(() => apply(ctx)).not.toThrow()
+      // 静态注册三件套已移除：不再有 `ctx.skills.register` 调用（provider 挂载
+      // 需 `ctx.plugin`，本最小 mock 无之 → 惰性加载降级，由 provider 测试覆盖）。
+      expect(registered).toHaveLength(0)
+    } finally {
+      if (prev === undefined) delete process.env.DSH_FINANCE_DATA_DIR
+      else process.env.DSH_FINANCE_DATA_DIR = prev
+    }
   })
 })

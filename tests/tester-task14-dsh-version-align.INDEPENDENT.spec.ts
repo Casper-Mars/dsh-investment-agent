@@ -28,6 +28,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import SkillRegistry from '@deepseek-ai/dsh-skill'
 // ★ 真实构建产物入口（exports["."].default = ./dist-server/index.js）
 import * as pluginNs from '../dist-server/index.js'
 
@@ -300,20 +301,44 @@ describe('Task-14 复验 B：真实构建产物（dist-server）装载与运行�
     }
   })
 
-  it('B4·★ skills 6 个正常注册（名称/顺序逐一核对）', async () => {
-    const b = await bootDistPlugin(makeTmpDataRoot())
+  it('B4·★ skills 6 个正常发现（skill-filesystem provider 路径）', async () => {
+    const dataRoot = makeTmpDataRoot()
+    process.env.DSH_FINANCE_DATA_DIR = dataRoot
+    const app = new Context()
+    app.provide('systemPrompt', makeSystemPromptStub().service)
+    await (app.plugin(SkillRegistry as never) as Promise<unknown>)
+
+    // 仅注入 skills：apply 对其余服务软取降级；缺省 fs → provider 回落 node fs。
+    const pluginFiber = app.plugin({
+      name: pluginNs.name,
+      inject: ['skills'],
+      apply: pluginNs.apply,
+    } as never) as unknown as { dispose: () => Promise<void> }
+
     try {
-      const names = b.sk.registered.map((s) => s.name)
-      expect(names).toEqual([...EXPECTED_SKILLS])
-      for (const s of b.sk.registered) {
-        expect(s.description.length, `${s.name} description 非空`).toBeGreaterThan(0)
-        expect(s.content.length, `${s.name} content 非空`).toBeGreaterThan(0)
+      let names: string[] = []
+      const deadline = Date.now() + 8000
+      while (Date.now() < deadline) {
+        const list = await app.skills.list({})
+        names = list
+          .map((s) => s.name)
+          .filter((n) => (EXPECTED_SKILLS as readonly string[]).includes(n))
+          .sort()
+        if (names.length === EXPECTED_SKILLS.length) break
+        await new Promise((r) => setTimeout(r, 50))
       }
-      console.log(`[EVIDENCE B4] skills registered=6 :: ${names.join(', ')}`)
+      expect(names).toEqual([...EXPECTED_SKILLS].sort())
+      for (const n of EXPECTED_SKILLS) {
+        const def = await app.skills.get(n)
+        expect(def?.description.length, `${n} description 非空`).toBeGreaterThan(0)
+        expect(def?.content.length, `${n} content 非空`).toBeGreaterThan(0)
+      }
+      console.log(`[EVIDENCE B4] skills discovered=6 :: ${names.join(', ')}`)
     } finally {
-      await b.dispose()
+      await pluginFiber.dispose()
+      delete process.env.DSH_FINANCE_DATA_DIR
     }
-  })
+  }, 30000)
 
   it('B5·★ 人设 section 正常注册：name=dsh-finance:advisor，order=100', async () => {
     const b = await bootDistPlugin(makeTmpDataRoot())

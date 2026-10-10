@@ -32,11 +32,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import ToolRuntime, { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
+import SkillRegistry from '@deepseek-ai/dsh-skill'
 import { createToolContext, DEFAULT_THRESHOLDS, type ToolContext } from '../src/tools/context.js'
 import { createAllTools, registerAllTools } from '../src/tools/index.js'
 import { parseStrategyDoc } from '../src/domain/strategy.js'
 import { JsonStore } from '../src/domain/store.js'
-import { SKILL_NAMES, createAllSkillRegistrations } from '../src/skills/index.js'
+import { SKILL_NAMES } from '../src/skills/index.js'
 import { parseSkillFile } from '../src/skills/frontmatter.js'
 import { apply, inject as topLevelInject, name as pluginName } from '../src/plugin.js'
 
@@ -399,30 +400,23 @@ describe('3. review_retrospect 端到端：触发检讨由策略文档阈值决�
  * ================================================================== */
 
 describe('4. 运行时可见性：真实插件装载路径', () => {
-  it('顶层 inject 契约 + 真实装载后工具 21 / SKILL 6', async () => {
+  it('顶层 inject 契约 + 真实装载后工具 21 / SKILL 6（skill-filesystem provider）', async () => {
     expect(topLevelInject).toEqual(['tools', 'skills', 'fs'])
-
-    const registeredSkills: Array<{ name: string }> = []
-    const skillsService = {
-      name: 'skills',
-      register(s: { name: string }) {
-        registeredSkills.push(s)
-        return () => {}
-      },
-    }
 
     process.env.DSH_FINANCE_DATA_DIR = dir
     const app = new Context()
     app.provide('systemPrompt', systemPromptStub())
-    app.provide('skills', skillsService as never)
-    app.provide('fs', { name: 'fs' } as never)
+    await (app.plugin(SkillRegistry as never) as Promise<unknown>)
 
+    // 注：测试装载 inject 仅取 ['tools','skills']——本测试不提供真实的 dsh-fs 服务，
+    // 而 skill-filesystem provider 在 `ctx.get('fs')` 存在时会经其读取 custom roots；
+    // 若提供不兼容的 fs 桩会使其发现失效。缺省 fs 时 provider 回落到 node fs。
     const toolsFiber = (await app.plugin(ToolRuntime as never)) as unknown as {
       dispose: () => Promise<void>
     }
     const pluginFiber = app.plugin({
       name: pluginName,
-      inject: [...topLevelInject],
+      inject: ['tools', 'skills'],
       apply,
     } as never) as unknown as { dispose: () => Promise<void> }
 
@@ -434,27 +428,39 @@ describe('4. 运行时可见性：真实插件装载路径', () => {
       { timeout: 8000, interval: 10 },
     )
 
-    // SKILL 同步注册，立即可见。
-    expect(registeredSkills).toHaveLength(6)
-    expect(registeredSkills.map((s) => s.name)).toEqual([...SKILL_NAMES])
+    // SKILL 由挂载的 skill-filesystem provider 提供（惰性加载 + watch）：等其就绪。
+    let skillNames: string[] = []
+    await vi.waitFor(
+      async () => {
+        const list = await app.skills.list({})
+        skillNames = list
+          .map((s) => s.name)
+          .filter((n) => (SKILL_NAMES as readonly string[]).includes(n))
+          .sort()
+        expect(skillNames).toEqual([...SKILL_NAMES].sort())
+      },
+      { timeout: 8000, interval: 50 },
+    )
 
     console.log(
-      `[EVIDENCE 4] plugin load -> tools=${toolsBox.schemas().length}, skills=${registeredSkills.length} ` +
-        `(${registeredSkills.map((s) => s.name).join(',')})`,
+      `[EVIDENCE 4] plugin load -> tools=${toolsBox.schemas().length}, skills=${skillNames.length} ` +
+        `(${skillNames.join(',')})`,
     )
 
     await pluginFiber.dispose()
     await toolsFiber.dispose()
     delete process.env.DSH_FINANCE_DATA_DIR
-  })
+  }, 20000)
 
-  it('createAllSkillRegistrations 产出 6 个且 frontmatter 合法', () => {
-    const regs = createAllSkillRegistrations()
-    expect(regs).toHaveLength(6)
-    for (const r of regs) {
-      expect(r.name.length).toBeGreaterThan(0)
-      expect(r.description.length).toBeGreaterThan(0)
-      expect(r.content.length).toBeGreaterThan(0)
+  it('随包种子 frontmatter 合法（6 个；strategy-authorship 在目次）', () => {
+    expect(SKILL_NAMES).toHaveLength(6)
+    for (const n of SKILL_NAMES) {
+      const parsed = parseSkillFile(
+        readFileSync(join(process.cwd(), 'src/skills', n, 'SKILL.md'), 'utf8'),
+      )
+      expect(parsed.frontmatter.name).toBe(n)
+      expect(parsed.frontmatter.description.length).toBeGreaterThan(0)
+      expect(parsed.content.length).toBeGreaterThan(0)
     }
     // strategy-authorship 在目次中。
     expect(SKILL_NAMES).toContain('strategy-authorship')

@@ -10,19 +10,23 @@
  * 另含：frontmatter 解析器单测、copy-assets 产物路径可解析校验。
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import {
   SKILL_NAMES,
   loadSkillMarkdown,
   parseSkill,
-  createSkillRegistration,
-  createAllSkillRegistrations,
-  registerAllSkills,
 } from '../src/skills/index'
+import { ensureSkillAssetsRepo } from '../src/skills/repo'
+import {
+  mountSkillFilesystemProviderAsync,
+  SKILL_PROVIDER_NAME,
+} from '../src/skills/provider'
 import {
   parseSkillFile,
   SKILL_NAME_PATTERN,
@@ -38,6 +42,26 @@ import {
 import { apply, inject as topLevelInject } from '../src/plugin'
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
+
+const tmpDirs: string[] = []
+
+/** 建临时 dataRoot 并预置 6 个 skill 资产（真实 git 仓库）。 */
+function makeSeededDataRoot(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-finance-prompt-skills-'))
+  tmpDirs.push(dir)
+  ensureSkillAssetsRepo({ dataRoot: dir, logger: () => {} })
+  return dir
+}
+
+afterEach(() => {
+  for (const dir of tmpDirs.splice(0)) {
+    try {
+      rmSync(dir, { recursive: true, force: true })
+    } catch {
+      /* ignore */
+    }
+  }
+})
 
 /* ------------------------------------------------------------------ *
  * 验收 1：advisor.md 四块结构 + 合规声明
@@ -89,21 +113,11 @@ describe('验收 2：6 个 SKILL.md frontmatter（name/description/whenToUse）'
     // 正文不含 frontmatter 分隔符残留。
     expect(content.startsWith('---')).toBe(false)
   })
-
-  it.each(SKILL_NAMES)('%s：注册对象契约（runtime + 双开调用）', (name) => {
-    const reg = createSkillRegistration(name)
-    expect(reg.name).toBe(name)
-    expect(reg.description.length).toBeGreaterThan(0)
-    expect(reg.source).toBe('runtime')
-    expect(reg.invocation).toEqual({ modelInvocable: true, userInvocable: true })
-    expect(reg.content).toBe(parseSkill(name).content)
-  })
-
-  it('createAllSkillRegistrations 返回 6 个注册对象', () => {
-    const regs = createAllSkillRegistrations()
-    expect(regs.map((r) => r.name).sort()).toEqual([...SKILL_NAMES].sort())
-  })
 })
+
+/* 说明：运行时注册已由 `src/skills/provider.ts` 的 skill-filesystem provider 承担，
+ * 旧的静态注册函数（本次重构已全部移除）不再存在；
+ * provider 路径的发现 / 正文 / 热更新 / 卸载由 `tests/skill-provider.spec.ts` 覆盖。 */
 
 /* ------------------------------------------------------------------ *
  * 验收 3：全文无写死的价格 / 阈值
@@ -174,7 +188,7 @@ describe('frontmatter 解析器', () => {
 })
 
 /* ------------------------------------------------------------------ *
- * 验收 5a：真实 SkillRegistry 端到端发现 / 卸载
+ * 验收 5a：经 skill-filesystem provider 端到端发现 / 卸载
  * ------------------------------------------------------------------ */
 
 async function newSkillContext(): Promise<Context> {
@@ -183,16 +197,18 @@ async function newSkillContext(): Promise<Context> {
   return ctx
 }
 
-describe('验收 5：经真实 SkillRegistry 加载 / 卸载 6 个 SKILL', () => {
-  it('注册后 6 个 skill 均可在目录中列出，get() 返回正文；注销后消失', async () => {
+describe('验收 5：经 skill-filesystem provider 发现 / 卸载 6 个 SKILL', () => {
+  it('挂载 provider 后 6 个 skill 均可列出、get() 返回正文；注销后消失', async () => {
+    const dataRoot = makeSeededDataRoot()
     const ctx = await newSkillContext()
-    const dispose = registerAllSkills(ctx)
+    const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
 
     const summaries = await ctx.skills.list({})
     for (const name of SKILL_NAMES) {
       const s = summaries.find((x) => x.name === name)
       expect(s, `skill ${name} 未出现在目录中`).toBeDefined()
-      expect(s?.source).toBe('runtime')
+      expect(s?.source).toBe('custom')
+      expect(s?.provider).toBe(SKILL_PROVIDER_NAME)
 
       const def = await ctx.skills.get(name)
       expect(def?.content).toBe(parseSkill(name).content)
@@ -200,14 +216,14 @@ describe('验收 5：经真实 SkillRegistry 加载 / 卸载 6 个 SKILL', () =>
       expect(def?.invocation).toEqual({ modelInvocable: true, userInvocable: true })
     }
 
-    dispose()
+    await mount.dispose()
     const after = await ctx.skills.list({})
     for (const name of SKILL_NAMES) {
       expect(after.some((x) => x.name === name)).toBe(false)
     }
 
     await ctx.fiber.dispose()
-  })
+  }, 30000)
 })
 
 /* ------------------------------------------------------------------ *
@@ -303,30 +319,46 @@ describe('插件 apply 接入', () => {
     return { ctx, registeredSkills, injectedSections }
   }
 
-  it('apply 注册 6 个 skill + 1 个 prompt section，且不抛异常', () => {
-    const { ctx, registeredSkills, injectedSections } = makeMockCtx()
-    expect(() => apply(ctx)).not.toThrow()
+  it('apply 不再静态注册 SKILL（改由 provider 承担），注入 1 个 prompt section，且不抛异常', () => {
+    // 防止 ensureSkillAssetsRepo 回落到默认 `~/.dsh-finance`（污染 home）。
+    const dataRoot = makeSeededDataRoot()
+    const prev = process.env.DSH_FINANCE_DATA_DIR
+    process.env.DSH_FINANCE_DATA_DIR = dataRoot
+    try {
+      const { ctx, registeredSkills, injectedSections } = makeMockCtx()
+      expect(() => apply(ctx)).not.toThrow()
 
-    expect(registeredSkills).toHaveLength(6)
-    expect(registeredSkills.map((s) => s.name).sort()).toEqual([...SKILL_NAMES].sort())
-    expect(registeredSkills.every((s) => s.source === 'runtime')).toBe(true)
-    expect(registeredSkills.every((s) => s.content.length > 100)).toBe(true)
+      // 静态注册三件套已移除：不再有 `ctx.skills.register` 调用。
+      expect(registeredSkills).toHaveLength(0)
 
-    expect(injectedSections).toHaveLength(1)
-    expect(injectedSections[0].name).toBe(ADVISOR_SECTION_NAME)
+      // advisor section 注入保持不变。
+      expect(injectedSections).toHaveLength(1)
+      expect(injectedSections[0].name).toBe(ADVISOR_SECTION_NAME)
+    } finally {
+      if (prev === undefined) delete process.env.DSH_FINANCE_DATA_DIR
+      else process.env.DSH_FINANCE_DATA_DIR = prev
+    }
   })
 
   it('缺失 skills 服务时不抛错（安全降级）', () => {
-    const ctx = {
-      effect(body: () => unknown) {
-        body()
-        return () => {}
-      },
-      get: () => undefined,
-      inject: () => ({}),
-      tools: { register: () => () => {} },
-    } as unknown as Context
-    expect(() => apply(ctx)).not.toThrow()
+    const dataRoot = makeSeededDataRoot()
+    const prev = process.env.DSH_FINANCE_DATA_DIR
+    process.env.DSH_FINANCE_DATA_DIR = dataRoot
+    try {
+      const ctx = {
+        effect(body: () => unknown) {
+          body()
+          return () => {}
+        },
+        get: () => undefined,
+        inject: () => ({}),
+        tools: { register: () => () => {} },
+      } as unknown as Context
+      expect(() => apply(ctx)).not.toThrow()
+    } finally {
+      if (prev === undefined) delete process.env.DSH_FINANCE_DATA_DIR
+      else process.env.DSH_FINANCE_DATA_DIR = prev
+    }
   })
 })
 

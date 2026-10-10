@@ -15,18 +15,23 @@
  *   7. copy-assets 产物 + 编译态 new URL 可解析
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry, { isSkillName } from '@deepseek-ai/dsh-skill'
 import {
   SKILL_NAMES,
   loadSkillMarkdown,
   parseSkill,
-  createSkillRegistration,
-  registerAllSkills,
 } from '../src/skills/index'
+import { ensureSkillAssetsRepo } from '../src/skills/repo'
+import {
+  mountSkillFilesystemProviderAsync,
+  SKILL_PROVIDER_NAME,
+} from '../src/skills/provider'
 import { parseSkillFile, SKILL_NAME_PATTERN } from '../src/skills/frontmatter'
 import {
   ADVISOR_SECTION_NAME,
@@ -40,6 +45,26 @@ import {
 import { apply, inject as topLevelInject } from '../src/plugin'
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
+
+const tmpDirs: string[] = []
+
+/** 建临时 dataRoot 并预置 6 个 skill 资产（真实 git 仓库）。 */
+function makeSeededDataRoot(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-finance-tester-prompt-skills-'))
+  tmpDirs.push(dir)
+  ensureSkillAssetsRepo({ dataRoot: dir, logger: () => {} })
+  return dir
+}
+
+afterEach(() => {
+  for (const dir of tmpDirs.splice(0)) {
+    try {
+      rmSync(dir, { recursive: true, force: true })
+    } catch {
+      /* ignore */
+    }
+  }
+})
 const EXPECTED_SKILLS = [
   'trend-analysis',
   'grid-strategy',
@@ -145,24 +170,15 @@ describe('[2] 6 个 SKILL.md 逐字段校验', () => {
       expect(existsSync(`${REPO_ROOT}/src/skills/${n}/SKILL.md`)).toBe(true)
     }
   })
-
-  it('createSkillRegistration 产出 runtime 来源 + 双开调用', () => {
-    for (const n of EXPECTED_SKILLS) {
-      const reg = createSkillRegistration(n)
-      expect(reg.name).toBe(n)
-      expect(reg.source).toBe('runtime')
-      expect(reg.invocation).toEqual({ modelInvocable: true, userInvocable: true })
-      expect(reg.content).toBe(parseSkill(n).content)
-    }
-  })
 })
 
 /* ================================================================== *
- * 3. 真实 SkillRegistry 注册 / 发现 / 注销
+ * 3. 真实 SkillRegistry + skill-filesystem provider 发现 / 注销
  * ================================================================== */
 
-describe('[3] 真实 SkillRegistry 注册发现', () => {
-  it('registerAllSkills 后 list() 发现 6 个；get() 取回正文；注销后归 0', async () => {
+describe('[3] 经 skill-filesystem provider 发现', () => {
+  it('挂载 provider 后 list() 发现 6 个；get() 取回正文；注销后归 0', async () => {
+    const dataRoot = makeSeededDataRoot()
     const ctx = new Context()
     await (ctx.plugin(SkillRegistry as never) as Promise<unknown>)
 
@@ -170,12 +186,15 @@ describe('[3] 真实 SkillRegistry 注册发现', () => {
     const before = await ctx.skills.list({})
     expect(before.filter((s) => EXPECTED_SKILLS.includes(s.name))).toHaveLength(0)
 
-    const dispose = registerAllSkills(ctx)
+    const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
 
     const after = await ctx.skills.list({})
     const got = after.filter((s) => EXPECTED_SKILLS.includes(s.name))
     expect(got.map((s) => s.name).sort()).toEqual([...EXPECTED_SKILLS].sort())
-    for (const s of got) expect(s.source).toBe('runtime')
+    for (const s of got) {
+      expect(s.source).toBe('custom')
+      expect(s.provider).toBe(SKILL_PROVIDER_NAME)
+    }
 
     // 逐个 get 校验正文与 whenToUse。
     for (const n of EXPECTED_SKILLS) {
@@ -186,7 +205,7 @@ describe('[3] 真实 SkillRegistry 注册发现', () => {
       expect(def?.invocation).toEqual({ modelInvocable: true, userInvocable: true })
     }
 
-    dispose()
+    await mount.dispose()
     const finalList = await ctx.skills.list({})
     expect(finalList.filter((s) => EXPECTED_SKILLS.includes(s.name))).toHaveLength(0)
 
@@ -273,17 +292,26 @@ describe('[5] 顶层 inject 契约', () => {
   })
 
   it('apply(ctx) 后顶层 inject 未被改写', () => {
-    const ctx = {
-      effect(body: () => unknown) {
-        const d = body()
-        return typeof d === 'function' ? (d as () => void) : () => {}
-      },
-      get: () => undefined,
-      inject: () => ({}),
-      tools: { register: () => () => {} },
-    } as unknown as Context
-    apply(ctx)
-    expect(topLevelInject).toEqual(['tools', 'skills', 'fs'])
+    // 防 ensureSkillAssetsRepo 回落到默认 `~/.dsh-finance`（污染 home）。
+    const dataRoot = makeSeededDataRoot()
+    const prev = process.env.DSH_FINANCE_DATA_DIR
+    process.env.DSH_FINANCE_DATA_DIR = dataRoot
+    try {
+      const ctx = {
+        effect(body: () => unknown) {
+          const d = body()
+          return typeof d === 'function' ? (d as () => void) : () => {}
+        },
+        get: () => undefined,
+        inject: () => ({}),
+        tools: { register: () => () => {} },
+      } as unknown as Context
+      apply(ctx)
+      expect(topLevelInject).toEqual(['tools', 'skills', 'fs'])
+    } finally {
+      if (prev === undefined) delete process.env.DSH_FINANCE_DATA_DIR
+      else process.env.DSH_FINANCE_DATA_DIR = prev
+    }
   })
 })
 
@@ -313,30 +341,44 @@ describe('[0] advisor.md 人设结构', () => {
 
 describe('[5b] 真实 cordis 下 apply(ctx) 端到端装配', () => {
   it('apply 后 6 个 skill 可经 ctx.skills 发现，且 advisor section 被注入', async () => {
-    const ctx = new Context()
-    await (ctx.plugin(SkillRegistry as never) as Promise<unknown>)
+    const dataRoot = makeSeededDataRoot()
+    const prev = process.env.DSH_FINANCE_DATA_DIR
+    process.env.DSH_FINANCE_DATA_DIR = dataRoot
+    try {
+      const ctx = new Context()
+      await (ctx.plugin(SkillRegistry as never) as Promise<unknown>)
 
-    const sections: Array<{ name: string; order: number }> = []
-    ctx.provide('systemPrompt', {
-      section(s: { name: string; order: number }) {
-        sections.push(s)
-        return () => {}
-      },
-    })
+      const sections: Array<{ name: string; order: number }> = []
+      ctx.provide('systemPrompt', {
+        section(s: { name: string; order: number }) {
+          sections.push(s)
+          return () => {}
+        },
+      })
 
-    apply(ctx)
-    await new Promise((r) => setTimeout(r, 0))
+      apply(ctx)
+      // provider 惰性加载 + 挂载：等待其就绪。
+      await new Promise((r) => setTimeout(r, 0))
 
-    const summaries = await ctx.skills.list({})
-    const names = summaries
-      .filter((s) => EXPECTED_SKILLS.includes(s.name))
-      .map((s) => s.name)
-      .sort()
-    expect(names).toEqual([...EXPECTED_SKILLS].sort())
+      let names: string[] = []
+      for (let i = 0; i < 80; i += 1) {
+        const summaries = await ctx.skills.list({})
+        names = summaries
+          .map((s) => s.name)
+          .filter((n) => EXPECTED_SKILLS.includes(n))
+          .sort()
+        if (names.length === EXPECTED_SKILLS.length) break
+        await new Promise((r) => setTimeout(r, 50))
+      }
+      expect(names).toEqual([...EXPECTED_SKILLS].sort())
 
-    expect(sections.some((s) => s.name === 'dsh-finance:advisor')).toBe(true)
+      expect(sections.some((s) => s.name === 'dsh-finance:advisor')).toBe(true)
 
-    await ctx.fiber.dispose()
+      await ctx.fiber.dispose()
+    } finally {
+      if (prev === undefined) delete process.env.DSH_FINANCE_DATA_DIR
+      else process.env.DSH_FINANCE_DATA_DIR = prev
+    }
   })
 })
 

@@ -13,14 +13,14 @@
  * `tests/prompt-skills.spec.ts`。分两条独立证据链：
  *   1) 源码态：`src/skills/*` 逐要素比对 §10.2 要素清单（关键词 / 结构）；
  *   2) 装载态：真实 `@deepseek-ai/dsh-skill` SkillRegistry + 真实构建产物
- *      `dist-server/` 插件装载，观测 `ctx.skills` 恰好注册 6 个 SKILL。
+ *      `dist-server/` 插件装载，观测 `ctx.skills` 恰好发现 6 个 SKILL（skill-filesystem provider）。
  *
  * 覆盖 8 条验收点：
  *   1. SKILL.md 存在 + frontmatter（name=kebab / description / whenToUse）
  *   2. 正文要素齐全（对照 §10.2 清单）
  *   3. SKILL_NAMES 末尾含 task-authorship、长度 6、顺序正确
  *   4. parseSkill('task-authorship') 可解析、content 非空
- *   5. 真实装载后 ctx.skills 恰好注册 6 个，名称与 SKILL_NAMES 一致（含注销）
+ *   5. 真实装载后发现 6 个 skill（skill-filesystem provider），含注销
  *   6. index.ts / README.md / plugin.ts 计数表述为 6
  *   7. task-authorship 正文标的无关（无写死价格 / 阈值）
  *   8. 顶层 inject 契约仍为 [tools, skills, fs]
@@ -34,16 +34,17 @@ import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-// ★ 真实构建产物入口（dist-server），验证编译态同样注册 5 个 SKILL。
 import * as pluginNs from '../dist-server/index.js'
 import {
   SKILL_NAMES,
   loadSkillMarkdown,
   parseSkill,
-  createSkillRegistration,
-  createAllSkillRegistrations,
-  registerAllSkills,
 } from '../src/skills/index.js'
+import { ensureSkillAssetsRepo } from '../src/skills/repo.js'
+import {
+  mountSkillFilesystemProviderAsync,
+  SKILL_PROVIDER_NAME,
+} from '../src/skills/provider.js'
 import { parseSkillFile, SKILL_NAME_PATTERN } from '../src/skills/frontmatter.js'
 import { inject as srcInject } from '../src/plugin.js'
 
@@ -203,73 +204,59 @@ describe('[验收4] parseSkill(task-authorship) 可解析', () => {
     expect(content.trim().length).toBeGreaterThan(200)
     expect(loadSkillMarkdown(TA)).toContain('task-authorship')
   })
-
-  it('createSkillRegistration：runtime 来源 + 双开调用 + content = 正文', () => {
-    const reg = createSkillRegistration(TA)
-    expect(reg.name).toBe(TA)
-    expect(reg.description.length).toBeGreaterThan(0)
-    expect(reg.source).toBe('runtime')
-    expect(reg.invocation).toEqual({ modelInvocable: true, userInvocable: true })
-    expect(reg.content).toBe(parseSkill(TA).content)
-  })
-
-  it('createAllSkillRegistrations 返回 6 个，名称与 SKILL_NAMES 一致', () => {
-    const regs = createAllSkillRegistrations()
-    expect(regs).toHaveLength(6)
-    expect(regs.map((r) => r.name)).toEqual([...SKILL_NAMES])
-  })
 })
 
 /* ================================================================== *
- * 验收 5：真实装载注册 6 个（SkillRegistry + dist 插件）
+ * 验收 5：真实装载发现 6 个（SkillRegistry + skill-filesystem provider）
  * ================================================================== */
 
-describe('[验收5] 真实装载后 ctx.skills 恰好注册 6 个', () => {
-  it('真实 SkillRegistry：registerAllSkills 后 6 个可发现，注销后归 0', async () => {
-    const ctx = new Context()
-    await (ctx.plugin(SkillRegistry as never) as Promise<unknown>)
+describe('[验收5] 真实装载后发现 6 个 skill', () => {
+  it('真实 SkillRegistry + skill-filesystem provider：6 个可发现，注销后归 0', async () => {
+    const dataRoot = mkdtempSync(join(tmpdir(), 'dsh-fin-ta-'))
+    process.env.DSH_FINANCE_DATA_DIR = dataRoot
+    try {
+      ensureSkillAssetsRepo({ dataRoot, logger: () => {} })
 
-    const before = await ctx.skills.list({})
-    expect(before.filter((s) => (EXPECTED_SKILLS as readonly string[]).includes(s.name))).toHaveLength(0)
+      const ctx = new Context()
+      await (ctx.plugin(SkillRegistry as never) as Promise<unknown>)
 
-    const dispose = registerAllSkills(ctx)
+      const before = await ctx.skills.list({})
+      expect(
+        before.filter((s) => (EXPECTED_SKILLS as readonly string[]).includes(s.name)),
+      ).toHaveLength(0)
 
-    const after = await ctx.skills.list({})
-    const got = after.filter((s) => (EXPECTED_SKILLS as readonly string[]).includes(s.name))
-    expect(got).toHaveLength(6)
-    expect(got.map((s) => s.name).sort()).toEqual([...EXPECTED_SKILLS].sort())
+      const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
 
-    for (const n of EXPECTED_SKILLS) {
-      const def = await ctx.skills.get(n)
-      expect(def?.name).toBe(n)
-      expect(def?.content).toBe(parseSkill(n).content)
-      expect(def?.invocation).toEqual({ modelInvocable: true, userInvocable: true })
+      const after = await ctx.skills.list({})
+      const got = after.filter((s) => (EXPECTED_SKILLS as readonly string[]).includes(s.name))
+      expect(got).toHaveLength(6)
+      expect(got.map((s) => s.name).sort()).toEqual([...EXPECTED_SKILLS].sort())
+      for (const s of got) expect(s.provider).toBe(SKILL_PROVIDER_NAME)
+
+      for (const n of EXPECTED_SKILLS) {
+        const def = await ctx.skills.get(n)
+        expect(def?.name).toBe(n)
+        expect(def?.content).toBe(parseSkill(n).content)
+        expect(def?.invocation).toEqual({ modelInvocable: true, userInvocable: true })
+      }
+
+      await mount.dispose()
+      const finalList = await ctx.skills.list({})
+      expect(
+        finalList.filter((s) => (EXPECTED_SKILLS as readonly string[]).includes(s.name)),
+      ).toHaveLength(0)
+
+      await ctx.fiber.dispose()
+    } finally {
+      rmSync(dataRoot, { recursive: true, force: true })
+      delete process.env.DSH_FINANCE_DATA_DIR
     }
+  }, 30000)
 
-    dispose()
-    const finalList = await ctx.skills.list({})
-    expect(
-      finalList.filter((s) => (EXPECTED_SKILLS as readonly string[]).includes(s.name)),
-    ).toHaveLength(0)
-
-    await ctx.fiber.dispose()
-  })
-
-  it('真实构建产物 dist-server 装载：skills 注册 6 个，顺序与 SKILL_NAMES 一致', async () => {
+  it('真实构建产物 dist-server 装载：skills 发现 6 个（provider），注销后归 0', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-fin-ta-'))
     process.env.DSH_FINANCE_DATA_DIR = dir
 
-    const registered: Array<{ name: string; description: string; content: string }> = []
-    const skillsService = {
-      name: 'skills',
-      register(s: { name: string; description: string; content: string }) {
-        registered.push(s)
-        return () => {
-          const i = registered.indexOf(s)
-          if (i >= 0) registered.splice(i, 1)
-        }
-      },
-    }
     const systemPromptStub = {
       name: 'systemPrompt',
       tools() {},
@@ -282,35 +269,51 @@ describe('[验收5] 真实装载后 ctx.skills 恰好注册 6 个', () => {
     }
     const app = new Context()
     app.provide('systemPrompt', systemPromptStub as never)
-    app.provide('skills', skillsService as never)
-    app.provide('fs', { name: 'fs' } as never)
+    await (app.plugin(SkillRegistry as never) as Promise<unknown>)
 
+    // 编译态入口 apply 与源码同源；缺省 fs → provider 回落 node fs。
     const toolsFiber = (await app.plugin(ToolRuntime as never)) as unknown as {
       dispose: () => Promise<void>
     }
-    const pluginFiber = app.plugin(pluginNs as never) as unknown as {
-      dispose: () => Promise<void>
-    }
+    const pluginFiber = app.plugin({
+      name: pluginNs.name,
+      inject: ['tools', 'skills'],
+      apply: pluginNs.apply,
+    } as never) as unknown as { dispose: () => Promise<void> }
 
     try {
-      await vi.waitFor(() => expect(registered).toHaveLength(6), { timeout: 5000, interval: 10 })
-      expect(registered.map((s) => s.name)).toEqual([...SKILL_NAMES])
-      for (const s of registered) {
-        expect(s.description.length, `${s.name} description 非空`).toBeGreaterThan(0)
-        expect(s.content.length, `${s.name} content 非空`).toBeGreaterThan(0)
+      let names: string[] = []
+      await vi.waitFor(
+        async () => {
+          const list = await app.skills.list({})
+          names = list
+            .map((s) => s.name)
+            .filter((n) => (EXPECTED_SKILLS as readonly string[]).includes(n))
+            .sort()
+          expect(names).toEqual([...EXPECTED_SKILLS].sort())
+        },
+        { timeout: 8000, interval: 50 },
+      )
+
+      for (const n of EXPECTED_SKILLS) {
+        const def = await app.skills.get(n)
+        expect(def?.description.length, `${n} description 非空`).toBeGreaterThan(0)
+        expect(def?.content.length, `${n} content 非空`).toBeGreaterThan(0)
+        expect(def?.content).toBe(parseSkill(n).content)
       }
-      // 最后一个恰为 task-authorship。
-      expect(registered[5].name).toBe(TA)
 
       // 注销：dispose 插件 fiber 后 6 个全部消失。
       await pluginFiber.dispose()
-      expect(registered).toHaveLength(0)
+      const after = await app.skills.list({})
+      expect(
+        after.filter((s) => (EXPECTED_SKILLS as readonly string[]).includes(s.name)),
+      ).toHaveLength(0)
     } finally {
       await toolsFiber.dispose()
       rmSync(dir, { recursive: true, force: true })
       delete process.env.DSH_FINANCE_DATA_DIR
     }
-  })
+  }, 20000)
 })
 
 /* ================================================================== *

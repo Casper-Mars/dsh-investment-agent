@@ -13,14 +13,16 @@
  *          注销器绑定 `ctx.effect`，fiber 卸载（含 HMR 重载）时自动注销；
  *          另经 `applyScheduler` 注册 7 个 `task_*` 定时任务工具（详见
  *          `src/scheduler/tools.ts`），合计本插件注册 21 个工具；
- *       2. 经 `ctx.skills.register` 注册 6 个技术面 SKILL
+ *       2. 挂载 dsh 原生 `skill-filesystem` provider（`src/skills/provider.ts`），
+ *          指向运行时数据目录 `<dataRoot>/skills` 并开启 watch 热更新，发现 6 个技术面 SKILL
  *          （trend-analysis / grid-strategy / stop-rule / strategy-authorship / analysis-decision / task-authorship）；
+ *          provider 注册在插件自身 ctx（global 层），对固定会话与 workspace 会话均可见；
  *       3. 经 `ctx.inject(['systemPrompt'], cb)` **动态注入** advisor.md 人设
  *          （详见 `src/prompts/index.ts`）。
  *
  * 依赖服务说明（已在 harness 源码核实）：
  *   - `tools`      —— dsh 工具注册表（`ctx.tools`，defineTool 注册面向模型的工具）
- *   - `skills`     —— dsh 技能注册表（`ctx.skills`，注册面向模型的 SKILL 操作指南）
+ *   - `skills`     —— dsh 技能注册表（`ctx.skills`，provider 注册/发现面向模型的 SKILL 操作指南）
  *   - `fs`         —— cordis 标准服务（`node:fs` 的文件系统访问）
  *
  * 注意：`systemPrompt` **不**加入顶层 `inject`，而是在 `apply` 内以
@@ -28,8 +30,8 @@
  *   `['tools','skills','fs']` 与 `cordis.patch.yml` 保持一致。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { registerAllSkills } from './skills/index.js'
 import { ensureSkillAssetsRepo } from './skills/repo.js'
+import { mountSkillFilesystemProvider } from './skills/provider.js'
 import { applyAdvisorPrompt } from './prompts/index.js'
 import { applyScheduler } from './scheduler/index.js'
 import { applySessionEnsure } from './session-ensure.js'
@@ -91,10 +93,11 @@ export const inject: string[] = ['tools', 'skills', 'fs']
  *      插件 fiber 卸载（含 HMR 重载）时自动注销。`tools` 经顶层 `inject` 保证
  *      就绪，但此处仍以 `ctx.get('tools')` 软取，使插件在「未提供 tools 服务的
  *      最小上下文」（如装载测试）下安全降级，不中断插件装载。
- *   2. 在 `ctx.effect` 内注册 6 个技术面 SKILL；注销器绑定到 effect，
- *      插件 fiber 卸载（含 HMR 重载）时自动注销。`skills` 经顶层 `inject`
- *      保证就绪，但此处仍以 `ctx.get('skills')` 软取，使插件在「未提供 skills
- *      服务的最小上下文」（如装载测试）下安全降级，不中断插件装载。
+ *   2. 冷启动预置 skill 资产仓库（`ensureSkillAssetsRepo`），再挂载指向
+ *      `<dataRoot>/skills` 的 `skill-filesystem` provider 并开启 watch 热更新
+ *      （`mountSkillFilesystemProvider`）。provider 注册进插件自身 ctx（global 层），
+ *      对固定会话与 workspace 会话均可见；注销器绑定 effect，插件 fiber 卸载时自动
+ *      注销并关闭 watch。预置与挂载均 try/catch 降级，失败不中断插件装载。
  *   3. 经 `applyAdvisorPrompt(ctx)` 动态注入 advisor.md 人设到 system-prompt。
  *
  * @param ctx 插件上下文（已注入上述三项服务）。
@@ -132,24 +135,6 @@ export function apply(ctx: Context): void {
     }
   }, 'dsh-finance tools')
 
-  // ---- 技术面 SKILL（同步注册，注销器绑定 ctx.effect） ----
-  ctx.effect(() => {
-    let disposeSkills: (() => void) | undefined
-    const skills = typeof ctx.get === 'function' ? ctx.get('skills') : undefined
-    if (!skills) {
-      console.warn('[dsh-finance] skills 服务不可用，跳过 SKILL 注册')
-    } else {
-      try {
-        disposeSkills = registerAllSkills(ctx)
-      } catch (err: unknown) {
-        console.error('[dsh-finance] SKILL 注册失败：', err)
-      }
-    }
-    return () => {
-      disposeSkills?.()
-    }
-  }, 'dsh-finance skills')
-
   // ---- advisor.md 人设（动态 inject systemPrompt，不改顶层 inject） ----
   applyAdvisorPrompt(ctx)
 
@@ -161,6 +146,16 @@ export function apply(ctx: Context): void {
     ensureSkillAssetsRepo()
   } catch (err: unknown) {
     console.error('[dsh-finance] skill 资产仓库预置装配失败（降级）：', err)
+  }
+
+  // ---- skill-filesystem provider（指向 <dataRoot>/skills + watch 热更新，§任务-2） ----
+  // 挂载 dsh 原生 filesystem provider，注册进插件自身 ctx（global 层 → 对固定会话与
+  // workspace 会话均可见）。依赖为可选 peer，故惰性加载；解析/挂载失败 → 记日志、降级
+  // 不抛。注销器绑定 ctx.effect，fiber 卸载时自动注销并关闭 watch。
+  try {
+    mountSkillFilesystemProvider(ctx)
+  } catch (err: unknown) {
+    console.error('[dsh-finance] skill-filesystem provider 装配失败（降级）：', err)
   }
 
   // ---- 固定会话确保（Task-10：检查 → 恢复 → 新建，§9.5） ----
