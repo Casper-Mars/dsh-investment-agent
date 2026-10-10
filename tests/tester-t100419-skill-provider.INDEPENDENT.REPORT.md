@@ -4,6 +4,7 @@
 - **被测交付物**：`dsh-finance` 接入 dsh 原生 `skill-filesystem` provider（指向 `<dataRoot>/skills`，`watch:true` 热更新），替换旧静态注册
 - **项目路径**：`/Users/reachlucifer/project/opc/dsh-finance`
 - **执行环境**：macOS（Reach 的 MacBook Pro），Node **v25.9.0**，pnpm **11.7.0**，vitest **3.2.7**，`hw.ncpu=12`
+  - ⚠️ 执行期间宿主机上存在**另一并行 vitest 会话**（另一 subagent/前次尝试遗留的 `hc12`/`hc1`/`full11` 等实验进程，实测出现多个 `vitest run` 并发）。本报告将「安静机器」的测量作为权威基线，并在 §9 存档「存在并发争用」时的对照结果。
 - **测试范围**：**运行时行为验证**（非静态/格式复查）
 - **独立测试文件**：`tests/tester-t100419-skill-provider.INDEPENDENT.spec.ts`（15 用例，含真实 chokidar，30s 超时）
 - **独立探针脚本**：`t100419-independent-probe.mjs`（临时，跑完已删；源码见附录 A，直接 `node` 运行，绕过 vitest）
@@ -215,7 +216,9 @@ PROBE-DONE (process exits naturally => no leaked persistent watcher)
    ```
 
 4. **穿插另一次全量运行（`maxWorkers:4`，但宿主机上有**另一并发 vitest 进程**争用 CPU）**：仅本独立 spec 的 A2 失败，`expected [...] to include 'tester-added-skill'`——即 12s 轮询预算被吃掉后触发的**超时型**失败。
-5. **隔离单跑**（同一 spec，单文件 → 单 worker）：3/3 全绿；开发者 spec 单独跑全绿。
+5. **隔离单跑**（同一 spec，单文件 → 单 worker）：3/3 全绿；开发者 spec 单独跑全绿；且在有并行会话争用时重跑本 spec 仍 `15 passed (15)`、`EXIT=0`。
+6. **重复全量运行（含并行会话争用）**：多次测得 `990/992`，失败用例**稳定落在** `tester-prompt-skills.INDEPENDENT.spec.ts [5b]` 的 `Test timed out in 5000ms`（其 provider 用例仍用默认 5s 超时）——再次印证「超时型、非断言型」。
+7. **安静机器的权威基线**：`Test Files 51 passed (51)` / `Tests 992 passed (992)`，`Duration 23.59s`（日志 `/tmp/t100419-full-test2.log`）。
 
 **判定依据**：
 - 高并发下的失败**全部是 `Test timed out in …`**，即**资源竞争/时序**（CPU 12→12 但每 worker 跑真实 git/chokidar/FSEvents），**从无断言/逻辑失败**；
