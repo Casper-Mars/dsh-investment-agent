@@ -92,9 +92,16 @@ type TaskScriptResult =
 
 ## 与定时规则的配合
 
-一个任务程序要生效，分两步（均由 agent 完成）：
+一个任务程序要生效，遵循「编码 → 测试 → 注册」三步闭环（均由 agent 完成）：
 
 1. **写程序**：按本 SKILL 写好 `tasks/<id>/task.ts` + `package.json`。
-2. **注册定时**：经 `task_create({ id, name, cron, task_path })` 注册，`task_path` 指向该 `task.ts`。
+2. **测试**：真实执行一次，校验两件事：
+   - **跑得起来**：正常退出、无异常抛出、不超时（`taskTimeoutMs` 默认 60s 内）、返回结构符合 `TaskScriptResult` 契约、`shouldWake` 是合法 boolean。
+   - **干的活对**：抓对数据、判读逻辑产生预期 `shouldWake`。由 agent 读程序输出的富信息（原始数据 + 中间指标 + 触发对比值）自行判断。
+3. **注册 / 修复**：测试通过 → 经 `task_create({ id, name, cron, task_path })` 注册，`task_path` 指向该 `task.ts`；测试不通过 → 修复程序回到第 1 步，再测，直到通过。
+
+纪律：**写完必须测试验证通过才允许 `task_create` 注册；测试不通过就修复、修复后再测，直到通过**。这是开发纪律，不是可选项。程序的正确性靠 agent 自测纪律保证，而非任何注册前的强制校验机制。
 
 程序只管「跑一次做什么」，cron 只管「什么时候跑」；改逻辑动程序，改频率动 cron。
+
+必要时，可 spawn 一个 subagent 独立执行「编码-测试-修复」循环：当任务程序较复杂、或希望获得独立复核视角时使用（经 dsh 官方 subagent 委派工具，由宿主装配，非本插件实现）。子 agent 交付后，agent 仍需复核其产出是否符合策略意图，再决定是否注册。
