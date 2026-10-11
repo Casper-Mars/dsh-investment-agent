@@ -2,7 +2,7 @@
  * dsh-finance SKILL provider 装配层 —— 接入 dsh 原生 `skill-filesystem` provider。
  *
  * 背景（skill 重构任务-2）：
- *   历史上 6 个技术面 SKILL 由 `src/skills/index.ts` 以「读文件 + `ctx.skills.register`」
+ *   历史上 skill（5 个可进化 + 1 个固有）由 `src/skills/index.ts` 以「读文件 + `ctx.skills.register`」
  *   静态注册到运行时层。该路径无法热更新（改 SKILL.md 需重启），且把「资产发现」
  *   与「资产内容」耦合在本插件里。本模块改为挂载 dsh 原生 filesystem provider，
  *   指向运行时数据目录 `<dataRoot>/skills`（`src/skills/repo.ts` 的独立 git 仓库），

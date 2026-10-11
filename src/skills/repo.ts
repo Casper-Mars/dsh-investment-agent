@@ -2,7 +2,7 @@
  * skill 资产仓库 —— 数据目录内的**独立 git 仓库**（`<dataRoot>/skills`）。
  *
  * 背景（skill 重构任务-1）：
- *   历史上 6 个技术面 SKILL 以「随源码编译的静态 `.md`」形式存在于
+ *   历史上 skill（5 个可进化 + 1 个固有）以「随源码编译的静态 `.md`」形式存在于
  *   `src/skills/<name>/SKILL.md`（`scripts/copy-assets.mjs` 搬运到
  *   `dist-server/skills/`），只能随包发布、运行时不改写。目标是把 skill 资产
  *   迁移为「运行时可写 + 可 git 版本管理」的载体，落在数据目录下的独立 git
