@@ -9,17 +9,21 @@
  *   仓库 `<dataRoot>/skills`：
  *
  *     <dataRoot>/skills                 # 独立 git 仓库根
- *     <dataRoot>/skills/<name>/SKILL.md # 6 个 skill（目录名 = frontmatter.name）
+ *     <dataRoot>/skills/<name>/SKILL.md # 5 个「可进化 skill」（目录名 = frontmatter.name）
+ *
+ *   注意：`task-authorship` 是「固有 SKILL」（任务程序方法论），**不**落入本仓库——
+ *   它不随 git 进化链 / 热更新时间线变动，由 `src/plugin.ts` 单独静态注册。故本模块
+ *   只预置 5 个可进化 SKILL（= {@link SKILL_NAMES}）。
  *
  *   此后 agent 复盘改文件 → `git commit` → 热更新（provider 切换属后续任务）。
  *
  * 本模块职责（仅「数据载体 + 迁移 + 幂等预置」这一层地基）：
  *   1. {@link resolveSkillsRepoDir}：`<dataRoot>/skills` 路径解析；
  *   2. {@link loadSkillSeeds}：从随包发布的**首版种子**（`src/skills/<name>/SKILL.md`，
- *      编译态为 `dist-server/skills/<name>/SKILL.md`）读取 6 份原文，并校验
+ *      编译态为 `dist-server/skills/<name>/SKILL.md`）读取 5 份原文，并校验
  *      「目录名 / 文件名 / frontmatter.name」三者一致；
  *   3. {@link ensureSkillAssetsRepo}：**幂等**冷启动预置 —— 仓库缺失或为空时
- *      `mkdir -p` + `git init` + 落首版 6 个 SKILL.md + `git add` + `git commit`；
+ *      `mkdir -p` + `git init` + 落首版 5 个 SKILL.md + `git add` + `git commit`；
  *      仓库已就绪则**完全 no-op**（不重复 init / 不产生第二个 commit）。
  *
  * 设计约束：
@@ -128,7 +132,7 @@ export function resolveSkillsRepoDir(dataRoot: string): string {
 }
 
 /**
- * 载入 6 份首版种子（`src/skills/<name>/SKILL.md`，编译态为
+ * 载入 5 份首版种子（`src/skills/<name>/SKILL.md`，编译态为
  * `dist-server/skills/<name>/SKILL.md`），并校验一致性：
  *   目录名（= 枚举名）与 frontmatter.name 一致；frontmatter 合法（kebab-case、
  *   description 非空）。返回**原文**（保留逐字节正文）。
@@ -233,7 +237,7 @@ function ensureGitignore(repoDir: string): void {
 }
 
 /**
- * 执行预置：`mkdir -p` +（必要时）`git init` + 落 6 个 SKILL.md + `git add` +
+ * 执行预置：`mkdir -p` +（必要时）`git init` + 落 5 个 SKILL.md + `git add` +
  * （仅当有变更时）`git commit`。
  *
  * 「仅当有变更时提交」是幂等的第二道保险：即便在「有 `.git` 但无提交」的

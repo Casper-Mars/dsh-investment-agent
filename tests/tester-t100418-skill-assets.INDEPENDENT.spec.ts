@@ -8,12 +8,13 @@
  *   ① 独立 mock 断言：注入自定义 `gitRunner` 观察调用序列（init / init 回落 /
  *      add -A / commit 仅 1 次；已就绪 → 不触发任何写操作）；
  *   ② 真实进程 / 真实 git E2E：临时 dataRoot 真跑 `ensureSkillAssetsRepo`，验
- *      目录结构 / git log 恰 1 条 / status 干净 / 6 skill 与种子逐字节一致；
+ *      目录结构 / git log 恰 1 条 / status 干净 / 5 个可进化 skill 与种子逐字节一致；
  *      二次调用 commit 数不变；**编译态 E2E**（dist-server 产物独立 node 进程）；
  *   ③ 降级独立验证：gitRunner 抛错 / commit 阶段失败 / 路径不可创建（无写权限
  *      等价） / 种子读取异常（mock）→ 均不抛、返回 degraded；
- *   ④ 一致性：落盘 6 个 SKILL.md 用 frontmatter.ts 解析，目录名 ===
- *      frontmatter.name === 期望名；SKILL_NAMES 与落盘集合一致；
+ *   ④ 一致性：落盘 5 个可进化 SKILL.md 用 frontmatter.ts 解析，目录名 ===
+ *      frontmatter.name === 期望名；SKILL_NAMES 与落盘集合一致（固有 SKILL task-authorship
+ *      不落盘，仅存在于 `src/skills/` 随包源）；
  *   ⑤ 空 / 半初始化判定：缺失 / 无 .git / 有 .git 无提交 / 仅空目录 / 无 skill
  *      内容 → 均需预置且恰一次首版 commit；
  *   ⑥ 路径护栏：不污染真实 `~/.dsh-finance`，dataRoot 优先级注入 > env > 默认；
@@ -36,7 +37,7 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { SKILL_NAMES } from '../src/skills/index.js'
+import { SKILL_NAMES, TASK_AUTHORSHIP_SKILL_NAME } from '../src/skills/index.js'
 import { parseSkillFile, SKILL_NAME_PATTERN } from '../src/skills/frontmatter.js'
 import {
   ensureSkillAssetsRepo,
@@ -193,7 +194,7 @@ describe('① 调用序列（注入 gitRunner 观察）', () => {
  * ② 真实 git E2E
  * ================================================================== */
 describe('② 真实 git E2E（临时 dataRoot）', () => {
-  it('冷启动：目录 / .git / 6 skill / git log 恰 1 条 / status 干净 / 逐字节一致', () => {
+  it('冷启动：目录 / .git / 5 个可进化 skill / git log 恰 1 条 / status 干净 / 逐字节一致', () => {
     const dataRoot = join(tmp, 'data')
     const out = ensureSkillAssetsRepo({ dataRoot, logger: noop })
     const repoDir = out.dir
@@ -209,7 +210,7 @@ describe('② 真实 git E2E（临时 dataRoot）', () => {
     const entries = readdirSync(repoDir).filter((n) => n !== '.git' && n !== '.gitignore')
     expect([...entries].sort()).toEqual([...SKILL_NAMES].sort())
 
-    // 6 skill 逐字节 = 源码种子 = 编译态种子。
+    // 5 个可进化 skill 逐字节 = 源码种子 = 编译态种子（固有 SKILL task-authorship 不落盘）。
     for (const name of SKILL_NAMES) {
       const file = join(repoDir, name, SKILL_FILENAME)
       expect(existsSync(file), `${name} 缺失`).toBe(true)
@@ -365,7 +366,7 @@ describe('③ 降级（不抛、返回 degraded）', () => {
  * ④ 一致性（目录名 / 文件名 / frontmatter.name）
  * ================================================================== */
 describe('④ 三者一致 + SKILL_NAMES 对齐', () => {
-  it('种子：恰 6 个、kebab-case、目录名 === frontmatter.name、正文非空', () => {
+  it('种子：恰 5 个、kebab-case、目录名 === frontmatter.name、正文非空', () => {
     const seeds = loadSkillSeeds()
     expect(seeds).toHaveLength(SKILL_NAMES.length)
     expect(seeds.map((s) => s.name)).toEqual([...SKILL_NAMES])
@@ -378,12 +379,13 @@ describe('④ 三者一致 + SKILL_NAMES 对齐', () => {
     }
   })
 
-  it('源码目录集合 === SKILL_NAMES，且每个目录含 SKILL.md', () => {
+  it('源码目录集合 === 5 个可进化 SKILL + 固有 SKILL，且每个目录含 SKILL.md', () => {
     const srcSkillsDir = join(REPO_ROOT, 'src', 'skills')
     const dirs = readdirSync(srcSkillsDir).filter((n) =>
       existsSync(join(srcSkillsDir, n, SKILL_FILENAME)),
     )
-    expect([...dirs].sort()).toEqual([...SKILL_NAMES].sort())
+    // 随包源目录 = 5 个可进化（SKILL_NAMES）+ 1 个固有（task-authorship）。
+    expect([...dirs].sort()).toEqual([...SKILL_NAMES, TASK_AUTHORSHIP_SKILL_NAME].sort())
   })
 
   it('落盘后：目录名 === 文件名 SKILL.md === frontmatter.name', () => {
@@ -541,7 +543,7 @@ describe('⑦ 插件装配：apply 接线与安全降级', () => {
     return { ctx, disposers }
   }
 
-  it('最小上下文 + env 指向临时目录：apply 不抛且落盘到临时目录（6 skill）', () => {
+  it('最小上下文 + env 指向临时目录：apply 不抛且落盘到临时目录（5 个可进化 skill）', () => {
     const envRoot = join(tmp, 'apply-data')
     process.env[DATA_ROOT_ENV] = envRoot
     const { ctx, disposers } = minimalCtx()

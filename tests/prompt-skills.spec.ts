@@ -1,11 +1,12 @@
 /**
- * Task 5 验收测试：Prompt 注入（advisor.md）+ 6 个技术面 SKILL。
+ * Task 5 验收测试：Prompt 注入（advisor.md）+ 技术面 SKILL。
  *
  * 覆盖验收标准：
  *   1. advisor.md 含角色/原则/工作流/合规四块，末尾明确「本内容不构成投资建议」。
- *   2. 6 个 SKILL.md 均含 frontmatter 的 name/description/whenToUse，name 为 kebab-case。
+ *   2. 5 个可进化 SKILL.md 均含 frontmatter 的 name/description/whenToUse，name 为 kebab-case。
  *   3. prompt 与 skill 全文不出现写死的标的价格/阈值（数值用「从配置读取」占位）。
- *   4. apply(ctx) 注册后 6 个 skill 可被 ctx.skills 发现、advisor.md 注入 system-prompt。
+ *   4. apply(ctx) 后 5 个可进化 skill 可被 ctx.skills 经 provider 发现、固有 SKILL
+ *      task-authorship 经静态注册可见、advisor.md 注入 system-prompt。
  *
  * 另含：frontmatter 解析器单测、copy-assets 产物路径可解析校验。
  */
@@ -19,7 +20,10 @@ import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import {
   SKILL_NAMES,
+  TASK_AUTHORSHIP_SKILL_NAME,
   loadSkillMarkdown,
+  loadTaskAuthorshipMarkdown,
+  createIntrinsicSkillRegistration,
   parseSkill,
 } from '../src/skills/index'
 import { ensureSkillAssetsRepo } from '../src/skills/repo'
@@ -45,7 +49,7 @@ const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 
 const tmpDirs: string[] = []
 
-/** 建临时 dataRoot 并预置 6 个 skill 资产（真实 git 仓库）。 */
+/** 建临时 dataRoot 并预置 5 个可进化 skill 资产（真实 git 仓库）。 */
 function makeSeededDataRoot(): string {
   const dir = mkdtempSync(join(tmpdir(), 'dsh-finance-prompt-skills-'))
   tmpDirs.push(dir)
@@ -93,13 +97,32 @@ describe('验收 1：advisor.md 人设内容', () => {
 })
 
 /* ------------------------------------------------------------------ *
- * 验收 2：6 个 SKILL.md 的 frontmatter
+ * 验收 2：5 个「可进化 SKILL」的 frontmatter
  * ------------------------------------------------------------------ */
 
-describe('验收 2：6 个 SKILL.md frontmatter（name/description/whenToUse）', () => {
-  it('SKILL_NAMES 恰为 6 个且均为 kebab-case', () => {
-    expect(SKILL_NAMES).toHaveLength(6)
+describe('验收 2：5 个可进化 SKILL.md frontmatter（name/description/whenToUse）', () => {
+  it('SKILL_NAMES 恰为 5 个且均为 kebab-case', () => {
+    expect(SKILL_NAMES).toHaveLength(5)
     for (const n of SKILL_NAMES) expect(SKILL_NAME_PATTERN.test(n)).toBe(true)
+  })
+
+  it('固有 SKILL：task-authorship 常量与原文可读（name 一致、frontmatter 合法）', () => {
+    expect(TASK_AUTHORSHIP_SKILL_NAME).toBe('task-authorship')
+    // 不在可进化清单中。
+    expect(SKILL_NAMES as readonly string[]).not.toContain(TASK_AUTHORSHIP_SKILL_NAME)
+    const { frontmatter, content } = parseSkillFile(loadTaskAuthorshipMarkdown())
+    expect(frontmatter.name).toBe(TASK_AUTHORSHIP_SKILL_NAME)
+    expect(frontmatter.description.length).toBeGreaterThan(0)
+    expect(content.trim().length).toBeGreaterThan(100)
+  })
+
+  it('固有 SKILL：注册对象契约（source=runtime、invocation 双开、正文非空）', () => {
+    const reg = createIntrinsicSkillRegistration()
+    expect(reg.name).toBe(TASK_AUTHORSHIP_SKILL_NAME)
+    expect(reg.description.length).toBeGreaterThan(0)
+    expect(reg.source).toBe('runtime')
+    expect(reg.invocation).toEqual({ modelInvocable: true, userInvocable: true })
+    expect(reg.content.trim().length).toBeGreaterThan(100)
   })
 
   it.each(SKILL_NAMES)('%s：frontmatter 三字段齐全、name=kebab-case、与目录名一致', (name) => {
@@ -127,6 +150,7 @@ describe('验收 3：prompt 与 skill 全文不出现写死的价格/阈值', ()
   function readAllTexts(): Array<[string, string]> {
     const out: Array<[string, string]> = [['prompts/advisor.md', loadAdvisorMd()]]
     for (const n of SKILL_NAMES) out.push([`skills/${n}/SKILL.md`, loadSkillMarkdown(n)])
+    out.push([`skills/${TASK_AUTHORSHIP_SKILL_NAME}/SKILL.md`, loadTaskAuthorshipMarkdown()])
     return out
   }
 
@@ -197,8 +221,8 @@ async function newSkillContext(): Promise<Context> {
   return ctx
 }
 
-describe('验收 5：经 skill-filesystem provider 发现 / 卸载 6 个 SKILL', () => {
-  it('挂载 provider 后 6 个 skill 均可列出、get() 返回正文；注销后消失', async () => {
+describe('验收 5：经 skill-filesystem provider 发现 / 卸载 5 个可进化 SKILL', () => {
+  it('挂载 provider 后 5 个 skill 均可列出、get() 返回正文；注销后消失', async () => {
     const dataRoot = makeSeededDataRoot()
     const ctx = await newSkillContext()
     const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
@@ -319,7 +343,7 @@ describe('插件 apply 接入', () => {
     return { ctx, registeredSkills, injectedSections }
   }
 
-  it('apply 不再静态注册 SKILL（改由 provider 承担），注入 1 个 prompt section，且不抛异常', () => {
+  it('apply 仅静态注册固有 SKILL（task-authorship），5 个可进化 SKILL 改由 provider 承担；注入 1 个 prompt section，且不抛异常', () => {
     // 防止 ensureSkillAssetsRepo 回落到默认 `~/.dsh-finance`（污染 home）。
     const dataRoot = makeSeededDataRoot()
     const prev = process.env.DSH_FINANCE_DATA_DIR
@@ -328,8 +352,9 @@ describe('插件 apply 接入', () => {
       const { ctx, registeredSkills, injectedSections } = makeMockCtx()
       expect(() => apply(ctx)).not.toThrow()
 
-      // 静态注册三件套已移除：不再有 `ctx.skills.register` 调用。
-      expect(registeredSkills).toHaveLength(0)
+      // 5 个可进化 SKILL 不再静态注册（改由 provider 发现）；仅固有 SKILL 静态注册。
+      expect(registeredSkills).toHaveLength(1)
+      expect(registeredSkills[0].name).toBe(TASK_AUTHORSHIP_SKILL_NAME)
 
       // advisor section 注入保持不变。
       expect(injectedSections).toHaveLength(1)

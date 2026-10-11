@@ -2,7 +2,7 @@
  * skill 资产仓库（`<dataRoot>/skills` 独立 git 仓库）单测 —— 任务-1。
  *
  * 覆盖：
- *   ① 全新 dataRoot 冷启动 → 目录 / git 仓库 / 6 skill / 首版 commit 齐备；
+ *   ① 全新 dataRoot 冷启动 → 目录 / git 仓库 / 5 个可进化 skill / 首版 commit 齐备；
  *   ② 幂等：二次调用 no-op（commit 数不增、内容逐字节不变）；
  *   ③ git 不可用 / 命令失败 → 降级不抛、不中断；
  *   ④ 目录名 / 文件名 / frontmatter.name 三者一致；
@@ -90,7 +90,7 @@ afterEach(() => {
  * ------------------------------------------------------------------ */
 
 describe('① 冷启动预置（全新 dataRoot）', () => {
-  it('创建目录 + git 仓库 + 6 skill + 首版 commit', () => {
+  it('创建目录 + git 仓库 + 5 个可进化 skill + 首版 commit', () => {
     const dataRoot = join(tmp, 'data')
     const logs: string[] = []
     const out = ensureSkillAssetsRepo({ dataRoot, logger: (m) => logs.push(m) })
@@ -104,7 +104,8 @@ describe('① 冷启动预置（全新 dataRoot）', () => {
     // git 仓库就绪。
     expect(existsSync(join(repoDir, '.git'))).toBe(true)
 
-    // 6 个 skill 齐全，且逐字节等同随包种子。
+    // 5 个可进化 skill 齐全，且逐字节等同随包种子。
+    // （固有 SKILL task-authorship 不落盘，见 src/skills/index.ts 分野。）
     for (const name of SKILL_NAMES) {
       const file = join(repoDir, name, SKILL_FILENAME)
       expect(existsSync(file), `${name} 缺失`).toBe(true)
@@ -215,9 +216,9 @@ describe('③ 降级（git 不可用 / 命令失败不抛）', () => {
  * ------------------------------------------------------------------ */
 
 describe('④ 目录名 / 文件名 / frontmatter.name 三者一致', () => {
-  it('种子：恰 6 个、kebab-case、目录名 = frontmatter.name、正文非空', () => {
+  it('种子：恰 5 个、kebab-case、目录名 = frontmatter.name、正文非空', () => {
     const seeds = loadSkillSeeds()
-    expect(seeds).toHaveLength(6)
+    expect(seeds).toHaveLength(5)
     expect(seeds.map((s) => s.name)).toEqual([...SKILL_NAMES])
     for (const { name, markdown } of seeds) {
       expect(SKILL_NAME_PATTERN.test(name)).toBe(true)

@@ -2,26 +2,29 @@
  * tester-task10-task-authorship.INDEPENDENT.spec.ts
  * ==================================================================
  * Tester 独立复验（飞书任务卡 t100386）：新增技术面 SKILL ——
- * `task-authorship`（任务程序创作），`SKILL_NAMES` 计数 4 → 5 → 6（t100415 追加 `analysis-decision`）。
+ * `task-authorship`（任务程序创作）。
  *
- * 被测交付物：
- *   - 新增 `src/skills/task-authorship/SKILL.md`（按 §10.2 逐字落地）
- *   - `src/skills/index.ts`：SKILL_NAMES 追加 `'task-authorship'`（末尾）、计数 4 → 5 → 6
- *   - `src/skills/README.md`、`src/plugin.ts`：计数表述同步为 6
+ * 【架构演进（本轮「固有化」）】`task-authorship` 从「可进化清单」分离为「固有 SKILL」：
+ *   - `SKILL_NAMES`（可进化清单）收窄为 5 个（去掉 `task-authorship`），供 `repo.ts`
+ *     种子落盘 + provider 热更新；
+ *   - 新增 `TASK_AUTHORSHIP_SKILL_NAME` / `loadTaskAuthorshipMarkdown()` /
+ *     `createIntrinsicSkillRegistration()`（`src/skills/index.ts`）；
+ *   - `src/plugin.ts` 经 `ctx.skills.register` **静态注册** `task-authorship`（不进化）。
  *
  * 独立性声明：本文件由 Tester 独立编写，**不依赖** Developer 的
  * `tests/prompt-skills.spec.ts`。分两条独立证据链：
- *   1) 源码态：`src/skills/*` 逐要素比对 §10.2 要素清单（关键词 / 结构）；
+ *   1) 源码态：`src/skills/task-authorship/*` 逐要素比对 §10.2 要素清单（关键词 / 结构）；
  *   2) 装载态：真实 `@deepseek-ai/dsh-skill` SkillRegistry + 真实构建产物
- *      `dist-server/` 插件装载，观测 `ctx.skills` 恰好发现 6 个 SKILL（skill-filesystem provider）。
+ *      `dist-server/` 插件装载——观测 5 个可进化 SKILL 经 skill-filesystem provider 发现，
+ *      且 `task-authorship` 经静态注册可见。
  *
  * 覆盖 8 条验收点：
  *   1. SKILL.md 存在 + frontmatter（name=kebab / description / whenToUse）
  *   2. 正文要素齐全（对照 §10.2 清单）
- *   3. SKILL_NAMES 末尾含 task-authorship、长度 6、顺序正确
- *   4. parseSkill('task-authorship') 可解析、content 非空
- *   5. 真实装载后发现 6 个 skill（skill-filesystem provider），含注销
- *   6. index.ts / README.md / plugin.ts 计数表述为 6
+ *   3. SKILL_NAMES 恰为 5 个（不含 task-authorship）、顺序正确；固有常量正确
+ *   4. 固有 SKILL 静态读取入口（loadTaskAuthorshipMarkdown / 注册对象契约）
+ *   5. 真实装载：5 个可进化经 provider 发现；task-authorship 经静态注册可见，含注销
+ *   6. index.ts / README.md / plugin.ts 计数与分野表述同步（5 可进化 + 1 固有）
  *   7. task-authorship 正文标的无关（无写死价格 / 阈值）
  *   8. 顶层 inject 契约仍为 [tools, skills, fs]
  * ==================================================================
@@ -37,7 +40,9 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as pluginNs from '../dist-server/index.js'
 import {
   SKILL_NAMES,
-  loadSkillMarkdown,
+  TASK_AUTHORSHIP_SKILL_NAME,
+  createIntrinsicSkillRegistration,
+  loadTaskAuthorshipMarkdown,
   parseSkill,
 } from '../src/skills/index.js'
 import { ensureSkillAssetsRepo } from '../src/skills/repo.js'
@@ -50,17 +55,20 @@ import { inject as srcInject } from '../src/plugin.js'
 
 const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url))
 
-/** 期望的 6 个 SKILL（顺序 = 注册顺序）。 */
-const EXPECTED_SKILLS = [
+/** 5 个「可进化 SKILL」（provider 发现；顺序 = 种子落盘顺序）。 */
+const EVOLVABLE_SKILLS = [
   'trend-analysis',
   'grid-strategy',
   'stop-rule',
   'strategy-authorship',
   'analysis-decision',
-  'task-authorship',
 ] as const
 
-const TA = 'task-authorship'
+/** 固有 SKILL 名（任务程序创作）。 */
+const TA = TASK_AUTHORSHIP_SKILL_NAME
+
+/** 固有 SKILL 的解析结果（frontmatter + 正文），多处复用。 */
+const TA_PARSED = parseSkillFile(loadTaskAuthorshipMarkdown())
 
 /* ================================================================== *
  * 验收 1：SKILL.md 存在 + frontmatter
@@ -88,8 +96,8 @@ describe('[验收1] task-authorship SKILL.md 存在与 frontmatter', () => {
   })
 
   it('目录名 = frontmatter.name（skill-filesystem 发现规范）', () => {
-    const { frontmatter } = parseSkill(TA)
-    expect(frontmatter.name).toBe(TA)
+    // 固有 SKILL 不再进可进化清单，但目录名仍须 = frontmatter.name（静态读取一致）。
+    expect(TA_PARSED.frontmatter.name).toBe(TA)
   })
 })
 
@@ -98,7 +106,7 @@ describe('[验收1] task-authorship SKILL.md 存在与 frontmatter', () => {
  * ================================================================== */
 
 describe('[验收2] 正文覆盖 §10.2 全部要素', () => {
-  const body = parseSkill(TA).content
+  const body = TA_PARSED.content
 
   it('① 定位：指导 agent 编写/修改任务程序；职责只有执行 + 判读；交易判断属 agent；何时跑由 cron 决定', () => {
     expect(body).toMatch(/定位/)
@@ -191,21 +199,26 @@ describe('[验收2] 正文覆盖 §10.2 全部要素', () => {
 })
 
 /* ================================================================== *
- * 验收 3：SKILL_NAMES 长度 / 顺序 / 末尾
+ * 验收 3：SKILL_NAMES 长度 / 顺序（收窄为 5 个可进化）
  * ================================================================== */
 
-describe('[验收3] SKILL_NAMES 恰为 6 个且顺序正确', () => {
-  it('长度 = 6', () => {
-    expect(SKILL_NAMES).toHaveLength(6)
+describe('[验收3] SKILL_NAMES 恰为 5 个可进化且顺序正确', () => {
+  it('长度 = 5', () => {
+    expect(SKILL_NAMES).toHaveLength(5)
   })
 
-  it('顺序：trend-analysis → grid-strategy → stop-rule → strategy-authorship → analysis-decision → task-authorship', () => {
-    expect([...SKILL_NAMES]).toEqual([...EXPECTED_SKILLS])
+  it('顺序：trend-analysis → grid-strategy → stop-rule → strategy-authorship → analysis-decision', () => {
+    expect([...SKILL_NAMES]).toEqual([...EVOLVABLE_SKILLS])
   })
 
-  it('末尾为 task-authorship；原 4 个位置不变', () => {
-    expect(SKILL_NAMES[SKILL_NAMES.length - 1]).toBe(TA)
-    expect([...SKILL_NAMES].slice(0, 4)).toEqual([...EXPECTED_SKILLS].slice(0, 4))
+  it('不含 task-authorship（已分离为固有 SKILL，不落可进化清单）', () => {
+    expect(SKILL_NAMES as readonly string[]).not.toContain(TA)
+    expect(SKILL_NAMES[SKILL_NAMES.length - 1]).toBe('analysis-decision')
+  })
+
+  it('固有常量 TASK_AUTHORSHIP_SKILL_NAME = "task-authorship"（kebab-case）', () => {
+    expect(TA).toBe('task-authorship')
+    expect(SKILL_NAME_PATTERN.test(TA)).toBe(true)
   })
 
   it('每个名称均为 kebab-case', () => {
@@ -214,24 +227,41 @@ describe('[验收3] SKILL_NAMES 恰为 6 个且顺序正确', () => {
 })
 
 /* ================================================================== *
- * 验收 4：parseSkill 契约
+ * 验收 4：固有 SKILL 静态读取 / 注册对象契约
  * ================================================================== */
 
-describe('[验收4] parseSkill(task-authorship) 可解析', () => {
-  it('返回 frontmatter.name = task-authorship 且 content 非空', () => {
-    const { frontmatter, content } = parseSkill(TA)
+describe('[验收4] 固有 SKILL 静态读取入口契约', () => {
+  it('loadTaskAuthorshipMarkdown() 读到原文；frontmatter.name = task-authorship、content 非空', () => {
+    const raw = loadTaskAuthorshipMarkdown()
+    expect(raw).toContain('task-authorship')
+    const { frontmatter, content } = parseSkillFile(raw)
     expect(frontmatter.name).toBe(TA)
     expect(content.trim().length).toBeGreaterThan(200)
-    expect(loadSkillMarkdown(TA)).toContain('task-authorship')
+  })
+
+  it('createIntrinsicSkillRegistration()：name / source=runtime / invocation 双开 / 正文非空', () => {
+    const reg = createIntrinsicSkillRegistration()
+    expect(reg.name).toBe(TA)
+    expect(reg.source).toBe('runtime')
+    expect(reg.invocation).toEqual({ modelInvocable: true, userInvocable: true })
+    expect((reg.content ?? '').length).toBeGreaterThan(200)
+    expect(reg.description.length).toBeGreaterThan(0)
+    // 正文 = 原文（去 frontmatter）。
+    expect(reg.content).toBe(TA_PARSED.content)
+  })
+
+  it('固有 SKILL 正文与可进化 SKILL 解析器解耦：parseSkill 只接受 5 个可进化名', () => {
+    // 5 个可进化名经 parseSkill 正常解析（回归）。
+    for (const n of EVOLVABLE_SKILLS) expect(parseSkill(n).frontmatter.name).toBe(n)
   })
 })
 
 /* ================================================================== *
- * 验收 5：真实装载发现 6 个（SkillRegistry + skill-filesystem provider）
+ * 验收 5：真实装载（SkillRegistry + provider + 静态注册）
  * ================================================================== */
 
-describe('[验收5] 真实装载后发现 6 个 skill', () => {
-  it('真实 SkillRegistry + skill-filesystem provider：6 个可发现，注销后归 0', async () => {
+describe('[验收5] 真实装载：5 可进化经 provider 发现 + 固有经静态注册可见', () => {
+  it('真实 SkillRegistry + skill-filesystem provider：5 个可进化可发现，注销后归 0', async () => {
     const dataRoot = mkdtempSync(join(tmpdir(), 'dsh-fin-ta-'))
     process.env.DSH_FINANCE_DATA_DIR = dataRoot
     try {
@@ -242,18 +272,21 @@ describe('[验收5] 真实装载后发现 6 个 skill', () => {
 
       const before = await ctx.skills.list({})
       expect(
-        before.filter((s) => (EXPECTED_SKILLS as readonly string[]).includes(s.name)),
+        before.filter((s) => (EVOLVABLE_SKILLS as readonly string[]).includes(s.name)),
       ).toHaveLength(0)
 
       const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
 
       const after = await ctx.skills.list({})
-      const got = after.filter((s) => (EXPECTED_SKILLS as readonly string[]).includes(s.name))
-      expect(got).toHaveLength(6)
-      expect(got.map((s) => s.name).sort()).toEqual([...EXPECTED_SKILLS].sort())
+      const got = after.filter((s) => (EVOLVABLE_SKILLS as readonly string[]).includes(s.name))
+      expect(got).toHaveLength(5)
+      expect(got.map((s) => s.name).sort()).toEqual([...EVOLVABLE_SKILLS].sort())
       for (const s of got) expect(s.provider).toBe(SKILL_PROVIDER_NAME)
 
-      for (const n of EXPECTED_SKILLS) {
+      // 固有 SKILL 不经 provider 发现（不落 <dataRoot>/skills）。
+      expect(after.some((s) => s.name === TA)).toBe(false)
+
+      for (const n of EVOLVABLE_SKILLS) {
         const def = await ctx.skills.get(n)
         expect(def?.name).toBe(n)
         expect(def?.content).toBe(parseSkill(n).content)
@@ -263,7 +296,7 @@ describe('[验收5] 真实装载后发现 6 个 skill', () => {
       await mount.dispose()
       const finalList = await ctx.skills.list({})
       expect(
-        finalList.filter((s) => (EXPECTED_SKILLS as readonly string[]).includes(s.name)),
+        finalList.filter((s) => (EVOLVABLE_SKILLS as readonly string[]).includes(s.name)),
       ).toHaveLength(0)
 
       await ctx.fiber.dispose()
@@ -273,7 +306,7 @@ describe('[验收5] 真实装载后发现 6 个 skill', () => {
     }
   }, 30000)
 
-  it('真实构建产物 dist-server 装载：skills 发现 6 个（provider），注销后归 0', async () => {
+  it('真实构建产物 dist-server 装载：5 可进化经 provider 发现 + task-authorship 静态注册可见，注销后皆消失', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-fin-ta-'))
     process.env.DSH_FINANCE_DATA_DIR = dir
 
@@ -302,32 +335,41 @@ describe('[验收5] 真实装载后发现 6 个 skill', () => {
     } as never) as unknown as { dispose: () => Promise<void> }
 
     try {
+      // (a) 5 个可进化 SKILL 经 provider 发现。
       let names: string[] = []
       await vi.waitFor(
         async () => {
           const list = await app.skills.list({})
           names = list
             .map((s) => s.name)
-            .filter((n) => (EXPECTED_SKILLS as readonly string[]).includes(n))
+            .filter((n) => (EVOLVABLE_SKILLS as readonly string[]).includes(n))
             .sort()
-          expect(names).toEqual([...EXPECTED_SKILLS].sort())
+          expect(names).toEqual([...EVOLVABLE_SKILLS].sort())
         },
         { timeout: 8000, interval: 50 },
       )
 
-      for (const n of EXPECTED_SKILLS) {
+      for (const n of EVOLVABLE_SKILLS) {
         const def = await app.skills.get(n)
         expect(def?.description.length, `${n} description 非空`).toBeGreaterThan(0)
         expect(def?.content.length, `${n} content 非空`).toBeGreaterThan(0)
         expect(def?.content).toBe(parseSkill(n).content)
       }
 
-      // 注销：dispose 插件 fiber 后 6 个全部消失。
+      // (b) 固有 SKILL task-authorship 经 apply 静态注册可见（source=runtime），不经 provider。
+      const intrinsic = (await app.skills.list({})).find((s) => s.name === TA)
+      expect(intrinsic, 'task-authorship 应经静态注册可见').toBeDefined()
+      expect(intrinsic?.source).toBe('runtime')
+      const taDef = await app.skills.get(TA)
+      expect(taDef?.content).toBe(TA_PARSED.content)
+
+      // 注销：dispose 插件 fiber 后 5 个可进化 + 固有 SKILL 全部消失。
       await pluginFiber.dispose()
       const after = await app.skills.list({})
       expect(
-        after.filter((s) => (EXPECTED_SKILLS as readonly string[]).includes(s.name)),
+        after.filter((s) => (EVOLVABLE_SKILLS as readonly string[]).includes(s.name)),
       ).toHaveLength(0)
+      expect(after.some((s) => s.name === TA)).toBe(false)
     } finally {
       await toolsFiber.dispose()
       rmSync(dir, { recursive: true, force: true })
@@ -337,31 +379,38 @@ describe('[验收5] 真实装载后发现 6 个 skill', () => {
 })
 
 /* ================================================================== *
- * 验收 6：计数表述同步为 6
+ * 验收 6：计数 / 分野表述同步（5 可进化 + 1 固有）
  * ================================================================== */
 
-describe('[验收6] index.ts / README.md / plugin.ts 计数表述为 6', () => {
+describe('[验收6] index.ts / README.md / plugin.ts 表述同步（5 可进化 + 1 固有）', () => {
   const read = (rel: string): string => readFileSync(join(PROJECT_ROOT, rel), 'utf8')
 
-  it('src/skills/index.ts 注释计数为 6，且不再出现「5 个 …SKILL」', () => {
+  it('src/skills/index.ts：区分「可进化 / 固有」，含 TASK_AUTHORSHIP_SKILL_NAME 与 5 个清单', () => {
     const src = read('src/skills/index.ts')
-    expect(src).toMatch(/6 个/)
-    expect(src).not.toMatch(/5 个(运行时)?\s*SKILL/)
-    expect(src).toContain("'task-authorship'")
+    expect(src).toMatch(/可进化/)
+    expect(src).toMatch(/固有/)
+    expect(src).toContain('task-authorship')
+    expect(src).toContain('TASK_AUTHORSHIP_SKILL_NAME')
+    expect(src).toContain('loadTaskAuthorshipMarkdown')
+    expect(src).toMatch(/5 个/)
   })
 
-  it('src/skills/README.md 计数为 6，且不再出现「5 个 …SKILL」', () => {
+  it('src/skills/README.md：区分「可进化 / 固有」，含 task-authorship', () => {
     const src = read('src/skills/README.md')
-    expect(src).toMatch(/6 个/)
-    expect(src).not.toMatch(/5 个/)
+    expect(src).toMatch(/可进化/)
+    expect(src).toMatch(/固有/)
     expect(src).toContain('task-authorship')
+    expect(src).toMatch(/5 个/)
   })
 
-  it('src/plugin.ts 注释计数为 6，且不再出现「5 个技术面 SKILL」', () => {
+  it('src/plugin.ts：区分「可进化 / 固有」，并静态注册 task-authorship', () => {
     const src = read('src/plugin.ts')
-    expect(src).toMatch(/6 个技术面 SKILL/)
-    expect(src).not.toMatch(/5 个技术面 SKILL/)
+    expect(src).toMatch(/可进化/)
+    expect(src).toMatch(/固有/)
     expect(src).toContain('task-authorship')
+    // 静态注册接线：provider（可进化）+ 固有注册对象 + provider 名。
+    expect(src).toContain('createIntrinsicSkillRegistration')
+    expect(src).toContain('mountSkillFilesystemProvider')
   })
 })
 
@@ -370,7 +419,7 @@ describe('[验收6] index.ts / README.md / plugin.ts 计数表述为 6', () => {
  * ================================================================== */
 
 describe('[验收7] task-authorship 正文标的无关', () => {
-  const body = parseSkill(TA).content
+  const body = TA_PARSED.content
 
   it('不含具体价格形态的小数（剔除 semver 版本号后）', () => {
     // 版本号（如 1.0.0 / ^22.0.0）非价格：先剔除再扫描。

@@ -177,7 +177,7 @@ describe('t100363 插件装配：21 个工具经 apply 注册', () => {
     expect(() => apply(ctx)).not.toThrow()
   })
 
-  it('tools 服务缺省时 apply 仍安全降级（SKILL 已改由 skill-filesystem provider 承担）', () => {
+  it('tools 服务缺省时 apply 仍安全降级（5 个可进化 SKILL 改由 provider 承担，仅静态注册固有 SKILL task-authorship）', () => {
     // 防 ensureSkillAssetsRepo 回落到默认 `~/.dsh-finance`（污染 home）。
     const prev = process.env.DSH_FINANCE_DATA_DIR
     process.env.DSH_FINANCE_DATA_DIR = makeTmpDataRoot()
@@ -204,9 +204,11 @@ describe('t100363 插件装配：21 个工具经 apply 注册', () => {
       } as unknown as Context
 
       expect(() => apply(ctx)).not.toThrow()
-      // 静态注册三件套已移除：不再有 `ctx.skills.register` 调用（provider 挂载
-      // 需 `ctx.plugin`，本最小 mock 无之 → 惰性加载降级，由 provider 测试覆盖）。
-      expect(registered).toHaveLength(0)
+      // 5 个可进化 SKILL 不再静态注册（provider 挂载需 `ctx.plugin`，本最小 mock
+      // 无之 → 惰性加载降级，由 provider 测试覆盖）；仅固有 SKILL task-authorship
+      // 经内置静态注册入口挂上。
+      expect(registered).toHaveLength(1)
+      expect(registered[0].name).toBe('task-authorship')
     } finally {
       if (prev === undefined) delete process.env.DSH_FINANCE_DATA_DIR
       else process.env.DSH_FINANCE_DATA_DIR = prev

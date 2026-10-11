@@ -12,7 +12,7 @@
  *   1. 策略版本链 E2E（v001→v002 / 落盘 / current 指针 / 版本不可变 / parent 冲突 / 未 init / 未设定）
  *   2. 阈值来源 E2E（front-matter → 旧 json → 默认；非法键回落且不抛）
  *   3. review_retrospect 端到端（调整策略阈值可翻转「触发检讨」结论）
- *   4. 运行时可见性（真实插件装载：工具 21 / SKILL 6）
+ *   4. 运行时可见性（真实插件装载：工具 21 / SKILL 5 可进化 + 1 固有）
  *   5. 旧功能全量回归（ledger_* / predict_* / review_*）
  *   6. Prompt/Skill 文本（advisor 6 步 + 措辞；3 skill 无残留；strategy-authorship 注册且 frontmatter 合法）
  *   7. 契约未变（顶层 inject 三项；cordis.patch.yml 无 diff；无新依赖）
@@ -396,11 +396,11 @@ describe('3. review_retrospect 端到端：触发检讨由策略文档阈值决�
 })
 
 /* ================================================================== *
- * 4. 运行时可见性（真实插件装载：工具 21 / SKILL 6）
+ * 4. 运行时可见性（真实插件装载：工具 21 / SKILL 5 可进化 + 1 固有）
  * ================================================================== */
 
 describe('4. 运行时可见性：真实插件装载路径', () => {
-  it('顶层 inject 契约 + 真实装载后工具 21 / SKILL 6（skill-filesystem provider）', async () => {
+  it('顶层 inject 契约 + 真实装载后工具 21 / SKILL 5 可进化（+ 1 固有，skill-filesystem provider）', async () => {
     expect(topLevelInject).toEqual(['tools', 'skills', 'fs'])
 
     process.env.DSH_FINANCE_DATA_DIR = dir
@@ -452,8 +452,8 @@ describe('4. 运行时可见性：真实插件装载路径', () => {
     delete process.env.DSH_FINANCE_DATA_DIR
   }, 20000)
 
-  it('随包种子 frontmatter 合法（6 个；strategy-authorship 在目次）', () => {
-    expect(SKILL_NAMES).toHaveLength(6)
+  it('随包种子 frontmatter 合法（5 个可进化；strategy-authorship 在目次）', () => {
+    expect(SKILL_NAMES).toHaveLength(5)
     for (const n of SKILL_NAMES) {
       const parsed = parseSkillFile(
         readFileSync(join(process.cwd(), 'src/skills', n, 'SKILL.md'), 'utf8'),

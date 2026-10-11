@@ -90,7 +90,7 @@ function mkTmpRaw(): string {
   return track(mkdtempSync(join(tmpdir(), 'dsh-fin-t100419-raw-')))
 }
 
-/** 临时 dataRoot 并预置真实 skills 仓库（6 个 skill，独立 git 仓库）。 */
+/** 临时 dataRoot 并预置真实 skills 仓库（5 个可进化 skill，独立 git 仓库）。 */
 function mkSeededDataRoot(): string {
   const dir = track(mkdtempSync(join(tmpdir(), 'dsh-fin-t100419-data-')))
   const out = ensureSkillAssetsRepo({ dataRoot: dir, logger: () => {} })
@@ -330,7 +330,7 @@ describe('A · 真实热更新闭环（真实 chokidar watch）', () => {
  * B. global 层可见性（真实 scope）
  * ================================================================== */
 describe('B · provider 落在 global 层 → 任意 scope 读取方可见', () => {
-  it('B1 unscoped root 挂载 → 固定会话 scope 与 workspace→session 链 scope 均命中全部 6', async () => {
+  it('B1 unscoped root 挂载 → 固定会话 scope 与 workspace→session 链 scope 均命中全部 5', async () => {
     const dataRoot = mkSeededDataRoot()
     const ctx = await newRegistryCtx()
     const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
@@ -349,13 +349,13 @@ describe('B · provider 落在 global 层 → 任意 scope 读取方可见', () 
       ['workspace 会话', wsSessionKey],
     ] as const) {
       const all = await list(ctx, key)
-      expect(coreNames(all), `${label} 应见 6 个`).toEqual([...CORE].sort())
+      expect(coreNames(all), `${label} 应见 5 个`).toEqual([...CORE].sort())
       expect(
         all.filter((s) => CORE.includes(s.name)).every((s) => s.provider === SKILL_PROVIDER_NAME),
         `${label} 来源 provider 名`,
       ).toBe(true)
     }
-    console.log('[EVIDENCE B1] fixed-session & workspace-session scope both see 6 via %s', SKILL_PROVIDER_NAME)
+    console.log('[EVIDENCE B1] fixed-session & workspace-session scope both see 5 via %s', SKILL_PROVIDER_NAME)
 
     await fixedScope.dispose()
     await wsScope.dispose()
@@ -389,18 +389,18 @@ describe('B · provider 落在 global 层 → 任意 scope 读取方可见', () 
     const wsNames = (await list(ctx, workspaceKey)).map((s) => s.name)
     expect(wsNames).toContain('tester-scoped-skill')
     expect((await list(ctx, workspaceKey)).find((s) => s.name === 'tester-scoped-skill')?.provider).toBe('fs-scoped')
-    expect(coreNames(await list(ctx, workspaceKey))).toHaveLength(6)
+    expect(coreNames(await list(ctx, workspaceKey))).toHaveLength(5)
 
-    // 无该 scope 注册的读取方看不到 scoped provider，但仍见 global 6。
+    // 无该 scope 注册的读取方看不到 scoped provider，但仍见 global 5。
     const fixedNames = (await list(ctx, fixedKey)).map((s) => s.name)
     expect(fixedNames).not.toContain('tester-scoped-skill')
     expect(coreNames(await list(ctx, fixedKey))).toEqual([...CORE].sort())
 
-    // 无 scope 的 global 视图：仅 global 6。
+    // 无 scope 的 global 视图：仅 global 5。
     const globalAll = await list(ctx)
     expect(coreNames(globalAll)).toEqual([...CORE].sort())
     expect(globalAll.map((s) => s.name)).not.toContain('tester-scoped-skill')
-    console.log('[EVIDENCE B2] ws sees scoped; fx & global do not; global still 6')
+    console.log('[EVIDENCE B2] ws sees scoped; fx & global do not; global still 5')
 
     await wsScope.dispose()
     await fixedScope.dispose()
@@ -628,7 +628,7 @@ describe('E · 卸载语义（dispose → 归零 + watch 关闭）', () => {
 
     const fsBefore = countFsWatchers()
     const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
-    expect(coreNames(await list(ctx))).toHaveLength(6)
+    expect(coreNames(await list(ctx))).toHaveLength(5)
     const fsDuring = countFsWatchers()
 
     await mount.dispose()
@@ -656,7 +656,7 @@ describe('E · 卸载语义（dispose → 归零 + watch 关闭）', () => {
 
     await waitFor(
       async () => {
-        expect(coreNames(await list(ctx))).toHaveLength(6)
+        expect(coreNames(await list(ctx))).toHaveLength(5)
       },
       { timeout: 12000, label: 'E2 sync 装配就绪' },
     )

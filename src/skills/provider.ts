@@ -8,6 +8,9 @@
  *   指向运行时数据目录 `<dataRoot>/skills`（`src/skills/repo.ts` 的独立 git 仓库），
  *   并开启 `watch` 热更新。
  *
+ * 范围：本 provider 发现的是 **5 个「可进化 SKILL」**（= `SKILL_NAMES`）。固有 SKILL
+ *   `task-authorship` 不落数据目录、不参与本 provider 发现，改由 `src/plugin.ts` 静态注册。
+ *
  * 挂载语义（已在 harness 源码核实）：
  *   - `@deepseek-ai/dsh-skill-filesystem` 是标准 cordis 插件（`name` / `inject=['skills']`
  *     / `Config` / `apply`）；其 `apply` 内部调 `ctx.skills.registerProvider(...)`，

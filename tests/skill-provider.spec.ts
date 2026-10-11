@@ -3,7 +3,7 @@
  *
  * 覆盖验收标准：
  *   1. 挂载指向 `<dataRoot>/skills` 的 provider 后，真实 `ctx.skills.list()` 能发现
- *      6 个 skill，`get()` 正文与文件内容一致；
+ *      5 个可进化 skill，`get()` 正文与文件内容一致；
  *   2. 改写某 `SKILL.md` → chokidar watch → invalidate → 再次 `list()` 取到新内容
  *      （无需重启，热更新链路成立）；
  *   3. provider 注册进**插件自身 ctx（unscoped → global 层）**，故任意 scoped 读取
@@ -32,7 +32,7 @@ const TEST_TIMEOUT = 30000
 
 const tmpDirs: string[] = []
 
-/** 建临时 dataRoot 并预置 `<dataRoot>/skills` 内的 6 个 skill（真实 git 仓库）。 */
+/** 建临时 dataRoot 并预置 `<dataRoot>/skills` 内的 5 个可进化 skill（真实 git 仓库）。 */
 function makeSeededDataRoot(): string {
   const dir = mkdtempSync(join(tmpdir(), 'dsh-finance-provider-'))
   tmpDirs.push(dir)
@@ -60,7 +60,7 @@ afterEach(() => {
 })
 
 describe('skill-filesystem provider：发现 / 正文', () => {
-  it('挂载后 list() 发现 6 个 skill，get() 正文与数据目录文件一致', async () => {
+  it('挂载后 list() 发现 5 个 skill，get() 正文与数据目录文件一致', async () => {
     const dataRoot = makeSeededDataRoot()
     const skillsDir = resolveSkillsRepoDir(dataRoot)
     const ctx = await newSkillContext()
@@ -191,7 +191,7 @@ describe('skill-filesystem provider：global 层可见性', () => {
 })
 
 describe('skill-filesystem provider：卸载', () => {
-  it('dispose 后 provider 注销，6 个 skill 从目录消失（无残留）', async () => {
+  it('dispose 后 provider 注销，5 个 skill 从目录消失（无残留）', async () => {
     const dataRoot = makeSeededDataRoot()
     const ctx = await newSkillContext()
     const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
@@ -212,7 +212,7 @@ describe('skill-filesystem provider：卸载', () => {
     // 同步入口不抛错（惰性加载 + 降级）。
     const disposeMount = mountSkillFilesystemProvider(ctx, { dataRoot })
 
-    // 等待惰性加载 + provider 就绪后即可发现 6 个 skill。
+    // 等待惰性加载 + provider 就绪后即可发现 5 个 skill。
     await vi.waitFor(
       async () => {
         const list = await ctx.skills.list({})

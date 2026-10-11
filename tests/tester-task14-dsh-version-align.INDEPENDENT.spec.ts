@@ -15,7 +15,8 @@
  *   2) 运行在**真实 @deepseek-ai/dsh-tools@0.2.0-rc.2**（node_modules 已解析
  *      0.2.0-rc.2）+ 真实 @deepseek-ai/cordis 4.0.4 的 Context 之上，并在测试
  *      内**运行时读取** node_modules 版本号作为「确实以 0.2.0-rc.2 运行」的证据。
- *   3) skills 与 systemPrompt 服务以**捕获式桩**提供，逐项核对 6 个 SKILL 与
+ *   3) skills 与 systemPrompt 服务以**捕获式桩**提供，逐项核对 5 个可进化 SKILL（provider）
+ *      与 1 个固有 SKILL（task-authorship，静态注册）与人设 section 的注册结果
  *      人设 section 的注册结果（非空桩）。
  *
  * 仅新增本测试文件，不改动 src/** 与 package.json。
@@ -70,15 +71,17 @@ const EXPECTED = {
   ],
 } as const
 const ALL_EXPECTED = Object.values(EXPECTED).flat()
-/** 6 个技术面 SKILL（注册顺序：趋势研判 → 网格策略 → 止损纪律 → 策略创作 → 分析与决策 → 任务程序创作）。 */
+/** 5 个可进化 SKILL（注册顺序：趋势研判 → 网格策略 → 止损纪律 → 策略创作 → 分析与决策）。 */
 const EXPECTED_SKILLS = [
   'trend-analysis',
   'grid-strategy',
   'stop-rule',
   'strategy-authorship',
   'analysis-decision',
-  'task-authorship',
 ] as const
+
+/** 固有 SKILL（任务程序方法论）：由 plugin 静态注册（source=runtime），不经 provider。 */
+const INTRINSIC_SKILL = 'task-authorship' as const
 /** 人设 section 契约（src/prompts/index.ts）。 */
 const ADVISOR_SECTION_NAME = 'dsh-finance:advisor'
 const ADVISOR_SECTION_ORDER = 100
@@ -107,7 +110,7 @@ function makeSystemPromptStub() {
   }
 }
 
-/** skills 捕获式桩：记录 register 调用（用于逐项核对 6 个 SKILL）。 */
+/** skills 捕获式桩：记录 register 调用（用于逐项核对 5 个可进化 SKILL + 1 个固有 SKILL）。 */
 function makeSkillsStub() {
   const registered: Array<{
     name: string
@@ -301,7 +304,7 @@ describe('Task-14 复验 B：真实构建产物（dist-server）装载与运行�
     }
   })
 
-  it('B4·★ skills 6 个正常发现（skill-filesystem provider 路径）', async () => {
+  it('B4·★ skills 5 个可进化正常发现（skill-filesystem provider 路径）+ 固有 SKILL 静态注册可见', async () => {
     const dataRoot = makeTmpDataRoot()
     process.env.DSH_FINANCE_DATA_DIR = dataRoot
     const app = new Context()
@@ -333,7 +336,11 @@ describe('Task-14 复验 B：真实构建产物（dist-server）装载与运行�
         expect(def?.description.length, `${n} description 非空`).toBeGreaterThan(0)
         expect(def?.content.length, `${n} content 非空`).toBeGreaterThan(0)
       }
-      console.log(`[EVIDENCE B4] skills discovered=6 :: ${names.join(', ')}`)
+      // 固有 SKILL task-authorship 经 apply 静态注册可见（source=runtime），不经 provider 发现。
+      const intrinsic = (await app.skills.list({})).find((s) => s.name === INTRINSIC_SKILL)
+      expect(intrinsic, '固有 SKILL 应经静态注册可见').toBeDefined()
+      expect(intrinsic?.source).toBe('runtime')
+      console.log(`[EVIDENCE B4] evolvable discovered=5 :: ${names.join(', ')}; intrinsic=${INTRINSIC_SKILL}`)
     } finally {
       await pluginFiber.dispose()
       delete process.env.DSH_FINANCE_DATA_DIR

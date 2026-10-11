@@ -3,7 +3,7 @@
  * t100420 E2E 驱动脚本（辅助，非生产代码）。
  *
  * 在**单个长驻 dsh 进程**内串起三条链路 + 固定会话能力闭环：
- *   A. 冷启动预置（全新 dataRoot）→ 6 skill + 首版 commit
+ *   A. 冷启动预置（全新 dataRoot）→ 5 个可进化 skill + 首版 commit（task-authorship 为固有 SKILL，不落盘）
  *   B. 热更新（同进程外改 SKILL.md，无需重启，下一轮生效）
  *   C. git 回滚（commit → revert，回退内容，热更新生效）
  *   D. 固定会话 investment-advisor 自身读/改 skill 文件 + git commit/revert
@@ -23,7 +23,8 @@ const HOME = homedir()
 const FIN = join(HOME, '.dsh-finance')
 const SKILLS = join(FIN, 'data', 'skills')
 const TREND = join(SKILLS, 'trend-analysis', 'SKILL.md')
-const CORE = ['trend-analysis','grid-strategy','stop-rule','strategy-authorship','analysis-decision','task-authorship']
+// 5 个「可进化 SKILL」= <dataRoot>/skills 落盘集合（固有 SKILL task-authorship 不落盘）。
+const CORE = ['trend-analysis','grid-strategy','stop-rule','strategy-authorship','analysis-decision']
 const PINNED = 'investment-advisor'
 const SENT_A = 'HOTUPDATE-E2E-SENTINEL-ALPHA'
 const SENT_B = 'CAPABILITY-E2E-SENTINEL-BETA'
