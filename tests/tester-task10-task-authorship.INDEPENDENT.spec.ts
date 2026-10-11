@@ -164,9 +164,29 @@ describe('[验收2] 正文覆盖 §10.2 全部要素', () => {
     expect(body).toMatch(/60/)
   })
 
-  it('⑧ 与定时规则配合：写程序 + task_create 注册；改逻辑动程序、改频率动 cron', () => {
+  it('⑧ 与定时规则配合：编码→测试→注册三步闭环 + 注册门禁（测试通过才注册、不通过修复再测）；改逻辑动程序、改频率动 cron', () => {
+    // 三步闭环
+    expect(body).toMatch(/编码 → 测试 → 注册/)
+    expect(body).toMatch(/写程序/)
+    expect(body).toMatch(/测试/)
+    expect(body).toMatch(/注册\s*\/\s*修复/)
+    // 注册手段与频率职责
     expect(body).toMatch(/task_create/)
-    expect(body).toMatch(/频率|cron/)
+    expect(body).toMatch(/cron/)
+    expect(body).toMatch(/改逻辑动程序/)
+    expect(body).toMatch(/改频率动 cron/)
+    // 测试要校验「两件事」
+    expect(body).toMatch(/跑得起来/)
+    expect(body).toMatch(/干的活对/)
+    expect(body).toMatch(/TaskScriptResult/)
+    expect(body).toMatch(/shouldWake/)
+    // 注册门禁纪律（不是可选项）
+    expect(body).toMatch(/测试验证通过才允许/)
+    expect(body).toMatch(/测试不通过就修复/)
+    expect(body).toMatch(/循环/)
+    // spawn subagent 委派
+    expect(body).toMatch(/subagent/)
+    expect(body).toMatch(/编码-测试-修复/)
   })
 })
 
