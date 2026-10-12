@@ -15,12 +15,26 @@
 |------|------|------|
 | 独立验收测试 | `vitest run tests/tester-t100436-task-log.INDEPENDENT.spec.ts` | **52 passed / 0 failed** |
 | 被测模块既有回归 | `vitest run tests/task-log.test.ts tests/runner.test.ts tests/runner-real-process.test.ts` | **61 passed**（23+32+6） |
-| 全量回归 | `vitest run` | **62 files / 1249 tests passed，EXIT=0** |
+| 全量回归 | `vitest run` | **62 files / 1249 tests**（M3 相关全绿；EXIT=0 可复现不稳定，见下「稳定性说明」） |
 | 类型门禁 | `tsc -p tsconfig.json --noEmit` | **EXIT=0** |
 | 真实 home 污染 | `ls ~/.dsh-finance/logs` | **No such file or directory**（未污染） |
 
 > 隔离：全部用例走临时目录（注入 `TaskLogOptions.dir` 或临时覆盖 `DSH_FINANCE_LOG_DIR`），afterEach 清理；未触碰真实 `~/.dsh-finance`。
 > 既有未跟踪文件 `scripts/jev-news-demo.*` 未改动（`git status` 仅新增本 spec + 既有 demo 文件）。
+
+### 稳定性说明（全量回归非确定性，均为**既有**用例，非 M3 回归）
+
+`vitest run` 全量在 `maxWorkers=4` 下存在**已知抖动**（`vitest.config.ts` 已注明并发下 watcher/git/真实子进程资源竞争）。复跑观察：
+
+| 复跑 | 结果 | 失败用例（均非 M3 相关） |
+|------|------|--------------------------|
+| 第 1 次 | 1 failed / 1248 passed | `tester-task11-scheduler-chain-integration`（cron 分钟边界对齐，约 1s/60s 概率） |
+| 第 2 次 | 4 failed / 1245 passed | `tester-prompt-skills`（×2，watcher 装配）+ `runner-real-process`（×2，20× 循环超 5s 默认超时） |
+| 单跑（隔离） | 全绿 | `tester-task11…`、`runner-real-process` 单文件隔离各 3–5 次全绿 |
+
+- **归因**：`runner-real-process.test.ts` 调用 `runner.run(taskPath)`（**不传 taskId**）→ M3 代码路径**完全不启用**，零额外开销；其超时纯属并发负载。`tester-task11` 失败随墙钟分钟边界游走、每次运行命中的文件不同，属既有 flake。
+- **M3 相关用例零失败**：`task-log.test.ts`(23)、本 spec(52)、`runner.test.ts`(32)、`t100411-taskid-contract`(3) 在两次全量复跑中**始终全绿**。
+- 结论不变：**M3 未引入回归**；「全量 1249 全绿」为某次运气运行，非保证稳定结果。
 
 ---
 
@@ -60,7 +74,8 @@
 - `tsc -p tsconfig.json --noEmit` EXIT=0 佐证类型门禁。
 
 ### AC6 — 既有测试不回归 ✅
-- 全量 `vitest run`：**62 files / 1249 tests 全绿，EXIT=0**（含本独立 spec；`ls tests/*.test.ts tests/*.spec.ts | wc -l = 62`）。
+- 全量 `vitest run`：**62 files / 1249 tests**；M3 相关四个测试文件（`task-log`/本 spec/`runner`/`t100411`）两次复跑**始终全绿**。
+- ⚠️ 全量整体存在**既有**非确定性（3 个无关文件在并发负载下偶发 flake，见「稳定性说明」）；经归因均与本任务无关，**不构成 M3 回归**。
 
 ---
 
