@@ -13,7 +13,8 @@
  *   2. **JSONL 记录形状**（§4.2）：`{ ts, level, name, msg, args?, pid, origin }`。
  *      `ts` 为 `message.ts`（epoch ms）转 ISO；`msg` 由 `message.args` 的 printf 风格
  *      首参展开；`args` 为结构化附加数据（M1 门面把 `meta` 作为第二参传入）。
- *      本期不填 `sessionId/taskId/traceId`（M4 trace / M5 去敏 / M3 任务进程日志另属他期）。
+ *      写盘前经 M5 {@link ./redact.js} 的 {@link redactRecord} 做**字段级去敏**（`msg` 文本级 /
+ *      `args` 深遍历）；`sessionId/taskId/traceId` 由 M4 trace 上下文自动并入 `meta`。
  *   3. **按天轮转**：文件名带日期（`message.ts` 的 UTC 日期）→ 跨天自然新开当日文件；
  *      同日若当前文件已达阈值 `DSH_FINANCE_LOG_MAX_SIZE`（默认 50 MB），则递增后缀
  *      `-1`、`-2`… 选下一个未达阈值的文件。
@@ -38,6 +39,9 @@
  *      `name === p` 或 `name` 以 `p + ':'` 为前缀（子 scope），`p ∈ options.names`
  *      （默认 `['dsh-finance']`）。与上面的级别过滤**叠加**（两者都满足才落盘）。
  *
+ * 8. **去敏（M5）**：写盘前对 `msg` 与 `args` 统一去敏——敏感 / 金额键值 → `[REDACTED]`、
+ *    长文本截断、`Error` 仅记 message + 前 N 行 stack。去敏口径见 `src/log/redact.ts`。
+ *
  * 不引第三方依赖；不改顶层 `inject`（仍 `['tools','skills','fs']`）。
  */
 import { appendFileSync, chmodSync, statSync } from 'node:fs'
@@ -48,6 +52,7 @@ import {
   resolveLogLevel,
   type LogLevel,
 } from './logger.js'
+import { redactRecord, type RedactOptions } from './redact.js'
 import { ensureFinanceLogDir, resolveFinanceLogDir } from '../paths.js'
 
 /** 环境变量：轮转 / 封顶阈值（字节）。默认 {@link DEFAULT_LOG_MAX_SIZE}。 */
@@ -81,6 +86,11 @@ export interface FileExporterOptions {
    * 匹配规则：`name === p` 或 `name` 以 `p + ':'` 为前缀。显式传入空 / 全空白数组时回落默认。
    */
   names?: string[]
+  /**
+   * 字段级去敏（M5）选项；缺省按 {@link ./redact.js} 默认口径。
+   * 写盘前经 {@link redactRecord} 对 `msg`（文本级）与 `args`（深遍历）统一去敏。
+   */
+  redact?: RedactOptions
 }
 
 /** 解析 name 白名单：显式非空数组 > 默认；剔除空 / 全空白项（防误配导致全丢弃）。 */
@@ -244,6 +254,8 @@ class FileExporter implements Exporter {
   private readonly threshold: LogLevel
   /** 接受落盘的 logger name 白名单（本插件命名空间）。 */
   private readonly names: readonly string[]
+  /** 字段级去敏选项（M5）。 */
+  private readonly redactOptions: RedactOptions | undefined
   /** 目录是否已确保存在（仅成功创建后置位，失败则下次重试）。 */
   private dirEnsured = false
   /** 已显式 chmod 为 `0o600` 的文件路径集合（避免逐行重复 chmod）。 */
@@ -254,6 +266,7 @@ class FileExporter implements Exporter {
     this.maxSize = resolveLogMaxSize(options.maxSize)
     this.threshold = resolveLogLevel(options.level)
     this.names = resolveExportNames(options.names)
+    this.redactOptions = options.redact
   }
 
   /** 单条结构化日志落地（cordis `Exporter` 契约入口）。任何异常吞掉降级。 */
@@ -280,7 +293,13 @@ class FileExporter implements Exporter {
     return LEVEL_RANK[type] <= LEVEL_RANK[this.threshold]
   }
 
-  /** 组装 JSONL 记录（§4.2 形状）。 */
+  /**
+   * 组装 JSONL 记录（§4.2 形状），并在返回前统一做**字段级去敏**（M5）。
+   *
+   * 去敏入口固定在此（写盘前）：`msg` 走文本级去敏、`args` 走深遍历去敏。
+   * 若 `args` 含循环引用，{@link redactRecord} 会抛错（默认策略），由
+   * {@link export} 的降级 `try/catch` 吞掉 → 该行静默丢弃（保持 M2 既有行为）。
+   */
   private buildRecord(message: Message): Record<string, unknown> {
     const { msg, args } = formatMessage(message.args)
     const record: Record<string, unknown> = {
@@ -292,7 +311,7 @@ class FileExporter implements Exporter {
       origin: 'host',
     }
     if (args !== undefined) record.args = args
-    return record
+    return redactRecord(record, this.redactOptions)
   }
 
   /** 幂等确保目录存在（`0o700`）；失败保持未置位以便下次重试。 */
