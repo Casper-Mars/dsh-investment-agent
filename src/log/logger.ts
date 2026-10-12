@@ -98,8 +98,15 @@ export const LOG_LEVEL_ENV = 'DSH_FINANCE_LOG_LEVEL'
 /** 默认最低日志级别。 */
 export const DEFAULT_LOG_LEVEL: LogLevel = 'info'
 
-/** 级别严重度排序（过滤用）。数值越小越严重。 */
-const LEVEL_RANK: Record<LogLevel, number> = { error: 0, warn: 1, info: 2, debug: 3 }
+/**
+ * 级别严重度排序（过滤用）。数值越小越严重。
+ *
+ * 顺序对齐技术方案《日志完善技术方案》§4.1（`error ≤ warn ≤ info ≤ debug`），
+ * 与 cordis `LoggerLevel` 的**数值**序（`ERROR=0, INFO=1, WARN=2, DEBUG=3`）**不同**
+ * （info / warn 相反）。凡按方案严重度过滤（如 M2 文件 exporter）都应复用本表，
+ * 避免两处口径漂移。
+ */
+export const LEVEL_RANK: Record<LogLevel, number> = { error: 0, warn: 1, info: 2, debug: 3 }
 
 /** 全部合法级别（用于环境变量解析）。 */
 const LEVELS: readonly LogLevel[] = ['error', 'warn', 'info', 'debug']

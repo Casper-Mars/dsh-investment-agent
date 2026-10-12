@@ -38,6 +38,7 @@ import { applyAdvisorPrompt } from './prompts/index.js'
 import { applyScheduler } from './scheduler/index.js'
 import { applySessionEnsure } from './session-ensure.js'
 import { createFinanceLogger } from './log/logger.js'
+import { createFileExporter } from './log/file-exporter.js'
 
 export { PINNED_SESSION_ID, type SessionPersistenceLike, type PinnedSessionId } from './session.js'
 export {
@@ -116,6 +117,21 @@ export function apply(ctx: Context): void {
   const logSkills = logger.child('skills')
   const logSession = logger.child('session')
   const logScheduler = logger.child('scheduler')
+
+  // ---- 文件落地 exporter（M2「文件落地」）：追加注册，早于业务装配 -------
+  // 经 `ctx.logger.exporter(...)` **追加**一个 JSONL 文件 exporter（宿主既有 exporter
+  // 不受影响）；注销器已绑定 ctx.effect，fiber 卸载时自动注销。注册失败 / ctx.logger
+  // 不可用（如最小 mock 上下文）→ 记日志、降级不抛，不中断插件装载。
+  // 注意：本行置于下方「插件加载」info 之前，使装载日志也能落入文件。
+  try {
+    if (nativeLogger && typeof nativeLogger.exporter === 'function') {
+      nativeLogger.exporter(createFileExporter())
+    } else {
+      logger.warn('[dsh-finance] ctx.logger 不可用，跳过文件 exporter 注册（降级）')
+    }
+  } catch (err: unknown) {
+    logger.error('[dsh-finance] 文件 exporter 注册失败（降级）', { error: err })
+  }
 
   logger.info(`[dsh-finance] 插件加载：name=${name} inject=[${inject.join(', ')}]`)
 

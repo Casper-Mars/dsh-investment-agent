@@ -19,7 +19,7 @@
  * 不接触 dsh/cordis API。
  */
 import { join, resolve } from 'node:path'
-import { mkdirSync } from 'node:fs'
+import { chmodSync, mkdirSync } from 'node:fs'
 import { getFinanceHome } from './flags.js'
 
 /** 固定根目录名（位于用户主目录下）。 */
@@ -105,4 +105,49 @@ export function resolveDataRoot(explicit?: string): string {
   const env = process.env[DATA_ROOT_ENV]
   if (env && env.trim() !== '') return resolve(env)
   return ensureFinanceDataDir()
+}
+
+/**
+ * 环境变量：覆盖默认日志目录。
+ *
+ * 覆盖优先级（由 {@link resolveFinanceLogDir} 落实）：构造注入 > 本环境变量 > 默认值
+ * `~/.dsh-finance/logs`。
+ */
+export const LOG_DIR_ENV = 'DSH_FINANCE_LOG_DIR'
+
+/**
+ * 默认日志目录绝对路径：`~/.dsh-finance/logs`（与 `data/` 平级）。
+ *
+ * 覆盖优先级：**构造注入 > 环境变量 `DSH_FINANCE_LOG_DIR` > 默认值**。
+ * 纯计算，无副作用（不创建目录）；目录创建由 {@link ensureFinanceLogDir} 负责。
+ *
+ * @param explicit 构造注入的日志目录（可选）。
+ * @returns 日志目录绝对路径。
+ */
+export function resolveFinanceLogDir(explicit?: string): string {
+  if (explicit && explicit.trim() !== '') return resolve(explicit)
+  const env = process.env[LOG_DIR_ENV]
+  if (env && env.trim() !== '') return resolve(env)
+  return join(resolveFinanceHomeDir(), 'logs')
+}
+
+/**
+ * 确保日志目录存在并返回其绝对路径（默认 `~/.dsh-finance/logs`）。
+ *
+ * `mkdirSync(dir, { recursive: true, mode: 0o700 })` 幂等创建（已存在则 no-op）；
+ * 因 `mode` 会受进程 umask 影响，创建后再显式 `chmod(dir, 0o700)` 兜底，保证目录
+ * 权限严格为 `0o700`（仅属主可读写执行）。
+ *
+ * @param explicit 构造注入的日志目录（可选）；同 {@link resolveFinanceLogDir}。
+ * @returns 日志目录绝对路径。
+ */
+export function ensureFinanceLogDir(explicit?: string): string {
+  const dir = resolveFinanceLogDir(explicit)
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
+  try {
+    chmodSync(dir, 0o700)
+  } catch {
+    /* umask / 平台差异兜底：chmod 失败不致命（mkdir mode 已尽量收紧）。 */
+  }
+  return dir
 }
