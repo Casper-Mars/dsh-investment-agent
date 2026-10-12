@@ -38,11 +38,11 @@ import {
   type NoticeUserMessage,
 } from './message-source.js'
 import {
-  PINNED_SESSION_ID,
   type SessionEventLike,
   type SessionHandleLike,
   type SessionPersistenceLike,
 } from './session.js'
+import { getPinnedSessionId } from './flags.js'
 
 /**
  * 开场 notice 正文（固定文案，触发 `turn/start` 用）。
@@ -124,7 +124,7 @@ export async function isSessionBlank(
   deps: Pick<OpeningNoticeDeps, 'sessionPersistence' | 'sessionProjections' | 'pinnedId'>,
   session?: unknown,
 ): Promise<boolean | undefined> {
-  const id = deps.pinnedId ?? PINNED_SESSION_ID
+  const id = deps.pinnedId ?? getPinnedSessionId()
 
   // 1) 软取投影空白位（web 宿主）。
   try {
@@ -190,7 +190,7 @@ export async function deliverOpeningNotice(
   deps: OpeningNoticeDeps,
 ): Promise<OpeningNoticeResult> {
   const log = deps.logger ?? ((message: string) => console.log(message))
-  const id = deps.pinnedId ?? PINNED_SESSION_ID
+  const id = deps.pinnedId ?? getPinnedSessionId()
 
   // 解析投递目标 agent（同时取 live session 供投影软取）。
   let agent: OpeningNoticeAgent | undefined

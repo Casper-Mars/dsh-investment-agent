@@ -34,10 +34,10 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import {
-  PINNED_SESSION_ID,
   type PinnedSessionId,
   type SessionPersistenceLike,
 } from './session.js'
+import { getPinnedSessionId } from './flags.js'
 import {
   deliverOpeningNotice,
   type OpeningNoticeAgents,
@@ -173,7 +173,7 @@ export async function ensurePinnedSession(
   deps: SessionEnsureDeps,
 ): Promise<{ outcome: EnsureOutcome; handle: EnsureAgentHandle | undefined }> {
   const log = deps.logger ?? ((message: string) => console.log(message))
-  const id = PINNED_SESSION_ID
+  const id = getPinnedSessionId()
 
   // 默认 preset 的挂载 setup（无 preset 服务 → undefined，不挂 setup、不设 meta.agentPreset）。
   const mountSetup = mountDefaultPresetSetup(deps.agentPresets, log)
@@ -289,7 +289,7 @@ export async function attachPinnedSessionToWorkspace(
 ): Promise<void> {
   const ws =
     (await registry.resolveByPath(cwd)) ?? (await registry.create(cwd))
-  await ws.attachSession(PINNED_SESSION_ID)
+  await ws.attachSession(getPinnedSessionId())
 }
 
 /** `agentDefaultModel` 服务的最小结构替身（仅需 `currentSelection()`）。 */
@@ -408,6 +408,7 @@ function deliverOpeningNoticeSafely(
       agents,
       sessionPersistence: { open, stat: maybeStat },
       sessionProjections,
+      pinnedId: getPinnedSessionId(),
       logger: log,
     }).catch((err: unknown) => {
       log(`[dsh-finance/notice] 警告 开场 notice 投递异常：${String(err)}`)

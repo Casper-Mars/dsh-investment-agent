@@ -32,6 +32,7 @@ import type { Clock, AgentLike, AgentRegistryLike } from './types.js'
 import { RISK_DISCLAIMER } from '../tools/constants.js'
 import { createNoticeMessage, type NoticeUserMessage } from '../message-source.js'
 import { PINNED_SESSION_ID } from '../session.js'
+import { getPinnedSessionId } from '../flags.js'
 
 // ---------------------------------------------------------------------------
 // 常量
@@ -71,6 +72,8 @@ export interface WakerOptions {
   readonly wakeTextBudget?: number
   /** 冷却窗口（毫秒）；缺省 {@link DEFAULT_WAKE_COOLDOWN_MS}，`<= 0` 关闭冷却。 */
   readonly wakeCooldownMs?: number
+  /** 定点投递目标会话 id；缺省取运行期 {@link getPinnedSessionId}。 */
+  readonly targetId?: string
   /** 投递日志钩子（可选，用于诊断 / 测试观测）。 */
   readonly log?: (level: 'info' | 'warn' | 'error', message: string) => void
 }
@@ -164,6 +167,8 @@ export class Waker {
   private readonly wakeTextBudget: number
   /** 冷却窗口（毫秒，<= 0 关闭冷却）。 */
   private readonly wakeCooldownMs: number
+  /** 定点投递目标会话 id（运行期解析）。 */
+  private readonly targetId: string
   /** 投递日志钩子（注入，可空）。 */
   private readonly log: (level: 'info' | 'warn' | 'error', message: string) => void
 
@@ -180,6 +185,7 @@ export class Waker {
     this.clock = options.clock ?? createSystemClock()
     this.wakeTextBudget = options.wakeTextBudget ?? DEFAULT_WAKE_TEXT_BUDGET
     this.wakeCooldownMs = options.wakeCooldownMs ?? DEFAULT_WAKE_COOLDOWN_MS
+    this.targetId = options.targetId ?? getPinnedSessionId()
     this.log = options.log ?? NOOP_LOG
   }
 
@@ -217,9 +223,9 @@ export class Waker {
       }
 
       // 4. 定点取固定会话（§8.1）。
-      const agent = this.agents.get(WAKE_TARGET_ID)
+      const agent = this.agents.get(this.targetId)
       if (!agent || typeof agent.followup !== 'function') {
-        const reason = `[wake] 固定会话 ${WAKE_TARGET_ID} 不可达（无 followup），降级 skipped`
+        const reason = `[wake] 固定会话 ${this.targetId} 不可达（无 followup），降级 skipped`
         this.log('warn', reason)
         return { delivered: false, count: 0, targets: [], reason }
       }
@@ -239,7 +245,7 @@ export class Waker {
       try {
         agent.followup(message as unknown as Parameters<AgentLike['followup']>[0])
       } catch (err) {
-        const reason = `[wake] 投递到 ${WAKE_TARGET_ID} 异常，降级 skipped: ${String(err)}`
+        const reason = `[wake] 投递到 ${this.targetId} 异常，降级 skipped: ${String(err)}`
         this.log('error', reason)
         return { delivered: false, count: 0, targets: [], reason }
       }
@@ -250,8 +256,8 @@ export class Waker {
       return {
         delivered: true,
         count: 1,
-        targets: [WAKE_TARGET_ID],
-        reason: `[wake] 已唤醒并投递到 ${WAKE_TARGET_ID}`,
+        targets: [this.targetId],
+        reason: `[wake] 已唤醒并投递到 ${this.targetId}`,
       }
     } catch (err) {
       // 兜底降级：任何未预期异常（异常契约实现）→ skipped，不抛异常（§9.1）。

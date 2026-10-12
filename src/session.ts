@@ -8,9 +8,10 @@
  *   - agent-scoped 装配：`src/plugin.ts` 的 `apply`。
  *
  * 设计约束：
- *   - `PINNED_SESSION_ID` 是**与插件强相关的写死常量**（非配置项、非环境变量），
- *     全局唯一稳定；取插件标识 `investment-advisor`（与 `src/plugin.ts` 的
- *     `name` 一致），使「该插件独占的常驻会话」与插件身份一一对应。
+ *   - `PINNED_SESSION_ID` 是固定会话 id 的**默认值常量**（本插件标识
+ *     `investment-advisor`，与 `src/plugin.ts` 的 `name` 一致），使「该插件独占的
+ *     常驻会话」与插件身份一一对应。运行期可经环境变量 `DSH_FINANCE_SESSION_ID`
+ *     覆盖（见 `src/flags.ts` 的 `getPinnedSessionId`）；未覆盖时回落该默认值。
  *   - `SessionPersistenceLike` 是 `@deepseek-ai/dsh-session-persistence` 的
  *     `SessionPersistence` 服务的最小结构替身（结构等价，运行时即以实际源码
  *     为准），避免把该包加入本插件硬依赖（与 `src/prompts/index.ts` 的
@@ -24,12 +25,15 @@
  */
 
 /**
- * 固定会话标识：本插件专属的常驻会话 id。
+ * 固定会话标识：本插件专属的常驻会话 id 的**默认值常量**。
  *
- * **非配置项**：不读取任何配置 / 环境变量，全局唯一稳定，为
- * 「会话确保 / 唤醒定点投递」提供稳定锚点。
+ * 未覆盖时全局唯一稳定，为「会话确保 / 唤醒定点投递」提供稳定锚点。
+ *
+ * 运行期可经环境变量 `DSH_FINANCE_SESSION_ID` 覆盖（见 {@link src/flags.ts} 的
+ * {@link getPinnedSessionId}）；本常量仅作为「未覆盖时的默认值」单一事实来源，
+ * 与 `src/flags.ts` 的 {@link DEFAULT_PINNED_SESSION_ID} 保持一致。
  */
-export const PINNED_SESSION_ID = 'investment-advisor'
+export { DEFAULT_PINNED_SESSION_ID as PINNED_SESSION_ID } from './flags.js'
 
 /** 持久会话 id（`SessionId` 运行时即普通字符串，结构标注为 string）。 */
 export type PinnedSessionId = string

@@ -12,22 +12,27 @@
  * `~` 必须经 `os.homedir()` 展开为 fully-qualified 绝对路径（`workspaceRegistry.create`
  * 要求 path 必须是已存在的目录，且拒绝非全限定路径）。
  *
- * 本模块只依赖 `node:os` / `node:path` / `node:fs`，不新增第三方包、不接触 dsh/cordis API。
+ * 根目录可经环境变量 `DSH_FINANCE_HOME` 覆盖（见 `src/flags.ts`）；未覆盖时固定到
+ * `~/.dsh-finance`。
+ *
+ * 本模块只依赖 `node:path` / `node:fs` 及同包的 `src/flags.ts`，不新增第三方包、
+ * 不接触 dsh/cordis API。
  */
-import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { mkdirSync } from 'node:fs'
+import { getFinanceHome } from './flags.js'
 
 /** 固定根目录名（位于用户主目录下）。 */
 export const FINANCE_HOME = '.dsh-finance'
 
 /**
- * 固定根目录的绝对路径：`~/.dsh-finance`（`~` 经 `os.homedir()` 展开）。
+ * 固定根目录的绝对路径：环境变量 `DSH_FINANCE_HOME`（非空）> 默认
+ * `~/.dsh-finance`（`~` 经 `os.homedir()` 展开）。
  *
  * 纯计算，无副作用（不创建目录）。
  */
 export function resolveFinanceHomeDir(): string {
-  return join(homedir(), FINANCE_HOME)
+  return getFinanceHome()
 }
 
 /**
