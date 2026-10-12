@@ -33,6 +33,7 @@ import {
   type TaskRunnerLike,
 } from './scheduler.js'
 import { createWaker, type Waker } from './wake.js'
+import { createLeveledLogFunction } from '../log/logger.js'
 import type { AgentRegistryLike, TaskRunOutcome } from './types.js'
 
 export * from './types.js'
@@ -87,7 +88,7 @@ export interface SchedulerApplyOptions {
   wakeTextBudget?: number
   /** 唤醒冷却（ms）；默认 {@link DEFAULT_WAKE_COOLDOWN_MS}。 */
   wakeCooldownMs?: number
-  /** 调度日志钩子（level + message）。默认分流到 console。 */
+  /** 调度日志钩子（level + message）。默认走统一日志门面（{@link createLeveledLogFunction}）。 */
   logger?: (level: 'info' | 'warn' | 'error', message: string) => void
 }
 
@@ -113,13 +114,9 @@ function resolveDataRoot(explicit?: string): string {
  * @param options 覆盖项（数据根 / 唤醒预算 / 冷却 / 日志）。
  */
 export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}): void {
+  // 默认走统一日志门面；原生 logger 取自本 ctx（`ctx.logger`），缺失则门面内降级。
   const log: (level: 'info' | 'warn' | 'error', message: string) => void =
-    options.logger ??
-    ((level, message) => {
-      if (level === 'error') console.error(message)
-      else if (level === 'warn') console.warn(message)
-      else console.log(message)
-    })
+    options.logger ?? createLeveledLogFunction('dsh-finance:scheduler', ctx.logger)
 
   // ---- 1) 解析 dataRoot，并显式派生任务清单目录（不依赖 process.cwd()） ----
   const dataRoot = resolveDataRoot(options.dataRoot)

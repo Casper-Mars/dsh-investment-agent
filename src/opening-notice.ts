@@ -43,6 +43,7 @@ import {
   type SessionPersistenceLike,
 } from './session.js'
 import { getPinnedSessionId } from './flags.js'
+import { createLogFunction } from './log/logger.js'
 
 /**
  * 开场 notice 正文（固定文案，触发 `turn/start` 用）。
@@ -96,7 +97,7 @@ export interface OpeningNoticeDeps {
   sessionProjections?: SessionProjectionsLike
   /** 投递目标会话 id（默认 `PINNED_SESSION_ID`）。 */
   pinnedId?: string
-  /** 日志（默认 `console.log`）。 */
+  /** 日志（默认走统一日志门面，info 级）。 */
   logger?: (message: string) => void
 }
 
@@ -189,7 +190,7 @@ export type OpeningNoticeResult =
 export async function deliverOpeningNotice(
   deps: OpeningNoticeDeps,
 ): Promise<OpeningNoticeResult> {
-  const log = deps.logger ?? ((message: string) => console.log(message))
+  const log = deps.logger ?? createLogFunction('dsh-finance:notice')
   const id = deps.pinnedId ?? getPinnedSessionId()
 
   // 解析投递目标 agent（同时取 live session 供投影软取）。

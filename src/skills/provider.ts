@@ -29,6 +29,10 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { resolveDataRoot } from '../paths.js'
 import { resolveSkillsRepoDir } from './repo.js'
+import { createLogger } from '../log/logger.js'
+
+/** provider 装配降级日志出口（统一门面；挂载失败无 `ctx` logger 注入位，走降级实现）。 */
+const providerLog = createLogger('dsh-finance:skills')
 
 /**
  * 本插件在 `ctx.skills` 注册表中的唯一 provider 名。
@@ -128,7 +132,7 @@ export function mountSkillFilesystemProvider(
         mount = m
       })
       .catch((err: unknown) => {
-        console.error('[dsh-finance] skill-filesystem provider 挂载失败（降级）：', err)
+        providerLog.error('[dsh-finance] skill-filesystem provider 挂载失败（降级）', { error: err })
       })
 
     return async () => {

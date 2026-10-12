@@ -46,6 +46,7 @@ import { join } from 'node:path'
 import { resolveDataRoot } from '../paths.js'
 import { loadSkillMarkdown, SKILL_NAMES, type SkillName } from './index.js'
 import { parseSkillFile } from './frontmatter.js'
+import { createLogFunction } from '../log/logger.js'
 
 /** skill 资产仓库的目录名（位于 dataRoot 下）。 */
 export const SKILLS_REPO_DIRNAME = 'skills'
@@ -100,7 +101,7 @@ function defaultGitRunner(args: string[], cwd: string): string {
 export interface EnsureSkillAssetsOptions {
   /** 数据根目录（可选）；省略时依次取环境变量 `DSH_FINANCE_DATA_DIR` → 默认值。 */
   dataRoot?: string
-  /** 日志函数（默认 `console.log`）。 */
+  /** 日志函数（默认走统一日志门面，info 级）。 */
   logger?: (message: string) => void
   /** 自定义 git 执行器（仅测试注入；默认走 `node:child_process` 调系统 git）。 */
   gitRunner?: GitRunner
@@ -271,7 +272,7 @@ function provisionRepo(repoDir: string, seeds: SkillSeed[], run: GitRunner): voi
 export function ensureSkillAssetsRepo(
   options: EnsureSkillAssetsOptions = {},
 ): SkillAssetsRepoOutcome {
-  const logger = options.logger ?? ((message: string) => console.log(message))
+  const logger = options.logger ?? createLogFunction('dsh-finance:skills')
   const run = options.gitRunner ?? defaultGitRunner
 
   let dir = ''

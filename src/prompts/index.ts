@@ -19,6 +19,10 @@
  */
 import { readFileSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
+import { createLogger } from '../log/logger.js'
+
+/** 人设注入日志出口（统一门面；无 `ctx` logger 注入位，走降级实现）。 */
+const promptLog = createLogger('dsh-finance:prompt')
 
 /** advisor 人设文件在运行时的绝对路径（源码态 / 编译态相对路径一致）。 */
 const ADVISOR_URL = new URL('./advisor.md', import.meta.url)
@@ -91,7 +95,7 @@ export function applyAdvisorPrompt(ctx: Context): void {
   ctx.inject(['systemPrompt'], (promptCtx) => {
     const systemPrompt = (promptCtx as unknown as { systemPrompt?: SystemPromptLike }).systemPrompt
     if (!systemPrompt || typeof systemPrompt.section !== 'function') {
-      console.warn('[dsh-finance] systemPrompt 服务不可用，跳过 advisor 人设注入')
+      promptLog.warn('[dsh-finance] systemPrompt 服务不可用，跳过 advisor 人设注入')
       return
     }
     registerAdvisorSection(systemPrompt)

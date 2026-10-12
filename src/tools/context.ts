@@ -24,6 +24,10 @@ import { parseStrategyDoc, StrategyRegistry } from '../domain/strategy.js'
 import { JsonStore } from '../domain/store.js'
 import type { Thresholds } from '../domain/types.js'
 import { resolveDataRoot } from '../paths.js'
+import { createLogger } from '../log/logger.js'
+
+/** 策略阈值解析日志出口（统一门面；无 `ctx` 注入位，走降级实现）。 */
+const strategyLog = createLogger('dsh-finance:strategy')
 
 /**
  * 环境变量：覆盖默认数据根目录。
@@ -124,7 +128,7 @@ export function createToolContext(opts: ToolContextOptions = {}): ToolContext {
           const parsed = parseStrategyDoc(doc.text)
           // front-matter 解析失败时记录告警（否则阈值静默回落默认值，故障难排查）。
           if (parsed.parseError) {
-            console.warn(
+            strategyLog.warn(
               `[dsh-finance][strategy] ${symbol} 策略文档 front-matter 解析失败，阈值回落默认值：${parsed.parseError}`,
             )
           }
@@ -134,7 +138,7 @@ export function createToolContext(opts: ToolContextOptions = {}): ToolContext {
             rawThresholds !== undefined &&
             (rawThresholds === null || typeof rawThresholds !== 'object' || Array.isArray(rawThresholds))
           ) {
-            console.warn(
+            strategyLog.warn(
               `[dsh-finance][strategy] ${symbol} 策略文档 thresholds 字段形态非法（应为对象），已忽略并回落默认值：${JSON.stringify(rawThresholds)}`,
             )
           }
@@ -143,7 +147,7 @@ export function createToolContext(opts: ToolContextOptions = {}): ToolContext {
         }
       } catch (err) {
         // 策略文档不可读/解析异常：记录后降级到旧表。
-        console.warn(
+        strategyLog.warn(
           `[dsh-finance][strategy] ${symbol} 策略文档读取异常，阈值回落默认值：${err instanceof Error ? err.message : String(err)}`,
         )
       }

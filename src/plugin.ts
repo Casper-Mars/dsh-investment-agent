@@ -37,6 +37,7 @@ import { mountSkillFilesystemProvider } from './skills/provider.js'
 import { applyAdvisorPrompt } from './prompts/index.js'
 import { applyScheduler } from './scheduler/index.js'
 import { applySessionEnsure } from './session-ensure.js'
+import { createFinanceLogger } from './log/logger.js'
 
 export { PINNED_SESSION_ID, type SessionPersistenceLike, type PinnedSessionId } from './session.js'
 export {
@@ -107,9 +108,16 @@ export const inject: string[] = ['tools', 'skills', 'fs']
  * @param ctx 插件上下文（已注入上述三项服务）。
  */
 export function apply(ctx: Context): void {
-  console.log(
-    `[dsh-finance] 插件加载：name=${name} inject=[${inject.join(', ')}]`,
-  )
+  // ---- 统一日志门面（M1）：最早期创建，取自 dsh 原生 `ctx.logger`；缺失则降级 ----
+  // 顶层 inject 契约不变（`ctx.logger` 是 Context 内置服务，不算顶层依赖）。
+  const nativeLogger = typeof ctx.logger === 'function' ? ctx.logger : undefined
+  const logger = createFinanceLogger({ native: nativeLogger, scope: 'dsh-finance' })
+  const logTools = logger.child('tools')
+  const logSkills = logger.child('skills')
+  const logSession = logger.child('session')
+  const logScheduler = logger.child('scheduler')
+
+  logger.info(`[dsh-finance] 插件加载：name=${name} inject=[${inject.join(', ')}]`)
 
   // ---- 14 个模型工具（惰性 import，异步注册，注销器绑定 ctx.effect） ----
   ctx.effect(() => {
@@ -119,7 +127,7 @@ export function apply(ctx: Context): void {
     // 安全降级：tools 服务不可用（最小上下文 / 装载测试）时跳过，不中断装载。
     const tools = typeof ctx.get === 'function' ? ctx.get('tools') : undefined
     if (!tools) {
-      console.warn('[dsh-finance] tools 服务不可用，跳过工具注册')
+      logTools.warn('[dsh-finance] tools 服务不可用，跳过工具注册')
     } else {
       // 惰性加载：模块图较重（context → domain → @deepseek-ai/dsh-tools），
       // 动态 import 避免拖慢插件 fiber 激活时序（参照 dsh-tasks 做法）。
@@ -129,7 +137,7 @@ export function apply(ctx: Context): void {
           if (!cancelled) disposeTools = registerAllTools(ctx)
         })
         .catch((err: unknown) => {
-          console.error('[dsh-finance] 工具注册失败：', err)
+          logTools.error('[dsh-finance] 工具注册失败', { error: err })
         })
     }
 
@@ -147,9 +155,9 @@ export function apply(ctx: Context): void {
   // 仅当其数据目录副本（<dataRoot>/skills）缺失或为空时预置；已就绪则完全 no-op。
   // 预置失败（git 不可用 / 命令失败 / 无写权限）→ 记日志、降级不抛，不中断装载。
   try {
-    ensureSkillAssetsRepo()
+    ensureSkillAssetsRepo({ logger: (message) => logSkills.info(message) })
   } catch (err: unknown) {
-    console.error('[dsh-finance] skill 资产仓库预置装配失败（降级）：', err)
+    logSkills.error('[dsh-finance] skill 资产仓库预置装配失败（降级）', { error: err })
   }
 
   // ---- skill-filesystem provider（指向 <dataRoot>/skills + watch 热更新，§任务-2） ----
@@ -159,7 +167,7 @@ export function apply(ctx: Context): void {
   try {
     mountSkillFilesystemProvider(ctx)
   } catch (err: unknown) {
-    console.error('[dsh-finance] skill-filesystem provider 装配失败（降级）：', err)
+    logSkills.error('[dsh-finance] skill-filesystem provider 装配失败（降级）', { error: err })
   }
 
   // ---- 固有 SKILL（task-authorship）静态注册（不进化，独立于 provider 发现） ----
@@ -171,14 +179,14 @@ export function apply(ctx: Context): void {
   ctx.effect(() => {
     const skills = typeof ctx.get === 'function' ? ctx.get('skills') : undefined
     if (!skills) {
-      console.warn('[dsh-finance] skills 服务不可用，跳过 task-authorship 静态注册')
+      logSkills.warn('[dsh-finance] skills 服务不可用，跳过 task-authorship 静态注册')
       return () => {}
     }
     let dispose: (() => void) | undefined
     try {
       dispose = skills.register(createIntrinsicSkillRegistration())
     } catch (err: unknown) {
-      console.error('[dsh-finance] task-authorship 静态注册失败（降级）：', err)
+      logSkills.error('[dsh-finance] task-authorship 静态注册失败（降级）', { error: err })
     }
     return () => {
       try {
@@ -191,15 +199,16 @@ export function apply(ctx: Context): void {
 
   // ---- 固定会话确保（Task-10：检查 → 恢复 → 新建，§9.5） ----
   try {
-    applySessionEnsure(ctx)
+    applySessionEnsure(ctx, { logger: (message) => logSession.info(message) })
   } catch (err: unknown) {
-    console.error('[dsh-finance] 会话确保装配失败：', err)
+    logSession.error('[dsh-finance] 会话确保装配失败', { error: err })
   }
 
   // ---- 定时任务多任务调度（loader → runner → waker 编排 + 7 工具，§4.3） ----
   try {
+    // scheduler 默认日志出口已统一接入门面（内部经本 ctx 取原生 logger）。
     applyScheduler(ctx)
   } catch (err: unknown) {
-    console.error('[dsh-finance] scheduler 装配失败：', err)
+    logScheduler.error('[dsh-finance] scheduler 装配失败', { error: err })
   }
 }

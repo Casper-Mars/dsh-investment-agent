@@ -38,6 +38,7 @@ import {
   type SessionPersistenceLike,
 } from './session.js'
 import { getPinnedSessionId } from './flags.js'
+import { createLogFunction } from './log/logger.js'
 import {
   deliverOpeningNotice,
   type OpeningNoticeAgents,
@@ -76,7 +77,7 @@ export interface SessionEnsureDeps {
   cwd: string
   /** `agentDefaultModel.currentSelection()` 的精简投影（仅 provider/model）。 */
   agentOptions: EnsureAgentOptions
-  /** 日志（默认 `console.log`）。 */
+  /** 日志（默认走统一日志门面，info 级）。 */
   logger?: (message: string) => void
 }
 
@@ -172,7 +173,7 @@ export type EnsureOutcome =
 export async function ensurePinnedSession(
   deps: SessionEnsureDeps,
 ): Promise<{ outcome: EnsureOutcome; handle: EnsureAgentHandle | undefined }> {
-  const log = deps.logger ?? ((message: string) => console.log(message))
+  const log = deps.logger ?? createLogFunction('dsh-finance:session')
   const id = getPinnedSessionId()
 
   // 默认 preset 的挂载 setup（无 preset 服务 → undefined，不挂 setup、不设 meta.agentPreset）。
@@ -438,7 +439,8 @@ export function applySessionEnsure(
   ctx: Context,
   options: { logger?: (message: string) => void; cwd?: string } = {},
 ): void {
-  const log = options.logger ?? ((message: string) => console.log(message))
+  // 默认走统一日志门面；原生 logger 取自本 ctx（`ctx.logger`），缺失则门面内降级。
+  const log = options.logger ?? createLogFunction('dsh-finance:session', ctx.logger)
 
   // cwd：固定到 `~/.dsh-finance`（展开后的绝对路径，目录不存在时自动创建）。
   // 这是新建会话落地的工作目录来源，也是 workspace 归属（canonical 路径）锚点；
