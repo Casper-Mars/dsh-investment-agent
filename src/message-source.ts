@@ -24,9 +24,14 @@ declare module '@deepseek-ai/dsh-llm' {
     /**
      * dsh-finance 感知唤醒 / 开场 notice 的生产者归属。
      * 消费者按 kind 保留该来源，投影据此去重。
+     *
+     * `traceId`（可选）为 M4 引入的跨进程关联锚点：唤醒消息**显式**携带，
+     * 使「触发 → 唤醒 → 研判」链路可被同一 traceId 串联（不依赖 ALS 跨进程传播）。
+     * 生产者为自有 kind，可附加自有字段；harness 原生 source 准入仅校验
+     * `kind`（非空且 ≠ `plugin`）并**保留未知归属字段**，故为向后兼容的加法扩展。
      * @persistenceAttribution
      */
-    'dsh-finance': { kind: 'dsh-finance' } & ContextFormed
+    'dsh-finance': { kind: 'dsh-finance' } & ContextFormed & { readonly traceId?: string }
   }
 }
 
@@ -41,6 +46,11 @@ export type NoticeMessageSource = {
   readonly kind: typeof PRODUCER_KIND
   readonly form: 'notice'
   readonly summary: string
+  /**
+   * 跨进程关联锚点（M4，可选）。唤醒链路经消息**显式**携带；无 trace 时
+   * **不写该字段**（保持既有 notice 形态逐字不变）。
+   */
+  readonly traceId?: string
 }
 
 /** notice 形态的 user 消息（`role: 'user'`，source 为 dsh-finance notice）。 */
@@ -54,13 +64,19 @@ export type NoticeUserMessage = UserMessage & {
  *
  * @param text 模型可见正文。
  * @param summary notice 一行摘要（≤ 120 字符）。
+ * @param traceId 可选跨进程关联锚点（M4）；缺省（`undefined`）时**不写**该字段。
  * @returns 冻结的 user 消息，`source.kind === 'dsh-finance'`、`form === 'notice'`。
  */
-export function createNoticeMessage(text: string, summary: string): NoticeUserMessage {
+export function createNoticeMessage(
+  text: string,
+  summary: string,
+  traceId?: string,
+): NoticeUserMessage {
   const source: NoticeMessageSource = {
     kind: PRODUCER_KIND,
     form: 'notice',
     summary,
+    ...(traceId === undefined ? {} : { traceId }),
   }
   return createUserMessage({
     content: [{ type: 'text', text }],

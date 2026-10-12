@@ -11,6 +11,10 @@
  *   2. **四级 + 派生 + 结构化 meta**：暴露 `error/warn/info/debug` 四级与
  *      `child(scope)` 派生命名 logger；每次调用可携带结构化 `meta`，与门面基础
  *      meta 浅合并（调用级优先）。
+ *   2.1 **trace 上下文自动合并（M4）**：单一出口 `emit()` 读取当前
+ *      `AsyncLocalStorage` 上下文（{@link getTrace}），把 `traceId/taskId/sessionId`
+ *      **自动合并进 meta**；优先级「调用级显式 meta > 当前 trace 上下文 > 基础
+ *      meta」。无上下文时**不加** trace 字段、退化为现状，绝不抛。
  *   3. **降级实现**：当 `ctx.logger` 缺失 / 形态非法（如纯单测、无宿主）时，回落到
  *      门面内极简实现（内部仍走 `console`），保证模块脱离宿主也能跑、能测。
  *      —— 方案 §10 验收第 1 条明确「统一门面内除外」，故仅本文件允许保留 `console.*`。
@@ -24,6 +28,8 @@
  *   `shouldEmit(level, threshold)` 即「级别严重度 ≤ 阈值严重度」才输出。默认 `info`
  *   放行 error / warn / info，抑制 debug。
  */
+
+import { getTrace, type TraceContext } from './trace.js'
 
 /** 日志级别。 */
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug'
@@ -146,6 +152,33 @@ function mergeMeta(base: LogMeta | undefined, extra: LogMeta | undefined): LogMe
   return { ...base, ...extra }
 }
 
+/**
+ * 把当前 trace 上下文投影为日志 meta 片段（仅含**已定义**字段）。
+ *
+ * 无上下文 / 全字段缺失 → `undefined`（不产生空对象，保持「无 trace 字段」的现状）。
+ */
+function traceMeta(trace: TraceContext | undefined): LogMeta | undefined {
+  if (!trace) return undefined
+  const out: LogMeta = {}
+  if (trace.traceId !== undefined) out.traceId = trace.traceId
+  if (trace.taskId !== undefined) out.taskId = trace.taskId
+  if (trace.sessionId !== undefined) out.sessionId = trace.sessionId
+  return hasEntries(out) ? out : undefined
+}
+
+/**
+ * 合并三层 meta（M4）：基础 meta → 当前 trace 上下文 → 调用级显式 meta。
+ *
+ * 优先级：**调用级显式 meta > trace 上下文 > 基础 meta**（同名键后者覆盖前者）。
+ * 无 trace 上下文时退化为既有的「基础 ⊕ 调用级」（行为零变化）。
+ */
+function mergeEmitMeta(
+  base: LogMeta | undefined,
+  meta: LogMeta | undefined,
+): LogMeta | undefined {
+  return mergeMeta(mergeMeta(base, traceMeta(getTrace())), meta)
+}
+
 /** 判据：meta 存在且至少含一个键。 */
 function hasEntries(meta: LogMeta | undefined): meta is LogMeta {
   return meta !== undefined && Object.keys(meta).length > 0
@@ -211,7 +244,7 @@ class FinanceLoggerImpl implements FinanceLogger {
 
   /** 单一出口：native 优先；缺失则按阈值过滤后走 `console`。 */
   private emit(level: LogLevel, message: string, meta?: LogMeta): void {
-    const merged = mergeMeta(this.baseMeta, meta)
+    const merged = mergeEmitMeta(this.baseMeta, meta)
     const native = this.bound()
     if (native) {
       if (hasEntries(merged)) native[level](message, merged)

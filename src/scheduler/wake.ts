@@ -31,6 +31,7 @@
 import type { Clock, AgentLike, AgentRegistryLike } from './types.js'
 import { RISK_DISCLAIMER } from '../tools/constants.js'
 import { createNoticeMessage, type NoticeUserMessage } from '../message-source.js'
+import { getTrace } from '../log/trace.js'
 import { PINNED_SESSION_ID } from '../session.js'
 import { getPinnedSessionId } from '../flags.js'
 
@@ -197,7 +198,7 @@ export class Waker {
    *   2. buildWakeText 组装正文（data + 合规声明，§8.4）；
    *   3. 冷却检查（§9.3）：同 task_id 冷却窗口内已成功投递 → skipped；
    *   4. 定点取固定会话 {@link WAKE_TARGET_ID}；缺失 / 无 followup → skipped；
-   *   5. createNoticeMessage(text, summary) 构造消息（复用 message-source，§8.3）；
+   *   5. createNoticeMessage(text, summary, traceId) 构造消息（复用 message-source，§8.3）；
    *   6. agent.followup(...) 投递；异常 → skipped；
    *   7. 记录成功投递时刻 + 回填 targets。
    *
@@ -205,9 +206,11 @@ export class Waker {
    *
    * @param taskId  任务 id（冷却键，§9.3）。
    * @param data    任务返回的唤醒正文原文（§5.3 / §9）。
+   * @param traceId 跨进程关联锚点（M4，可选）：**显式**优先；缺省回落当前 ALS
+   *                上下文（`getTrace()?.traceId`）。二者均无 → 消息不携带该字段。
    * @returns 投递结果（成功 / 降级，均不抛异常）。
    */
-  wake(taskId: string, data: string): WakeDeliveryResult {
+  wake(taskId: string, data: string, traceId?: string): WakeDeliveryResult {
     try {
       // 1. 文本预算截断（§9.2 / §9.3 boundPayload）。
       const bounded = boundPayload(data, this.wakeTextBudget)
@@ -231,8 +234,11 @@ export class Waker {
       }
 
       // 5. 复用 message-source 构造 notice 消息（§8.3，禁用 V3 'plugin' 包装）。
+      //    跨进程关联锚点（M4）：唤醒消息**显式**携带 traceId（优先调用方显式传入，
+      //    其次当前 ALS 上下文）。无 trace 时不携带，notice 形态与既有测试逐字不变。
+      const resolvedTraceId = traceId ?? getTrace()?.traceId
       const summary = deriveSummary(bounded)
-      const message = createNoticeMessage(text, summary)
+      const message = createNoticeMessage(text, summary, resolvedTraceId)
 
       // 6. 投递。
       //

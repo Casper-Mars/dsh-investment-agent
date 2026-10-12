@@ -34,6 +34,8 @@ import {
 } from './scheduler.js'
 import { createWaker, type Waker } from './wake.js'
 import { createLeveledLogFunction } from '../log/logger.js'
+import { newTraceId, runWithTrace } from '../log/trace.js'
+import { getPinnedSessionId } from '../flags.js'
 import type { AgentRegistryLike, TaskRunOutcome } from './types.js'
 
 export * from './types.js'
@@ -239,10 +241,25 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
     },
   }
 
+  // ---- 3.5) M4：trace 上下文包裹（AsyncLocalStorage） ----
+  // 进入编排即生成 traceId，并以其包裹**整段编排**（读程序 → 装依赖 → 执行 → 唤醒投递），
+  // 使该链路的所有日志（含 runner 失败诊断、wake 投递日志）由日志门面自动带上同一
+  // traceId。跨进程边界（任务子进程 / 唤醒消息）**不依赖 ALS**：由 wake 显式携带
+  // traceId（见 wake.ts）。
+  const tracedRunner: TaskRunnerLike = {
+    async run(taskId: string, taskPath: string): Promise<TaskRunOutcome> {
+      const traceId = newTraceId()
+      return runWithTrace(
+        { traceId, taskId, sessionId: getPinnedSessionId() },
+        () => orchestratedRunner.run(taskId, taskPath),
+      )
+    },
+  }
+
   // ---- 4) 多任务独立调度引擎 ----
   const scheduler: Scheduler = createScheduler({
     store,
-    runner: orchestratedRunner,
+    runner: tracedRunner,
     log,
   })
 
