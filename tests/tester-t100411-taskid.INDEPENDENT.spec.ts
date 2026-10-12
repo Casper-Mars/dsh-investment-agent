@@ -32,8 +32,16 @@ const H = vi.hoisted(() => ({
   loader: { value: null as unknown },
   runner: { value: null as unknown },
   waker: { value: null as unknown },
-  cap: { options: null as unknown, scheduler: null as unknown },
+  cap: { options: null as unknown, scheduler: null as unknown, financeHome: '' },
 }))
+
+vi.mock('../src/paths.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/paths.js')>()
+  return {
+    ...actual,
+    resolveFinanceHomeDir: () => H.cap.financeHome,
+  }
+})
 
 vi.mock('../src/scheduler/loader.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/scheduler/loader.js')>()
@@ -235,6 +243,9 @@ const tmps: string[] = []
 function mkTmp(): string {
   const d = mkdtempSync(join(tmpdir(), 'tester-t100411-'))
   tmps.push(d)
+  const home = mkdtempSync(join(tmpdir(), 'tester-t100411-home-'))
+  tmps.push(home)
+  H.cap.financeHome = home
   return d
 }
 function putTask(dataRoot: string, t: TaskDef, entry: boolean): void {
@@ -242,14 +253,14 @@ function putTask(dataRoot: string, t: TaskDef, entry: boolean): void {
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, `${t.id}.json`), JSON.stringify(t), 'utf8')
   if (entry) {
-    const abs = resolve(dataRoot, t.task_path)
+    const abs = resolve(H.cap.financeHome, t.task_path)
     mkdirSync(dirname(abs), { recursive: true })
     writeFileSync(abs, '// independent entry\n', 'utf8')
   }
 }
 /** 只写入口文件、不写清单（用于「清单为空」场景）。 */
-function putEntryOnly(dataRoot: string, relPath: string): void {
-  const abs = resolve(dataRoot, relPath)
+function putEntryOnly(_dataRoot: string, relPath: string): void {
+  const abs = resolve(H.cap.financeHome, relPath)
   mkdirSync(dirname(abs), { recursive: true })
   writeFileSync(abs, '// independent entry\n', 'utf8')
 }
@@ -282,6 +293,7 @@ describe('tester-t100411-B 编排层：run 直用入参 taskId，不再 store.li
     H.runner.value = null
     H.waker.value = null
     H.cap.options = null
+    H.cap.financeHome = ''
     for (const d of tmps.splice(0)) {
       try {
         rmSync(d, { recursive: true, force: true })
@@ -306,7 +318,7 @@ describe('tester-t100411-B 编排层：run 直用入参 taskId，不再 store.li
     // loader 依赖安装以入参 id 调用（旧实现此处是 store 反查到的 id 或根本不调用）。
     expect(install).toHaveBeenCalledTimes(1)
     expect(install.mock.calls[0][0]).toBe('standalone')
-    expect(install.mock.calls[0][1]).toBe(resolve(dataRoot, 'tasks/standalone'))
+    expect(install.mock.calls[0][1]).toBe(resolve(H.cap.financeHome, 'tasks/standalone'))
   })
 
   it('B2 清单为空 + 入口存在 → 直接按入参 id 执行并投递（证明反查已移除）', async () => {

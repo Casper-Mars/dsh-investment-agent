@@ -41,8 +41,17 @@ const H = vi.hoisted(() => ({
     options: null as unknown,
     startCalls: 0,
     stopCalls: 0,
+    financeHome: '',
   },
 }))
+
+vi.mock('../src/paths.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/paths.js')>()
+  return {
+    ...actual,
+    resolveFinanceHomeDir: () => H.cap.financeHome,
+  }
+})
 
 vi.mock('../src/scheduler/loader.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/scheduler/loader.js')>()
@@ -180,6 +189,10 @@ const tmpDirs: string[] = []
 function mkTmp(): string {
   const d = mkdtempSync(join(tmpdir(), 'dsh-t9-'))
   tmpDirs.push(d)
+  // finance home 与 dataRoot 各自独立（任务程序在 finance home，元数据在 dataRoot）。
+  const home = mkdtempSync(join(tmpdir(), 'dsh-t9-home-'))
+  tmpDirs.push(home)
+  H.cap.financeHome = home
   return d
 }
 
@@ -190,7 +203,7 @@ function writeTask(dataRoot: string, def: Record<string, unknown>): void {
   writeFileSync(join(dir, `${String(def.id)}.json`), JSON.stringify(def), 'utf8')
   // §9.1：编排 runner 会校验任务程序入口文件存在性；默认补齐入口文件，避免被误判为
   // skipped（内容无关，runner 已被替身接管）。
-  const abs = resolve(dataRoot, String(def.task_path))
+  const abs = resolve(H.cap.financeHome, String(def.task_path))
   mkdirSync(dirname(abs), { recursive: true })
   writeFileSync(abs, '// test task entry\n', 'utf8')
 }
@@ -202,9 +215,9 @@ function writeTaskNoEntry(dataRoot: string, def: Record<string, unknown>): void 
   writeFileSync(join(dir, `${String(def.id)}.json`), JSON.stringify(def), 'utf8')
 }
 
-/** 写一个任务入口程序文件到 `<dataRoot>/<taskPath>`。 */
-function writeProgram(dataRoot: string, taskPath: string, content: string): void {
-  const abs = resolve(dataRoot, taskPath)
+/** 写一个任务入口程序文件到 `<financeHome>/<taskPath>`。 */
+function writeProgram(_dataRoot: string, taskPath: string, content: string): void {
+  const abs = resolve(H.cap.financeHome, taskPath)
   mkdirSync(dirname(abs), { recursive: true })
   writeFileSync(abs, content, 'utf8')
 }
@@ -243,6 +256,7 @@ afterEach(() => {
   H.loaderImpl.value = null
   H.runnerImpl.value = null
   H.wakerImpl.value = null
+  H.cap.financeHome = ''
   for (const d of tmpDirs.splice(0)) {
     try {
       rmSync(d, { recursive: true, force: true })
@@ -370,8 +384,8 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     const out = await orch().run('alpha', 'tasks/alpha/task.mjs')
 
     expect(out.kind).toBe('quiet')
-    expect(loadCalls).toEqual([['alpha', resolve(dataRoot, 'tasks/alpha')]])
-    expect(runCalls).toEqual([resolve(dataRoot, 'tasks/alpha/task.mjs')])
+    expect(loadCalls).toEqual([['alpha', resolve(H.cap.financeHome, 'tasks/alpha')]])
+    expect(runCalls).toEqual([resolve(H.cap.financeHome, 'tasks/alpha/task.mjs')])
   })
 
   // t100411 起：编排层不再按 task_path 反查 taskId（删除了「未找到 → skipped」分支），
@@ -449,7 +463,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
       enabled: true,
     })
     // 仅建目录（无 package.json）
-    mkdirSync(resolve(dataRoot, 'tasks/nopkg'), { recursive: true })
+    mkdirSync(resolve(H.cap.financeHome, 'tasks/nopkg'), { recursive: true })
     H.loaderImpl.value = null // 真实 createTaskLoader
     const run = vi.fn(async () => ({ kind: 'quiet', reason: 'x' }))
     H.runnerImpl.value = { run }
@@ -595,8 +609,8 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
       task_path: 'tasks/noentry/task.ts',
       enabled: true,
     })
-    mkdirSync(resolve(dataRoot, 'tasks/noentry'), { recursive: true })
-    writeFileSync(resolve(dataRoot, 'tasks/noentry/package.json'), '{}', 'utf8')
+    mkdirSync(resolve(H.cap.financeHome, 'tasks/noentry'), { recursive: true })
+    writeFileSync(resolve(H.cap.financeHome, 'tasks/noentry/package.json'), '{}', 'utf8')
 
     // loader 替身成功（目录 + package.json 就绪）；runner 替身不应被触达。
     H.loaderImpl.value = { installTaskDeps: vi.fn(async () => {}) }
@@ -609,7 +623,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     expect(out.kind).toBe('skipped')
     expect(out.kind).not.toBe('failed')
     expect(String(out.reason)).toMatch(/任务程序文件缺失/)
-    expect(out.detail).toBe(resolve(dataRoot, 'tasks/noentry/task.ts'))
+    expect(out.detail).toBe(resolve(H.cap.financeHome, 'tasks/noentry/task.ts'))
     expect(run).not.toHaveBeenCalled()
   })
 })

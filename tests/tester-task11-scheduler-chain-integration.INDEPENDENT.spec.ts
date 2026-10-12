@@ -38,8 +38,16 @@ const H = vi.hoisted(() => ({
   /** 覆盖 waker 工厂返回值；null → 真实 createWaker。 */
   wakerImpl: { value: null as unknown },
   /** applyScheduler 内部 createScheduler 的入参捕获（取编排 runner）。 */
-  cap: { options: null as unknown },
+  cap: { options: null as unknown, financeHome: '' },
 }))
+
+vi.mock('../src/paths.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/paths.js')>()
+  return {
+    ...actual,
+    resolveFinanceHomeDir: () => H.cap.financeHome,
+  }
+})
 
 vi.mock('../src/scheduler/loader.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/scheduler/loader.js')>()
@@ -130,6 +138,9 @@ const tmpDirs: string[] = []
 function mkTmp(): string {
   const d = mkdtempSync(join(tmpdir(), 'dsh-t11-chain-'))
   tmpDirs.push(d)
+  const home = mkdtempSync(join(tmpdir(), 'dsh-t11-chain-home-'))
+  tmpDirs.push(home)
+  H.cap.financeHome = home
   return d
 }
 
@@ -140,7 +151,7 @@ function writeTask(dataRoot: string, def: Record<string, unknown>): void {
   writeFileSync(join(dir, `${String(def.id)}.json`), JSON.stringify(def), 'utf8')
   // §9.1：编排 runner 会校验任务程序入口文件存在性；默认补齐入口文件，避免被误判为
   // skipped（内容无关，真实 TaskRunner 已由 mock Spawner 接管）。
-  const abs = resolve(dataRoot, String(def.task_path))
+  const abs = resolve(H.cap.financeHome, String(def.task_path))
   mkdirSync(dirname(abs), { recursive: true })
   writeFileSync(abs, '// test task entry\n', 'utf8')
 }
@@ -230,6 +241,7 @@ afterEach(() => {
   H.loaderImpl.value = null
   H.runnerImpl.value = null
   H.wakerImpl.value = null
+  H.cap.financeHome = ''
   for (const d of tmpDirs.splice(0)) {
     try {
       rmSync(d, { recursive: true, force: true })
@@ -278,10 +290,10 @@ describe('T11-I2 全链路（真实 loader/runner/waker + mock spawner + 假 tim
 
       // 依赖就绪：真实 loader 被调用，cwd = 任务目录。
       expect(inst.install).toHaveBeenCalledTimes(1)
-      expect(inst.install.mock.calls[0][0]).toBe(resolve(dataRoot, 'tasks/alpha'))
+      expect(inst.install.mock.calls[0][0]).toBe(resolve(H.cap.financeHome, 'tasks/alpha'))
       // 独立执行：真实 runner 起进程，路径 = 任务入口绝对路径。
       expect(sp.spawn).toHaveBeenCalledTimes(1)
-      expect(sp.spawn.mock.calls[0][0]).toBe(resolve(dataRoot, 'tasks/alpha/task.mjs'))
+      expect(sp.spawn.mock.calls[0][0]).toBe(resolve(H.cap.financeHome, 'tasks/alpha/task.mjs'))
       // 唤醒投递：定点到固定会话，正文 = data 原文 + 合规声明。
       expect(followup).toHaveBeenCalledTimes(1)
       const msg = JSON.stringify(followup.mock.calls[0][0])
@@ -329,8 +341,8 @@ describe('T11-I2 全链路（真实 loader/runner/waker + mock spawner + 假 tim
       await vi.advanceTimersByTimeAsync(61_000)
 
       const spawned = sp.spawn.mock.calls.map((c) => c[0])
-      expect(spawned).toContain(resolve(dataRoot, 'tasks/on/task.mjs'))
-      expect(spawned).not.toContain(resolve(dataRoot, 'tasks/off/task.mjs'))
+      expect(spawned).toContain(resolve(H.cap.financeHome, 'tasks/on/task.mjs'))
+      expect(spawned).not.toContain(resolve(H.cap.financeHome, 'tasks/off/task.mjs'))
     } finally {
       vi.useRealTimers()
     }

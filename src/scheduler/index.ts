@@ -23,7 +23,7 @@ import { accessSync, constants, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { DATA_ROOT_ENV, DEFAULT_DATA_DIR } from '../tools/context.js'
-import { ensureFinanceDataDir } from '../paths.js'
+import { ensureFinanceDataDir, resolveFinanceHomeDir } from '../paths.js'
 import { createTaskStore, type TaskStore } from './store.js'
 import { createTaskLoader, LoaderError, type TaskLoader } from './loader.js'
 import { createTaskRunner, type TaskRunner } from './runner.js'
@@ -154,7 +154,12 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
       //         task_path 时 store.find 只取第一个」导致按 taskId 串扰（冷却/投递错配）的隐患。
       //     旧契约因不携带 taskId 才需反查；现契约已携带，故删除反查及其「未找到 → skipped」
       //     分支。taskPath 即 TaskDef.task_path 原文（相对路径）。
-      const absTaskPath = resolve(dataRoot, taskPath)
+      // taskPath 为 TaskDef.task_path 原文，是相对于 FINANCE_HOME（`~/.dsh-finance`）的
+      // 多级相对路径（如 `tasks/002156-intraday/task.ts`），因此解析基准是 finance home，
+      // 而非 dataRoot（`~/.dsh-finance/data`）——后者会多拼一层 `data`，导致程序文件
+      // 定位到错误的 `~/.dsh-finance/data/tasks/...`。
+      const financeHome = resolveFinanceHomeDir()
+      const absTaskPath = resolve(financeHome, taskPath)
       const taskDir = dirname(absTaskPath)
 
       // 3c) 任务程序入口可读性校验（§9.1「读任务程序：程序文件缺失 / 读取失败 → skipped」）。

@@ -27,8 +27,16 @@ const H = vi.hoisted(() => ({
   loaderImpl: { value: null as unknown },
   runnerImpl: { value: null as unknown },
   wakerImpl: { value: null as unknown },
-  cap: { options: null as unknown },
+  cap: { options: null as unknown, financeHome: '' },
 }))
+
+vi.mock('../src/paths.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/paths.js')>()
+  return {
+    ...actual,
+    resolveFinanceHomeDir: () => H.cap.financeHome,
+  }
+})
 
 vi.mock('../src/scheduler/loader.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/scheduler/loader.js')>()
@@ -90,6 +98,9 @@ const tmpDirs: string[] = []
 function mkTmp(): string {
   const d = mkdtempSync(join(tmpdir(), 'dsh-t100407-'))
   tmpDirs.push(d)
+  const home = mkdtempSync(join(tmpdir(), 'dsh-t100407-home-'))
+  tmpDirs.push(home)
+  H.cap.financeHome = home
   return d
 }
 
@@ -98,7 +109,7 @@ function writeTaskDef(dataRoot: string, def: Record<string, unknown>, withEntry:
   const dir = join(dataRoot, 'tasks')
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, `${String(def.id)}.json`), JSON.stringify(def), 'utf8')
-  const abs = resolve(dataRoot, String(def.task_path))
+  const abs = resolve(H.cap.financeHome, String(def.task_path))
   mkdirSync(dirname(abs), { recursive: true })
   if (withEntry) writeFileSync(abs, '// entry\n', 'utf8')
   if (!withEntry) writeFileSync(join(dirname(abs), 'package.json'), '{}', 'utf8')
@@ -139,6 +150,7 @@ afterEach(() => {
       /* ignore */
     }
   }
+  H.cap.financeHome = ''
 })
 
 // ===========================================================================
@@ -162,7 +174,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     expect(out.kind).toBe('skipped')
     expect(out.kind).not.toBe('failed')
     expect(String(out.reason)).toContain('任务程序文件缺失')
-    expect(out.detail).toBe(resolve(dataRoot, 'tasks/noentry/task.ts'))
+    expect(out.detail).toBe(resolve(H.cap.financeHome, 'tasks/noentry/task.ts'))
     // 关键：runner 必须完全未被触达
     expect(run).not.toHaveBeenCalled()
   })
@@ -208,7 +220,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     const out = await orch().run('ok', 'tasks/ok/task.ts')
 
     expect(out.kind).toBe('quiet')
-    expect(runCalls).toEqual([resolve(dataRoot, 'tasks/ok/task.ts')])
+    expect(runCalls).toEqual([resolve(H.cap.financeHome, 'tasks/ok/task.ts')])
   })
 
   it('A4 顺序：缺失文件 + loader 会抛错 → 仍 skipped（校验先于安装，install 未被触发）', async () => {
@@ -244,7 +256,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
       { id: 'direntry', name: 'DE', cron: '0 9 * * *', task_path: 'tasks/direntry/task.ts', enabled: true },
       false,
     )
-    mkdirSync(resolve(dataRoot, 'tasks/direntry/task.ts'), { recursive: true })
+    mkdirSync(resolve(H.cap.financeHome, 'tasks/direntry/task.ts'), { recursive: true })
     const install = vi.fn(async () => {})
     H.loaderImpl.value = { installTaskDeps: install }
     const run = vi.fn(async () => ({ kind: 'quiet', reason: 'SHOULD-NOT-RUN' }))
@@ -255,7 +267,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
 
     expect(out.kind).toBe('skipped')
     expect(String(out.reason)).toContain('任务程序文件缺失或不可读')
-    expect(out.detail).toBe(resolve(dataRoot, 'tasks/direntry/task.ts'))
+    expect(out.detail).toBe(resolve(H.cap.financeHome, 'tasks/direntry/task.ts'))
     expect(install).not.toHaveBeenCalled()
     expect(run).not.toHaveBeenCalled()
   })
@@ -267,7 +279,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
       { id: 'unreadable', name: 'UR', cron: '0 9 * * *', task_path: 'tasks/unreadable/task.ts', enabled: true },
       true,
     )
-    const abs = resolve(dataRoot, 'tasks/unreadable/task.ts')
+    const abs = resolve(H.cap.financeHome, 'tasks/unreadable/task.ts')
     const { chmodSync } = await import('node:fs')
     chmodSync(abs, 0o000)
     const install = vi.fn(async () => {})

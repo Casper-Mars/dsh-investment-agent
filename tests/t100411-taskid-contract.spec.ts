@@ -38,8 +38,16 @@ const H = vi.hoisted(() => ({
   loaderImpl: { value: null as unknown },
   runnerImpl: { value: null as unknown },
   wakerImpl: { value: null as unknown },
-  cap: { scheduler: null as unknown, options: null as unknown },
+  cap: { scheduler: null as unknown, options: null as unknown, financeHome: '' },
 }))
+
+vi.mock('../src/paths.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/paths.js')>()
+  return {
+    ...actual,
+    resolveFinanceHomeDir: () => H.cap.financeHome,
+  }
+})
 
 vi.mock('../src/scheduler/loader.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/scheduler/loader.js')>()
@@ -200,6 +208,9 @@ const tmpDirs: string[] = []
 function mkTmp(): string {
   const d = mkdtempSync(join(tmpdir(), 'dsh-t100411-'))
   tmpDirs.push(d)
+  const home = mkdtempSync(join(tmpdir(), 'dsh-t100411-home-'))
+  tmpDirs.push(home)
+  H.cap.financeHome = home
   return d
 }
 /** 写任务清单记录（可选补齐入口文件）。 */
@@ -208,7 +219,7 @@ function writeTaskDef(dataRoot: string, def: Record<string, unknown>, withEntry:
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, `${String(def.id)}.json`), JSON.stringify(def), 'utf8')
   if (withEntry) {
-    const abs = resolve(dataRoot, String(def.task_path))
+    const abs = resolve(H.cap.financeHome, String(def.task_path))
     mkdirSync(dirname(abs), { recursive: true })
     writeFileSync(abs, '// entry\n', 'utf8')
   }
@@ -252,6 +263,7 @@ describe('t100411-B 编排层不再按 task_path 反查 taskId', () => {
     H.runnerImpl.value = null
     H.wakerImpl.value = null
     H.cap.options = null
+    H.cap.financeHome = ''
     for (const d of tmpDirs.splice(0)) {
       try {
         rmSync(d, { recursive: true, force: true })
@@ -289,7 +301,7 @@ describe('t100411-B 编排层不再按 task_path 反查 taskId', () => {
     const dataRoot = mkTmp()
     // 清单为空（不含任何任务），但入口文件存在。
     mkdirSync(join(dataRoot, 'tasks'), { recursive: true })
-    const abs = resolve(dataRoot, 'tasks/only-by-arg/task.ts')
+    const abs = resolve(H.cap.financeHome, 'tasks/only-by-arg/task.ts')
     mkdirSync(dirname(abs), { recursive: true })
     writeFileSync(abs, '// entry\n', 'utf8')
 
