@@ -426,6 +426,113 @@ describe('⑦ 集成：exporter 落盘去敏（无明文密钥 / 金额 / 策略
 })
 
 // ===========================================================================
+// ⑨ 文本级裸令牌扫描 + 文本级金额键 + 扩展词表（t100437 缺陷修复回归）
+// ===========================================================================
+describe('⑨ 裸令牌 / 文本级金额 / 扩展词表（缺陷修复回归）', () => {
+  it('裸 `Bearer <token>`（无键名）→ 整体遮蔽；正常短语不误伤', () => {
+    const out = redactText('upstream said: Bearer sk-ABCDEFGHIJ1234567890')
+    expect(out).not.toContain('sk-ABCDEFGHIJ1234567890')
+    expect(out).toContain(REDACTED)
+    expect(redactText('Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9')).toBe(
+      'Authorization: [REDACTED]',
+    )
+    // 形态判据（最小长度）：正常短语里的 `Bearer` 不被误伤。
+    expect(redactText('Bearer of good news')).toBe('Bearer of good news')
+  })
+
+  it('裸已知前缀令牌（sk-/sk-proj-/ghp_/xoxb-/AKIA）→ 遮蔽；词首边界不误伤正常词', () => {
+    for (const raw of [
+      'sk-ABCDEFGHIJ1234567890',
+      'sk-proj-ABCDEFGHIJ1234567890',
+      'sk-ant-ABCDEFGHIJ1234567890',
+      'ghp_ABCDEFGHIJ1234567890ABCDEFGHIJ',
+      'xoxb-123456789012-abcdefghijkl',
+      'AKIAIOSFODNN7EXAMPLE',
+    ]) {
+      const out = redactText(`request failed, key was ${raw}`)
+      expect(out, raw).not.toContain(raw)
+      expect(out, raw).toContain(REDACTED)
+    }
+    // `sk` 前紧邻字母时无词边界 → 正常词 `task-driven-…` 不被误伤。
+    expect(redactText('task-driven-architecture-2099')).toBe('task-driven-architecture-2099')
+  })
+
+  it('文本形态金额（cost=… / cost:…）；一行内多键（空格 / 逗号分隔）全部处理', () => {
+    expect(redactText('cost=12.345678')).toBe('cost=[REDACTED]')
+    expect(redactText('cost: 12.345678')).toBe('cost: [REDACTED]')
+    expect(redactText('cost=12.345678 pnl=-99999.5')).toBe('cost=[REDACTED] pnl=[REDACTED]')
+    expect(redactText('cost=1,pnl=2')).toBe('cost=[REDACTED],pnl=[REDACTED]')
+    expect(redactText('amount=98765.43 price=3.14 profit=1 value=2')).toBe(
+      'amount=[REDACTED] price=[REDACTED] profit=[REDACTED] value=[REDACTED]',
+    )
+    // 非金额 / 非敏感键不受影响。
+    expect(redactText('symbol=588000 qty=100')).toBe('symbol=588000 qty=100')
+  })
+
+  it('扩展词表（balance/total/equity/nav/cash/shares/pwd）：结构化 + 文本级均遮蔽，上下文保留', () => {
+    const keys = ['balance', 'total', 'equity', 'nav', 'cash', 'shares', 'pwd']
+    const input: Record<string, unknown> = {}
+    for (const k of keys) input[k] = 123
+    const out = redact(input) as Record<string, unknown>
+    for (const k of keys) {
+      expect(out[k], k).toBe(REDACTED)
+      expect(isSensitiveKey(k), k).toBe(true)
+    }
+    expect(redactText('balance=1000 equity=500 nav=7')).toBe(
+      'balance=[REDACTED] equity=[REDACTED] nav=[REDACTED]',
+    )
+    // 既有上下文键仍保留。
+    expect(redact({ symbol: '588000', qty: 100, side: 'buy', taskId: 't' })).toEqual({
+      symbol: '588000',
+      qty: 100,
+      side: 'buy',
+      taskId: 't',
+    })
+  })
+
+  it('Error.message / stack 内裸令牌 → 文本级遮蔽', () => {
+    const e = new Error('auth failed: Bearer sk-BAREMESSAGE1234567890')
+    const out = redact(e) as Record<string, unknown>
+    expect(String(out.message)).not.toContain('sk-BAREMESSAGE1234567890')
+
+    const e2 = new Error('boom')
+    e2.stack = [
+      'Error: boom',
+      '    at fetch (Bearer sk-BARESTACK12345678901234)',
+      '    at main (a:1)',
+    ].join('\n')
+    const out2 = redact(e2) as Record<string, unknown>
+    expect(String(out2.stack)).not.toContain('sk-BARESTACK12345678901234')
+    expect((out2.stack as string).split('\n')).toHaveLength(3)
+  })
+
+  it('裸令牌 / 文本金额经真实 exporter 落盘 → 全文泄密扫描零命中 + [REDACTED] 出现', () => {
+    const dir = mkTmp()
+    const exporter = createFileExporter({ dir, level: 'debug' })
+    exporter.export(makeMessage({ type: 'info', args: ['upstream header: Bearer sk-BARELEAK1234567890'] }))
+    exporter.export(
+      makeMessage({ type: 'warn', args: ['cost=12.345678 pnl=-99999.5 sk-job-ABC1234567890XYZ'] }),
+    )
+    exporter.export(makeMessage({ type: 'error', args: [new Error('failed with Bearer sk-ERRBARE12345678901234')] }))
+
+    const content = readLog(dir)
+    for (const leak of [
+      'sk-BARELEAK1234567890',
+      '12.345678',
+      '-99999.5',
+      'sk-ERRBARE12345678901234',
+      'sk-job-ABC1234567890XYZ',
+    ]) {
+      expect(content, `不得出现明文: ${leak}`).not.toContain(leak)
+    }
+    for (const rx of [/sk-[A-Za-z0-9]{10,}/, /Bearer\s+\S+/, /AKIA[0-9A-Z]{8,}/]) {
+      expect(rx.test(content), `泄密模式命中: ${rx}`).toBe(false)
+    }
+    expect(content).toContain(REDACTED)
+  })
+})
+
+// ===========================================================================
 // ⑧ 全局泄密扫描（落盘全文）
 // ===========================================================================
 describe('⑧ 全局泄密扫描', () => {

@@ -13,6 +13,10 @@
  *      {@link TRUNCATED_SUFFIX}；
  *   4. **错误对象**：`Error` 实例 → 仅 `{ message, stack: 前 N 行 }`
  *      （{@link DEFAULT_MAX_STACK_LINES}，默认 10）。
+ *   5. **文本级裸令牌 / 金额**：`msg` / `Error.message` / `Error.stack` 等**文本**再做
+ *      文本级去敏——「裸令牌」（`Bearer <token>` 与已知前缀 `sk-` / `ghp_` / `xoxb-` /
+ *      `AKIA` …）按**前缀 / 形态**判据整体遮蔽（不做通用高熵猜测）；敏感 / 金额键的
+ *      `key=value` / `key:value` 赋值（支持一行内多键，空格 / 逗号分隔）值遮蔽。
  *
  * 设计要点（对齐技术方案《日志完善技术方案（dsh-finance 插件）v1.0》§7 / §10）：
  *   - **纯函数、零第三方依赖**：不引任何包，也不做 IO；
@@ -54,6 +58,7 @@ export const SENSITIVE_KEY_TOKENS: readonly string[] = Object.freeze([
   'key',
   'password',
   'passwd',
+  'pwd',
   'authorization',
   'auth',
   'credential',
@@ -61,6 +66,13 @@ export const SENSITIVE_KEY_TOKENS: readonly string[] = Object.freeze([
   'apikey',
   'accesskey',
   'privatekey',
+  // 金融域常见敏感键（保守 fail-closed；结构化键级同样生效）：
+  'balance',
+  'total',
+  'equity',
+  'nav',
+  'cash',
+  'shares',
 ])
 
 /**
@@ -71,6 +83,7 @@ export const SENSITIVE_KEY_TOKENS: readonly string[] = Object.freeze([
  */
 export const AMOUNT_KEY_TOKENS: readonly string[] = Object.freeze([
   'cost',
+  'costprice',
   'amount',
   'price',
   'marketvalue',
@@ -223,21 +236,54 @@ function looksLikeStack(text: string): boolean {
 
 /**
  * 敏感键词的正则分支（含驼峰 / 下划线 / 连字符形态；长词前置，避免短词抢先匹配）。
+ *
+ * 含金融域常见敏感键（`balance/total/equity/nav/cash/shares/pwd`）——文本级词表随之扩展。
  */
-const SENSITIVE_WORD = '(?:api[_-]?key|access[_-]?key|private[_-]?key|authorization|credential|password|passwd|secret|token|cookie|auth|key)'
+const SENSITIVE_WORD =
+  '(?:api[_-]?key|access[_-]?key|private[_-]?key|authorization|credential|password|passwd|secret|token|cookie|balance|equity|shares|cash|total|auth|pwd|nav|key)'
 
 /**
- * 敏感赋值形态的正则：**仅匹配敏感键** `key[:=]value`（可选引号包裹键 / 值）。
+ * 金额 / 成本键词的正则分支（长词前置）。
  *
- * 关键：直接把「敏感词」写进模式（而非「任意键 + 回调判定」），保证在多词文本
- * （如 `Error: token=sk-xxx`）中**只吃**敏感段，不把 `Error` 当作键而吞掉其后的明文。
+ * `costPrice` 由 `cost` 回溯命中、`marketValue` / `positionValue` 由 `value` 或
+ * `market[_-]?value` / `position[_-]?value` 命中；文本级词表并入这些金额键。
+ */
+const AMOUNT_WORD = '(?:market[_-]?value|position[_-]?value|costprice|cost|amount|price|pnl|profit|value)'
+
+/**
+ * 敏感 / 金额赋值形态的正则：**仅匹配敏感或金额键** `key[:=]value`（可选引号包裹键 / 值）。
+ *
+ * 关键 1：直接把「敏感 / 金额词」写进模式（而非「任意键 + 回调判定」），保证在多词文本
+ *   （如 `Error: token=sk-xxx`）中**只吃**命中段，不把 `Error` 当作键而吞掉其后的明文。
+ * 关键 2：`g` 全局模式支持**一行内多键值**（如 `cost=1 pnl=2` / `cost=1,pnl=2`）——
+ *   值分支在空白 / 逗号 / 分号 / 右括号处收束，故每个 `key=value` 独立成一次匹配，全部处理。
  *
  * 值分支（按序）：`Bearer <token>`（含空格凭证）｜双引号串｜单引号串｜无空白裸值。
  */
 const ASSIGN_RX = new RegExp(
-  `(["']?)(${SENSITIVE_WORD})(["']?)(\\s*[:=]\\s*)("(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*'|Bearer\\s+\\S+|[^\\s,;)\\]}"']+)`,
+  `(["']?)(${SENSITIVE_WORD}|${AMOUNT_WORD})(["']?)(\\s*[:=]\\s*)("(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*'|Bearer\\s+\\S+|[^\\s,;)\\]}"']+)`,
   'gi',
 )
+
+/**
+ * 文本级「裸 `Bearer <token>`」扫描：整体替换（默认不保留 `Bearer ` 前缀）。
+ *
+ * 判据为**形态**（词边界 + 令牌字符集 + 最小长度 16），**不**用通用高熵猜测，
+ * 规避误伤形如 `Bearer of good news` 的正常文本（`of` 仅 2 字符，不达阈值）。
+ */
+const BEARER_TOKEN_RX = /\bBearer\b\s+[A-Za-z0-9\-._~+/=]{16,}/gi
+
+/**
+ * 文本级「已知前缀令牌」扫描（前缀 / 形态判据，不做通用高熵猜测）：
+ *   - `sk-` / `sk-proj-` / `sk-ant-`（OpenAI 系，含 `_` / `-` 续体，≥ 10 续字符）；
+ *   - `ghp_` / `gho_` / `ghu_` / `ghs_` / `ghr_`（GitHub 系，≥ 16）；
+ *   - `xoxb-` / `xoxp-` / `xoxa-` / `xoxo-` / `xoxs-`（Slack 系，≥ 10）；
+ *   - `AKIA…`（AWS Access Key ID，≥ 8）。
+ * 均要求 `\b` 词首边界——规避 `task-based` / `risk-driven` 之类正常词被误判
+ * （`sk` 前紧邻字母时无词边界）。
+ */
+const KNOWN_TOKEN_RX =
+  /\bsk-[A-Za-z0-9_-]{10,}|\bgh[pousr]_[A-Za-z0-9]{16,}|\bxox[bpoas]-[A-Za-z0-9-]{10,}|\bAKIA[0-9A-Z]{8,}/g
 
 /** 值包裹：被引号包裹的值保持同款引号（保持 JSON / 引号形态可读）。 */
 function wrapReplacement(value: string, replacement: string): string {
@@ -246,17 +292,34 @@ function wrapReplacement(value: string, replacement: string): string {
   return replacement
 }
 
-/** 文本级去敏：`key=value` 形态的敏感赋值 → 值替换。 */
+/** 文本级去敏：`key=value` 形态的敏感 / 金额赋值 → 值替换（一行内多键值逐个处理）。 */
 function redactAssignments(text: string, opts: ResolvedOptions): string {
   return text.replace(ASSIGN_RX, (match, q1: string, key: string, q2: string, sep: string, val: string) => {
-    if (!isSensitiveKey(key, opts.sensitiveKeyTokens)) return match
+    if (!isSensitiveKey(key, opts.sensitiveKeyTokens) && !isAmountKey(key, opts.amountKeyTokens)) return match
     return `${q1}${key}${q2}${sep}${wrapReplacement(val, opts.replacement)}`
   })
 }
 
-/** 文本级去敏实现（已解析选项）：敏感赋值 → stack 裁剪 → 长文本截断。 */
+/**
+ * 文本级去敏：裸令牌扫描 —— `Bearer <token>`（整体）与已知前缀令牌（`sk-` / `ghp_` /
+ * `xoxb-` / `AKIA` …）→ 整体替换为 `replacement`。
+ *
+ * 用函数式替换，规避 `replacement` 中含 `$` 被当作替换模式解释。
+ */
+function redactBareTokens(text: string, opts: ResolvedOptions): string {
+  return text
+    .replace(BEARER_TOKEN_RX, () => opts.replacement)
+    .replace(KNOWN_TOKEN_RX, () => opts.replacement)
+}
+
+/** 文本级去敏核心（不含 stack / 长文本裁剪）：赋值去敏 → 裸令牌扫描。 */
+function redactTextCore(text: string, opts: ResolvedOptions): string {
+  return redactBareTokens(redactAssignments(text, opts), opts)
+}
+
+/** 文本级去敏实现（已解析选项）：赋值 / 裸令牌去敏 → stack 裁剪 → 长文本截断。 */
 function redactTextWith(text: string, opts: ResolvedOptions): string {
-  const redacted = redactAssignments(text, opts)
+  const redacted = redactTextCore(text, opts)
   if (looksLikeStack(redacted)) return firstLines(redacted, opts.maxStackLines)
   return truncateText(redacted, opts.maxTextLength)
 }
@@ -266,8 +329,8 @@ function redactError(err: Error, opts: ResolvedOptions): Record<string, unknown>
   const rawMessage = typeof err.message === 'string' ? err.message : String(err)
   const out: Record<string, unknown> = { message: redactTextWith(rawMessage, opts) }
   if (typeof err.stack === 'string' && err.stack.length > 0) {
-    // stack 首行会重复 message（可能含 `key=value` 明文），故先文本去敏再裁剪行数。
-    out.stack = firstLines(redactAssignments(err.stack, opts), opts.maxStackLines)
+    // stack 首行会重复 message（可能含 `key=value` 或裸令牌明文），故先文本级去敏再裁剪行数。
+    out.stack = firstLines(redactTextCore(err.stack, opts), opts.maxStackLines)
   }
   return out
 }
