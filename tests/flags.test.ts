@@ -19,6 +19,7 @@ import {
   DEFAULT_PINNED_SESSION_ID,
   FINANCE_HOME_ENV,
   FINANCE_SESSION_ID_ENV,
+  MAX_DERIVED_SESSION_ID_LENGTH,
   getFinanceHome,
   getPinnedSessionId,
 } from '../src/flags.js'
@@ -100,12 +101,59 @@ describe('getPinnedSessionId（DSH_FINANCE_SESSION_ID）', () => {
   })
 })
 
+describe('getPinnedSessionId：home 派生（仅设 DSH_FINANCE_HOME）', () => {
+  it('仅设非默认 HOME → 自动派生为 investment-advisor-<hash>', () => {
+    process.env[FINANCE_HOME_ENV] = '/tmp/foo'
+    const id = getPinnedSessionId()
+    expect(id).not.toBe(DEFAULT_PINNED_SESSION_ID)
+    expect(id.startsWith(`${DEFAULT_PINNED_SESSION_ID}-`)).toBe(true)
+    // 8 位 hex 后缀
+    expect(id.slice(`${DEFAULT_PINNED_SESSION_ID}-`.length)).toMatch(/^[0-9a-f]{8}$/)
+  })
+
+  it('稳定性：同一 home 路径多次调用结果恒定', () => {
+    process.env[FINANCE_HOME_ENV] = '/tmp/foo'
+    const first = getPinnedSessionId()
+    const second = getPinnedSessionId()
+    expect(second).toBe(first)
+  })
+
+  it('规范化：/tmp/foo 与 /tmp/foo/ 派生出相同 id', () => {
+    process.env[FINANCE_HOME_ENV] = '/tmp/foo'
+    const a = getPinnedSessionId()
+    process.env[FINANCE_HOME_ENV] = '/tmp/foo/'
+    const b = getPinnedSessionId()
+    expect(b).toBe(a)
+  })
+
+  it('不同 home → 派生不同 id', () => {
+    process.env[FINANCE_HOME_ENV] = '/tmp/foo'
+    const a = getPinnedSessionId()
+    process.env[FINANCE_HOME_ENV] = '/tmp/bar'
+    const b = getPinnedSessionId()
+    expect(b).not.toBe(a)
+  })
+
+  it('长度受控：派生 id 长度 <= MAX_DERIVED_SESSION_ID_LENGTH', () => {
+    process.env[FINANCE_HOME_ENV] = '/tmp/foo'
+    expect(getPinnedSessionId().length).toBeLessThanOrEqual(
+      MAX_DERIVED_SESSION_ID_LENGTH,
+    )
+  })
+})
+
 describe('两个环境变量组合', () => {
   it('同时设置 → 两个 getter 均返回覆盖值', () => {
     process.env[FINANCE_HOME_ENV] = '/tmp/foo'
     process.env[FINANCE_SESSION_ID_ENV] = 'bar'
     expect(getFinanceHome()).toBe(resolve('/tmp/foo'))
     expect(getPinnedSessionId()).toBe('bar')
+  })
+
+  it('设 HOME 且设 SESSION_ID → 返回显式 SESSION_ID 值（优先级更高）', () => {
+    process.env[FINANCE_HOME_ENV] = '/tmp/foo'
+    process.env[FINANCE_SESSION_ID_ENV] = 'explicit-session'
+    expect(getPinnedSessionId()).toBe('explicit-session')
   })
 
   it('同时不设置 → 行为与现状完全一致', () => {

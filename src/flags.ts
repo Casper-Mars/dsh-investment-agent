@@ -14,6 +14,11 @@
  *
  * 优先级：环境变量（非空）> 默认值。
  *
+ * 固定会话 id 的特殊策略：显式 `DSH_FINANCE_SESSION_ID` 优先；未显式设置时，若
+ * workspace home 被 `DSH_FINANCE_HOME` 覆盖，则从该 home 确定性派生 session id
+ * （`investment-advisor-<sha256(home) 前 8 位 hex>`），从而「只设 HOME 即自动隔离
+ * session」；home 未覆盖时仍返回默认 `investment-advisor`（向后兼容）。
+ *
  * 设计约束：
  *   - **叶子模块**：只依赖 `node:os` / `node:path`（不新增第三方包、不接触
  *     dsh/cordis API、不反向依赖 `src/paths.ts`）。`paths.ts` 依赖本模块取 home 值，
@@ -25,6 +30,7 @@
  *     `src/paths.ts`）行为不受影响。
  */
 
+import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 
@@ -41,6 +47,15 @@ export const DEFAULT_FINANCE_HOME_NAME = '.dsh-finance'
 export const DEFAULT_PINNED_SESSION_ID = 'investment-advisor'
 
 /**
+ * 派生固定会话 id 的防御性长度上限（字符数）。
+ *
+ * dsh 的 `SessionId` 是「unvalidated branded string」，理论上无长度限制，且写盘时
+ * 会经 `encodeSegment` 转为安全路径段；本上限仅为保护下游任何潜在限制而设，
+ * 正常派生结果（`investment-advisor-` + 8 位 hex = 27 字符）远不会触达。
+ */
+export const MAX_DERIVED_SESSION_ID_LENGTH = 128
+
+/**
  * 运行期工作区根目录：环境变量 `DSH_FINANCE_HOME`（非空，`resolve()` 为绝对路径）
  * > 默认 `~/.dsh-finance`。
  *
@@ -53,11 +68,37 @@ export function getFinanceHome(): string {
 }
 
 /**
- * 运行期固定会话 id：环境变量 `DSH_FINANCE_SESSION_ID`（非空）> 默认
- * `investment-advisor`。
+ * 从（已 `resolve()` 规范化的）workspace home 路径确定性派生固定会话 id。
+ *
+ * 形如 `investment-advisor-<sha256(home) 前 8 位 hex>`；同一 home 路径恒定得到
+ * 同一 id（`/tmp/foo` 与 `/tmp/foo/` 经 `resolve()` 归一后一致）。
+ *
+ * 使用 `node:crypto` 的 `createHash('sha256')`（无第三方依赖），输入为绝对路径，
+ * 与随机数无关，保证确定性。最终结果按 `MAX_DERIVED_SESSION_ID_LENGTH` 截断兜底。
+ */
+function deriveSessionIdFromHome(home: string): string {
+  const digest = createHash('sha256').update(home).digest('hex').slice(0, 8)
+  const derived = `${DEFAULT_PINNED_SESSION_ID}-${digest}`
+  return derived.length > MAX_DERIVED_SESSION_ID_LENGTH
+    ? derived.slice(0, MAX_DERIVED_SESSION_ID_LENGTH)
+    : derived
+}
+
+/**
+ * 运行期固定会话 id。优先级：
+ *   1. 环境变量 `DSH_FINANCE_SESSION_ID`（非空）→ 返回其 trim 值（最高优先级）。
+ *   2. 未覆盖 home（`getFinanceHome()` 等于默认 `~/.dsh-finance`）→ 返回默认
+ *      `investment-advisor`（**向后兼容**，默认场景 id 不变，避免正式实例重启
+ *      丢失既有会话上下文）。
+ *   3. home 被显式覆盖 → 返回从 home 派生的 id
+ *      `investment-advisor-<sha256(home) 前 8 位 hex>`，实现「只设
+ *      `DSH_FINANCE_HOME` 即自动隔离 session」。
  */
 export function getPinnedSessionId(): string {
   const env = process.env[FINANCE_SESSION_ID_ENV]
   if (env && env.trim() !== '') return env.trim()
-  return DEFAULT_PINNED_SESSION_ID
+  const home = getFinanceHome()
+  const defaultHome = resolve(homedir(), DEFAULT_FINANCE_HOME_NAME)
+  if (home === defaultHome) return DEFAULT_PINNED_SESSION_ID
+  return deriveSessionIdFromHome(home)
 }
