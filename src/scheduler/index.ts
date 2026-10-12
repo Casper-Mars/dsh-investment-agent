@@ -55,6 +55,7 @@ export {
   parseLastJsonLine,
   DEFAULT_TASK_TIMEOUT_MS,
   type RunnerOptions,
+  type TaskRunOptions,
   type TimeBudget,
 } from './runner.js'
 export { createScheduler, Scheduler, type SchedulerOptions, type TaskRunnerLike } from './scheduler.js'
@@ -190,10 +191,10 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
         }
       }
 
-      // 3e) runner 独立进程执行。
+      // 3e) runner 独立进程执行。携带 taskId 以启用任务进程日志独立采集（M3）。
       let outcome: TaskRunOutcome
       try {
-        outcome = await taskRunner.run(absTaskPath)
+        outcome = await taskRunner.run(absTaskPath, undefined, { taskId })
       } catch (err) {
         // runner 异常契约实现（reject）：归为 failed，不穿透调度链。
         const detail = err instanceof Error ? err.message : String(err)

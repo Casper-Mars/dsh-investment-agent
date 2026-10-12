@@ -52,6 +52,11 @@ import type {
   TaskRunOutcome,
   TaskScriptResult,
 } from './types.js'
+import {
+  createTaskLog,
+  type TaskLogCollector,
+  type TaskLogOptions,
+} from '../log/task-log.js'
 
 // ---------------------------------------------------------------------------
 // 可注入类型契约（最小结构，对齐 types.ts 可注入风格）
@@ -79,6 +84,11 @@ export interface RunnerOptions {
   readonly spawner?: Spawner
   /** 计时预算；缺省用 {@link createNodeTimeBudget}（真实 `setTimeout`/`clearTimeout`）。 */
   readonly timeBudget?: TimeBudget
+  /**
+   * 任务进程日志采集选项（M3）；仅在 {@link TaskRunner.run} 携带 taskId 时生效。
+   * 缺省走真实实现（`~/.dsh-finance/logs/tasks/<taskId>/`）。
+   */
+  readonly taskLog?: TaskLogOptions
   /** 任务执行超时上限（毫秒），默认 60s。§9.3 */
   readonly taskTimeoutMs?: number
   /**
@@ -111,6 +121,18 @@ export const DEFAULT_TASK_TIMEOUT_MS = 60_000
  */
 export const DEFAULT_MAX_STDOUT_BYTES = 1_048_576
 
+/** {@link TaskRunner.run} 的调用级选项（M3）。 */
+export interface TaskRunOptions {
+  /**
+   * 任务 id（对应 `TaskDef.id`）。
+   *
+   * 携带时启用「任务进程日志独立采集」（M3）：stdout 非末行内容 + 全部 stderr 落盘到
+   * `<logDir>/tasks/<taskId>/<ts>-<pid>.log`。**缺失时不产生任何副作用**（既有
+   * `run(taskPath)` / `run(taskPath, args)` 调用零影响）。
+   */
+  readonly taskId?: string
+}
+
 /** 执行任务程序的 node 可执行名（真实 `child_process.spawn` 的 command）。§4.3 */
 const NODE_BIN = 'node'
 
@@ -135,6 +157,7 @@ function createNodeSpawner(): Spawner {
       return {
         stdout: child.stdout,
         stderr: child.stderr,
+        pid: child.pid,
         get exitCode() {
           return child.exitCode
         },
@@ -281,12 +304,15 @@ export class TaskRunner {
   private readonly taskTimeoutMs: number
   /** stdout 累积上限（近似按 UTF-16 码元/字节计，见 {@link DEFAULT_MAX_STDOUT_BYTES}）。 */
   private readonly maxStdoutBytes: number
+  /** 任务进程日志采集选项（M3）。 */
+  private readonly taskLogOptions: TaskLogOptions | undefined
 
   constructor(options: RunnerOptions = {}) {
     this.spawner = options.spawner ?? createNodeSpawner()
     this.timeBudget = options.timeBudget ?? createNodeTimeBudget()
     this.taskTimeoutMs = options.taskTimeoutMs ?? DEFAULT_TASK_TIMEOUT_MS
     this.maxStdoutBytes = options.maxStdoutBytes ?? DEFAULT_MAX_STDOUT_BYTES
+    this.taskLogOptions = options.taskLog
   }
 
   /**
@@ -297,15 +323,28 @@ export class TaskRunner {
    *
    * @param taskPath 任务入口文件绝对路径（对应 `TaskDef.task_path`）。
    * @param args     传给 `node` 的额外参数（可空）。
+   * @param options  调用级选项（M3）：`taskId` 携带时启用任务进程日志采集。
    * @returns 单次运行结局（quiet / woke / failed）。
    */
-  run(taskPath: string, args?: readonly string[]): Promise<TaskRunOutcome> {
+  run(
+    taskPath: string,
+    args?: readonly string[],
+    options?: TaskRunOptions,
+  ): Promise<TaskRunOutcome> {
     return new Promise<TaskRunOutcome>((resolve) => {
       // 单一 settled 守卫：三结局互斥，一旦结算，后续任何事件（exit/超时）都被挡掉。
       let settled = false
+      // 任务进程日志采集器（M3）；未携带 taskId 时保持 undefined（零副作用）。
+      let taskLog: TaskLogCollector | undefined
       const finish = (outcome: TaskRunOutcome): void => {
         if (settled) return
         settled = true
+        // 收尾任务日志：丢弃末行结果 JSON（“延迟一行”策略的最终丢弃）。
+        try {
+          taskLog?.close()
+        } catch {
+          /* 日志收尾绝不影响结局判定。 */
+        }
         resolve(outcome)
       }
 
@@ -321,6 +360,17 @@ export class TaskRunner {
         return
       }
 
+      // ---- M3：任务进程日志独立采集（旁路，仅携带 taskId 时启用） ----
+      // 不改变任何三结局/超时/超限语义：日志器任何异常均内部降级，绝不影响结局判定。
+      const taskId = options?.taskId
+      if (typeof taskId === 'string' && taskId.trim() !== '') {
+        try {
+          taskLog = createTaskLog({ taskId, pid: proc.pid }, this.taskLogOptions)
+        } catch {
+          taskLog = undefined
+        }
+      }
+
       // 超时一旦触发，进程后续任何退出都归因超时（吸取 loader 教训）。
       let timedOut = false
       // stdout 超限标志：一旦置 true，后续 data 不再累积，且 onDone 不得改变结局。
@@ -333,9 +383,15 @@ export class TaskRunner {
       // 一旦越限立即 SIGTERM 强杀并结算 failed/exec，与超时强杀语义对称。
       if (proc.stdout) {
         proc.stdout.on('data', (chunk: Buffer | string) => {
+          const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+          // M3 旁路：stdout 非末行内容落盘（“延迟一行”）。先于超限判定，保证诊断完整。
+          try {
+            taskLog?.writeStdoutChunk(text)
+          } catch {
+            /* 日志旁路绝不打断 stdout 主流程。 */
+          }
           // 已越限：停止处理后续 chunk（finish 已结算，settled 守卫会挡掉，但显式返回更省）。
           if (overflowed) return
-          const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
           const acc = accumulateStdout(stdoutBuf, text, this.maxStdoutBytes)
           stdoutBuf = acc.buffer
           if (!acc.overflowed) return
@@ -356,11 +412,32 @@ export class TaskRunner {
         })
       }
       // stderr 仅作诊断，runner 不消费其内容（任务对 runner 是黑盒）。
+      // M3：携带任务日志时，全部 stderr 落盘；否则仅排空（保持既有行为）。
       if (proc.stderr) {
-        try {
-          proc.stderr.resume()
-        } catch {
-          /* 忽略：某些 mock stderr 无 resume */
+        if (taskLog) {
+          try {
+            proc.stderr.on('data', (chunk: Buffer | string) => {
+              const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+              try {
+                taskLog?.writeStderrChunk(text)
+              } catch {
+                /* 日志旁路绝不打断 stderr 排空。 */
+              }
+            })
+          } catch {
+            /* 某些 mock stderr 无 on；退回 resume 排空。 */
+            try {
+              proc.stderr.resume()
+            } catch {
+              /* 忽略。 */
+            }
+          }
+        } else {
+          try {
+            proc.stderr.resume()
+          } catch {
+            /* 忽略：某些 mock stderr 无 resume。 */
+          }
         }
       }
 

@@ -177,6 +177,14 @@ export interface TaskProcess {
   readonly stdout: NodeJS.ReadableStream;
   /** 任务进程的 stderr 流（诊断信息）。 */
   readonly stderr: NodeJS.ReadableStream;
+  /**
+   * 子进程 pid（可选，向后兼容扩展）。
+   *
+   * 供 runner 组装任务进程日志文件名 `<ts>-<pid>.log`（M3）。真实
+   * `createNodeSpawner` 填 `child.pid`；纯 mock 可省略——缺失时文件名降级为
+   * `<ts>-unknown.log`。**可选成员**，故既有 mock 无需改动。
+   */
+  readonly pid?: number;
   /** 进程退出码（`null` 表示尚未退出或崩溃）。 */
   readonly exitCode: number | null;
   /** 强制终止进程（用于超时强杀，§9.3）。 */
