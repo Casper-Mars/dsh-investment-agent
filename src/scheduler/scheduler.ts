@@ -343,6 +343,9 @@ export class Scheduler {
    *   - 重设前先清理旧句柄（该句柄已触发，但为防 timer 实现重复回调，稳妥清掉）。
    */
   private fire(id: string, schedule: CronSchedule, taskPath: string): void {
+    // 任务到点触发：先记录 trace，保证「任务确实执行了」这一事实可观测。
+    this.log('info', `[scheduler] 任务 ${id} 触发，执行 ${taskPath}`)
+
     // 记录本次触发所属代际：finally 中仅在代际未变（执行期间未 stop/reload）时才补 timer。
     const fireEpoch = this.epoch
 
@@ -370,8 +373,10 @@ export class Scheduler {
           )
         } else if (outcome.kind === 'skipped') {
           this.log('warn', `[scheduler] 任务 ${id} 判定无效: ${outcome.reason}`)
+        } else {
+          // quiet：正常执行完成但未唤醒，也记录 trace，保证「任务确实执行过」可观测。
+          this.log('info', `[scheduler] 任务 ${id} 执行完成（未唤醒）`)
         }
-        // 'quiet' 不记录（正常静默）。
       })
       .catch((err) => {
         // runner.run 返回 rejected Promise：异常被隔离，不抛到调度链。
