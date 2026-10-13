@@ -30,9 +30,13 @@ import { registerAllTools } from '../src/tools/index.js'
 
 let dir: string
 beforeEach(() => {
+  // ledger_trade 连续竞价时段硬闸门（bc448d1）：固定系统时间到竞价时段。
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2026-10-13T10:00:00'))
   dir = mkdtempSync(join(tmpdir(), 'dsh-finance-t8-fix-'))
 })
 afterEach(() => {
+  vi.useRealTimers()
   rmSync(dir, { recursive: true, force: true })
 })
 

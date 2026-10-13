@@ -349,9 +349,12 @@ describe('[0] advisor.md 人设结构', () => {
     expect(md).toMatch(/#+\s*合规/)
   })
 
-  it('末尾（最后一个非空行）明确「本内容不构成投资建议」', () => {
+  it('末尾（最后一个非空行）以风险提示收尾，且不含已废弃的「本内容不构成投资建议」', () => {
     const lines = md.split('\n').map((l) => l.trim()).filter((l) => l.length > 0)
-    expect(lines.at(-1)).toContain('本内容不构成投资建议')
+    // 当前实现（145a784 之后）：合规板块以风险提示收尾。
+    expect(lines.at(-1)).toContain('市场有风险，决策需谨慎')
+    // 防回归：被删除的「本内容不构成投资建议」声明不应再出现。
+    expect(md).not.toContain('本内容不构成投资建议')
   })
 })
 

@@ -85,11 +85,15 @@ describe('验收 1：advisor.md 人设内容', () => {
     expect(md).toMatch(/#\s*合规/)
   })
 
-  it('末尾明确「本内容不构成投资建议」', () => {
-    expect(md).toContain('本内容不构成投资建议')
-    // 合规声明应出现在靠后位置（结构以合规收尾）。
-    const idx = md.indexOf('本内容不构成投资建议')
-    expect(idx).toBeGreaterThan(md.length * 0.6)
+  it('合规板块以风险提示收尾，且不含已废弃的「本内容不构成投资建议」', () => {
+    // 当前实现（145a784 删除冗余合规声明行之后）：advisor.md 的 # 合规 板块
+    // 以风险提示收尾，不再包含独立的「本内容不构成投资建议」声明行。
+    expect(md).toMatch(/#\s*合规/)
+    expect(md).toContain('市场有风险，决策需谨慎')
+    // 风险提示应出现在靠后位置（结构以合规收尾）。
+    expect(md.indexOf('市场有风险，决策需谨慎')).toBeGreaterThan(md.length * 0.6)
+    // 防回归：145a784 已删除的「本内容不构成投资建议」声明不应再出现。
+    expect(md).not.toContain('本内容不构成投资建议')
   })
 
   it('体现「不执行真实交易」「趋势跟随」「防守优先」等核心约束', () => {

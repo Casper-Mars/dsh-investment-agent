@@ -9,7 +9,7 @@
  *   - ledger_query(symbol, price=X)   → float_pnl = (X − avg_cost) × qty，保留 4 位小数
  *   - 即时计算，不写库（accounts.float_pnl 不被改写）
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -27,11 +27,15 @@ function accountsPath(symbol: string): string {
 }
 
 beforeEach(() => {
+  // ledger_trade 连续竞价时段硬闸门（bc448d1）：固定系统时间到竞价时段。
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2026-10-13T10:00:00'))
   dir = mkdtempSync(join(tmpdir(), 't100405-ind-'))
   ledger = new Ledger(dir)
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   rmSync(dir, { recursive: true, force: true })
 })
 

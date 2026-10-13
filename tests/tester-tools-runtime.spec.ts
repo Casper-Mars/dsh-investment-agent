@@ -186,12 +186,17 @@ let booted: Booted
 let tools: ToolBox
 
 beforeEach(async () => {
+  // ledger_trade 连续竞价时段硬闸门（bc448d1）：固定系统时间到竞价时段，
+  // 消除对真实时钟的依赖（对齐 tests/tools.test.ts 的 fake timers 做法）。
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2026-10-13T10:00:00'))
   dir = mkdtempSync(join(tmpdir(), 'dsh-fin-t4-'))
   booted = await bootRegistry(dir)
   tools = booted.tools
 })
 
 afterEach(async () => {
+  vi.useRealTimers()
   await booted.dispose()
   rmSync(dir, { recursive: true, force: true })
 })
