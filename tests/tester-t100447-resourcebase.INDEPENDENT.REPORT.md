@@ -43,7 +43,7 @@ skill-authorship => {"kind":"directory","path":"/Users/reachlucifer/project/opc/
 
 - 只 `import` 被测函数（`createIntrinsicSkillRegistration` / `createSkillAuthorshipRegistration`），配合 `node:fs/node:path` 做**语义断言**（`isAbsolute` / `basename` / `existsSync` / `isDirectory`），未硬编码整串绝对路径，也未复用 Developer 任何 spec。
 - 对抗性：显式断言 `path` 的 basename 不含 `SKILL.md`，印证指向目录而非文件。
-- 已知环境项（均与任务无关，未计入）：`tester-t100445-rename` 的 AC6 因工作区未提交改动而失败、`tester-prompt-skills` 全量并行偶发超时。
+- 已知环境项（均与任务无关，未计入）：`tester-prompt-skills` 全量并行偶发超时。
 
 ## 缺陷
 
