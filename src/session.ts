@@ -10,7 +10,7 @@
  * 设计约束：
  *   - `PINNED_SESSION_ID` 是固定会话 id 的**默认值常量**（本插件标识
  *     `investment-advisor`，与 `src/plugin.ts` 的 `name` 一致），使「该插件独占的
- *     常驻会话」与插件身份一一对应。运行期可经环境变量 `DSH_FINANCE_SESSION_ID`
+ *     常驻会话」与插件身份一一对应。运行期可经环境变量 `DSH_IA_SESSION_ID`
  *     覆盖（见 `src/flags.ts` 的 `getPinnedSessionId`）；未覆盖时回落该默认值。
  *   - `SessionPersistenceLike` 是 `@deepseek-ai/dsh-session-persistence` 的
  *     `SessionPersistence` 服务的最小结构替身（结构等价，运行时即以实际源码
@@ -29,7 +29,7 @@
  *
  * 未覆盖时全局唯一稳定，为「会话确保 / 唤醒定点投递」提供稳定锚点。
  *
- * 运行期可经环境变量 `DSH_FINANCE_SESSION_ID` 覆盖（见 {@link src/flags.ts} 的
+ * 运行期可经环境变量 `DSH_IA_SESSION_ID` 覆盖（见 {@link src/flags.ts} 的
  * {@link getPinnedSessionId}）；本常量仅作为「未覆盖时的默认值」单一事实来源，
  * 与 `src/flags.ts` 的 {@link DEFAULT_PINNED_SESSION_ID} 保持一致。
  */

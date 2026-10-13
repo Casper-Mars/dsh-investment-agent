@@ -1,5 +1,5 @@
 /**
- * dsh-finance 插件契约层 —— 金融投资专家 Agent。
+ * dsh-ia 插件契约层 —— 金融投资专家 Agent。
  *
  * 本文件负责声明 Cordis 插件三要素（`name` / `apply` / `inject`）并在
  * `apply(ctx)` 内装配运行时贡献：
@@ -117,7 +117,7 @@ export function apply(ctx: Context): void {
   // ---- 统一日志门面（M1）：最早期创建，取自 dsh 原生 `ctx.logger`；缺失则降级 ----
   // 顶层 inject 契约不变（`ctx.logger` 是 Context 内置服务，不算顶层依赖）。
   const nativeLogger = typeof ctx.logger === 'function' ? ctx.logger : undefined
-  const logger = createFinanceLogger({ native: nativeLogger, scope: 'dsh-finance' })
+  const logger = createFinanceLogger({ native: nativeLogger, scope: 'dsh-ia' })
   const logTools = logger.child('tools')
   const logSkills = logger.child('skills')
   const logSession = logger.child('session')
@@ -132,13 +132,13 @@ export function apply(ctx: Context): void {
     if (nativeLogger && typeof nativeLogger.exporter === 'function') {
       nativeLogger.exporter(createFileExporter())
     } else {
-      logger.warn('[dsh-finance] ctx.logger 不可用，跳过文件 exporter 注册（降级）')
+      logger.warn('[dsh-ia] ctx.logger 不可用，跳过文件 exporter 注册（降级）')
     }
   } catch (err: unknown) {
-    logger.error('[dsh-finance] 文件 exporter 注册失败（降级）', { error: err })
+    logger.error('[dsh-ia] 文件 exporter 注册失败（降级）', { error: err })
   }
 
-  logger.info(`[dsh-finance] 插件加载：name=${name} inject=[${inject.join(', ')}]`)
+  logger.info(`[dsh-ia] 插件加载：name=${name} inject=[${inject.join(', ')}]`)
 
   // ---- 14 个模型工具（惰性 import，异步注册，注销器绑定 ctx.effect） ----
   ctx.effect(() => {
@@ -148,7 +148,7 @@ export function apply(ctx: Context): void {
     // 安全降级：tools 服务不可用（最小上下文 / 装载测试）时跳过，不中断装载。
     const tools = typeof ctx.get === 'function' ? ctx.get('tools') : undefined
     if (!tools) {
-      logTools.warn('[dsh-finance] tools 服务不可用，跳过工具注册')
+      logTools.warn('[dsh-ia] tools 服务不可用，跳过工具注册')
     } else {
       // 惰性加载：模块图较重（context → domain → @deepseek-ai/dsh-tools），
       // 动态 import 避免拖慢插件 fiber 激活时序（参照 dsh-tasks 做法）。
@@ -158,7 +158,7 @@ export function apply(ctx: Context): void {
           if (!cancelled) disposeTools = registerAllTools(ctx)
         })
         .catch((err: unknown) => {
-          logTools.error('[dsh-finance] 工具注册失败', { error: err })
+          logTools.error('[dsh-ia] 工具注册失败', { error: err })
         })
     }
 
@@ -166,7 +166,7 @@ export function apply(ctx: Context): void {
       cancelled = true
       disposeTools?.()
     }
-  }, 'dsh-finance tools')
+  }, 'dsh-ia tools')
 
   // ---- advisor.md 人设（动态 inject systemPrompt，不改顶层 inject） ----
   applyAdvisorPrompt(ctx)
@@ -178,7 +178,7 @@ export function apply(ctx: Context): void {
   try {
     ensureSkillAssetsRepo({ logger: (message) => logSkills.info(message) })
   } catch (err: unknown) {
-    logSkills.error('[dsh-finance] skill 资产仓库预置装配失败（降级）', { error: err })
+    logSkills.error('[dsh-ia] skill 资产仓库预置装配失败（降级）', { error: err })
   }
 
   // ---- skill-filesystem provider（指向 <dataRoot>/skills + watch 热更新，§任务-2） ----
@@ -188,7 +188,7 @@ export function apply(ctx: Context): void {
   try {
     mountSkillFilesystemProvider(ctx)
   } catch (err: unknown) {
-    logSkills.error('[dsh-finance] skill-filesystem provider 装配失败（降级）', { error: err })
+    logSkills.error('[dsh-ia] skill-filesystem provider 装配失败（降级）', { error: err })
   }
 
   // ---- 固有 SKILL（task-authorship）静态注册（不进化，独立于 provider 发现） ----
@@ -200,14 +200,14 @@ export function apply(ctx: Context): void {
   ctx.effect(() => {
     const skills = typeof ctx.get === 'function' ? ctx.get('skills') : undefined
     if (!skills) {
-      logSkills.warn('[dsh-finance] skills 服务不可用，跳过 task-authorship 静态注册')
+      logSkills.warn('[dsh-ia] skills 服务不可用，跳过 task-authorship 静态注册')
       return () => {}
     }
     let dispose: (() => void) | undefined
     try {
       dispose = skills.register(createIntrinsicSkillRegistration())
     } catch (err: unknown) {
-      logSkills.error('[dsh-finance] task-authorship 静态注册失败（降级）', { error: err })
+      logSkills.error('[dsh-ia] task-authorship 静态注册失败（降级）', { error: err })
     }
     return () => {
       try {
@@ -216,7 +216,7 @@ export function apply(ctx: Context): void {
         /* ignore */
       }
     }
-  }, 'dsh-finance task-authorship skill')
+  }, 'dsh-ia task-authorship skill')
 
   // ---- 固有 SKILL（skill-authorship）静态注册（固件：编写合规 skill 的规范，不进化） ----
   // `skill-authorship` 与 `task-authorship` 同机制同生命周期：固件、不参加进化、不落
@@ -225,14 +225,14 @@ export function apply(ctx: Context): void {
   ctx.effect(() => {
     const skills = typeof ctx.get === 'function' ? ctx.get('skills') : undefined
     if (!skills) {
-      logSkills.warn('[dsh-finance] skills 服务不可用，跳过 skill-authorship 静态注册')
+      logSkills.warn('[dsh-ia] skills 服务不可用，跳过 skill-authorship 静态注册')
       return () => {}
     }
     let dispose: (() => void) | undefined
     try {
       dispose = skills.register(createSkillAuthorshipRegistration())
     } catch (err: unknown) {
-      logSkills.error('[dsh-finance] skill-authorship 静态注册失败（降级）', { error: err })
+      logSkills.error('[dsh-ia] skill-authorship 静态注册失败（降级）', { error: err })
     }
     return () => {
       try {
@@ -241,13 +241,13 @@ export function apply(ctx: Context): void {
         /* ignore */
       }
     }
-  }, 'dsh-finance skill-authorship skill')
+  }, 'dsh-ia skill-authorship skill')
 
   // ---- 固定会话确保（Task-10：检查 → 恢复 → 新建，§9.5） ----
   try {
     applySessionEnsure(ctx, { logger: (message) => logSession.info(message) })
   } catch (err: unknown) {
-    logSession.error('[dsh-finance] 会话确保装配失败', { error: err })
+    logSession.error('[dsh-ia] 会话确保装配失败', { error: err })
   }
 
   // ---- 定时任务多任务调度（loader → runner → waker 编排 + 7 工具，§4.3） ----
@@ -255,6 +255,6 @@ export function apply(ctx: Context): void {
     // scheduler 默认日志出口已统一接入门面（内部经本 ctx 取原生 logger）。
     applyScheduler(ctx)
   } catch (err: unknown) {
-    logScheduler.error('[dsh-finance] scheduler 装配失败', { error: err })
+    logScheduler.error('[dsh-ia] scheduler 装配失败', { error: err })
   }
 }

@@ -1,4 +1,4 @@
-# Tester 测试报告 —— dsh-finance tools 层（t100353）
+# Tester 测试报告 —— dsh-ia tools 层（t100353）
 
 - 被测：`src/tools/**`（16 个工具的 defineTool 契约 + output schema + 写/读形态 + 边界）
 - 方式：**真实 `@deepseek-ai/dsh-tools` ToolRuntime registry 管线**
@@ -94,7 +94,7 @@
 
 ## 复跑命令
 ```bash
-cd /Users/reachlucifer/project/opc/dsh-finance
+cd /Users/reachlucifer/project/opc/dsh-ia
 pnpm test                                              # 187 passed
 npx vitest run tests/tester-tools-runtime.spec.ts      # 26 passed（本报告依据）
 ```

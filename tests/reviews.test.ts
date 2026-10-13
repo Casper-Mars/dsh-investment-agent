@@ -22,7 +22,7 @@ const HIT: HitResult = { hitDir: true, hitRange: true, deviation: 0 }
 const MISS: HitResult = { hitDir: false, hitRange: false, deviation: 0.2 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'dsh-finance-reviews-'))
+  dir = mkdtempSync(join(tmpdir(), 'dsh-ia-reviews-'))
   reviews = new Reviews(dir)
 })
 

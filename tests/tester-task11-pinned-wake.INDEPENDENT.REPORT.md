@@ -1,6 +1,6 @@
 # Task-11（t100361）独立复验报告 —— 定点唤醒投递 + 调度仅装配一次
 
-- 被测交付物：`dsh-finance`（分支 `main`，HEAD `87b2b64` + 未提交改动）
+- 被测交付物：`dsh-ia`（分支 `main`，HEAD `87b2b64` + 未提交改动）
 - 被测改动：`src/runner/wake.ts`、`src/runner/index.ts` + 5 个测试文件同步适配
 - 执行环境：宿主机 Mac（node `Reach的MacBook Pro`），`deepseek-harness` 0.2.0-rc.2
 - 独立测试文件：`tests/tester-task11-pinned-wake.INDEPENDENT.spec.ts`（22 用例，Tester 独立构造，未复用 Developer 单测作唯一依据）
@@ -17,7 +17,7 @@
 | 3 | 固定会话不可达时固定 skip：记日志、返回投递数 0、不抛、无配置开关 | ✅ 通过 | 未命中/get 抛错/followup 抛错三种不可达均返回 0、`not.toThrow()`、日志含「固定会话不可达 / 解析唤醒目标失败」。`wake.ts`/`index.ts` 无任何 env/config 读取路径（源码硬读确认无开关） |
 | 4 | 调度只装配一次（多会话/重复触发不重复 `scheduler.start()`） | ✅ 通过 | mock `createScheduler`：effect 执行 3 次 → `start()` 恰 1 次；cleanup → `stop()` 恰 1 次 |
 | 5 | 有单测覆盖定点投递与降级 | ✅ 通过 | Developer `runner-pinned-delivery.test.ts` + 本独立测试 22 用例 + `runner-sensor.test.ts` 同步覆盖 |
-| 6 | 契约不变：顶层 `inject=['tools','skills','ptcRuntime','fs']`；`cordis.patch.yml` 未改 | ✅ 通过 | `plugin.ts` inject 未变；`git status` 7 个改动文件不含 `cordis.patch.yml`；`--dump-config` 识别 `id=dsh-finance` + inject 四项 |
+| 6 | 契约不变：顶层 `inject=['tools','skills','ptcRuntime','fs']`；`cordis.patch.yml` 未改 | ✅ 通过 | `plugin.ts` inject 未变；`git status` 7 个改动文件不含 `cordis.patch.yml`；`--dump-config` 识别 `id=dsh-ia` + inject 四项 |
 | 7 | typecheck/build EXIT=0；`pnpm test` 全绿且用例数不降 | ✅ 通过 | typecheck EXIT=0；build EXIT=0；`pnpm test` 34 文件/558 用例全绿（Developer 交付后 33/536，基线 32/529，未降） |
 
 ---
@@ -54,7 +54,7 @@
 ### C. 真实 dsh 装载回归 —— 结论：✅ 通过
 
 - `dsh plugin --profile opc-finance-verify add .` → **EXIT=0**（pnpm 233ms，Already up to date）
-- `dsh --profile opc-finance-verify --dump-config` → **EXIT=0**，末尾 `# == dsh-finance` 段识别 `id: dsh-finance` + `name: dsh-finance` + `inject: [tools, skills, ptcRuntime, fs]`（四项，与 `cordis.patch.yml` 一致）
+- `dsh --profile opc-finance-verify --dump-config` → **EXIT=0**，末尾 `# == dsh-ia` 段识别 `id: dsh-ia` + `name: dsh-ia` + `inject: [tools, skills, ptcRuntime, fs]`（四项，与 `cordis.patch.yml` 一致）
 
 ---
 
@@ -71,7 +71,7 @@ TYPECHECK_EXIT=0
 ```
 $ pnpm build
 $ tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json && node scripts/copy-assets.mjs
-[dsh-finance-assets] 共搬运 11 个资源文件到 dist-server/
+[dsh-ia-assets] 共搬运 11 个资源文件到 dist-server/
 BUILD_EXIT=0
 ```
 
@@ -94,9 +94,9 @@ ADD_EXIT=0
 
 $ dsh --profile opc-finance-verify --dump-config
 ...
-# == dsh-finance
-- id: dsh-finance
-  name: dsh-finance
+# == dsh-ia
+- id: dsh-ia
+  name: dsh-ia
   inject:
     - tools
     - skills
@@ -126,7 +126,7 @@ DUMP_EXIT=0
 独立测试 `tester-task11-pinned-wake.INDEPENDENT.spec.ts`（22 用例）分六组：
 
 1. **① 定点解析 `resolveWakeTarget`（4）**：命中/未命中/无 followup/get 抛错/自定 pinnedId。
-2. **② 定点投递 `createAgentWaker`（8）**：仅命中固定会话；payload 全字段（role/user、source.plugin='dsh-finance'、form='notice'、summary≤120 截断、单一 text 块、非空 id）；**动态解析已移除回归守卫**（registry 带 list/roots/currentInitiator 仍只投固定会话）；多会话零误投；默认 pinnedId（传 `undefined`）；未命中→0 记日志不抛；get 抛错→0 不抛；followup 抛错→0 不抛且日志含 agent id。
+2. **② 定点投递 `createAgentWaker`（8）**：仅命中固定会话；payload 全字段（role/user、source.plugin='dsh-ia'、form='notice'、summary≤120 截断、单一 text 块、非空 id）；**动态解析已移除回归守卫**（registry 带 list/roots/currentInitiator 仍只投固定会话）；多会话零误投；默认 pinnedId（传 `undefined`）；未命中→0 记日志不抛；get 抛错→0 不抛；followup 抛错→0 不抛且日志含 agent id。
 3. **③ 三条路径同走一个真实定点 waker（1）**：`createSensorRunner` + 真实 `createAgentWaker`，pulse/review/prep 均投到固定会话，各 `targets=1`，reason 序列正确。
 4. **④ 装配幂等（2）**：mock `createScheduler`，多次 effect → `start()` 恰 1 次，cleanup → `stop()` 恰 1 次；agents 缺失时 scheduler 仍启动且记录降级日志。
 5. **⑤ 真实 cordis 降级路径（3）**：真实 `Context` 装载插件，agents 含 get（就绪日志）/缺 get（降级日志）/完全缺失（不抛、无就绪日志）。

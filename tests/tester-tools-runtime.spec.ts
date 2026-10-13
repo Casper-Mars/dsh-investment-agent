@@ -61,7 +61,7 @@ interface Booted {
   dispose: () => Promise<void>
 }
 
-/** 引导真实 ToolRuntime + 经 registerAllTools 注册 dsh-finance 工具。 */
+/** 引导真实 ToolRuntime + 经 registerAllTools 注册 dsh-ia 工具。 */
 async function bootRegistry(dataRoot: string): Promise<Booted> {
   const app = new Context()
   app.provide('systemPrompt', systemPromptStub())
@@ -69,7 +69,7 @@ async function bootRegistry(dataRoot: string): Promise<Booted> {
     dispose: () => Promise<void>
   }
   const pluginFiber = app.plugin({
-    name: 'dsh-finance-tools',
+    name: 'dsh-ia-tools',
     inject: ['tools'],
     apply(ctx: Context) {
       registerAllTools(ctx, { dataRoot })

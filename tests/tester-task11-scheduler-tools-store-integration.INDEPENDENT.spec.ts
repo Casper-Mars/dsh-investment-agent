@@ -2,7 +2,7 @@
  * T11 跨模块集成 + 契约测试（一）：`tools → store → scheduler.reload → 到点调度`
  * 真实模块组合（无 `src/**` 改动、无模块 mock）。
  *
- * 唯一权威设计文档：《感知层详细设计（dsh-finance 插件）》 v0.7。
+ * 唯一权威设计文档：《感知层详细设计（dsh-ia 插件）》 v0.7。
  *
  * 本文件补齐 tester-task9 / scheduler-tools 单测**未覆盖**的端到端链路：
  *   - 既有 `scheduler-tools.test.ts` 用 FakeStore + mock scheduler（reload 仅计数），

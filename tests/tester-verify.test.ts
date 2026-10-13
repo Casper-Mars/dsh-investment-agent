@@ -14,7 +14,7 @@ import { LOT_SIZE, COST_PRECISION } from '../src/domain/types.js'
 let dir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'dsh-finance-verify-'))
+  dir = mkdtempSync(join(tmpdir(), 'dsh-ia-verify-'))
 })
 
 afterEach(() => {

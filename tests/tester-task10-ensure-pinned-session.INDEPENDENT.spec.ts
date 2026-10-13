@@ -82,7 +82,7 @@ function makeDeps(overrides: Partial<SessionEnsureDeps> = {}): SessionEnsureDeps
       resume: vi.fn(async () => ({ agent: { id: PINNED_SESSION_ID }, dispose: vi.fn() })),
     },
     sessionPersistence: { stat: vi.fn(async () => undefined) },
-    cwd: '/srv/dsh-finance',
+    cwd: '/srv/dsh-ia',
     agentOptions: { provider: 'deepseek', model: 'deepseek-v4-pro' },
     logger: () => {},
     ...overrides,
@@ -126,7 +126,7 @@ describe('独立复验 ① ensurePinnedSession 三分支（自建 spy fake）', 
 
   it('AC3 均不存在 → create：带 meta.cwd 与 agentOptions，且不调用 resume', async () => {
     const { agents, createSpy, resumeSpy } = spyAgents({ live: false })
-    const cwd = '/srv/dsh-finance'
+    const cwd = '/srv/dsh-ia'
     const agentOptions: EnsureAgentOptions = { provider: 'deepseek', model: 'deepseek-v4-pro' }
     const deps = makeDeps({
       agents,
@@ -269,7 +269,7 @@ describe('独立复验 ② resolveAgentOptions', () => {
 describe('独立复验 ③ 真实 cordis Context（装配/生命周期）', () => {
   /** 用真实 cordis 装载一个「仅装配 ensure」的最小插件，返回 fiber 便于卸载。 */
   async function runEnsure(options: { cwd?: string } = {}) {
-    const cwd = options.cwd ?? '/srv/dsh-finance'
+    const cwd = options.cwd ?? '/srv/dsh-ia'
     const root = new Context()
     const fiber = root.plugin({
       name: 'test-session-ensure',
@@ -298,7 +298,7 @@ describe('独立复验 ③ 真实 cordis Context（装配/生命周期）', () =
     })
     const fiber = root.plugin({
       name: 'test-session-ensure',
-      apply: (ctx: Context) => applySessionEnsure(ctx, { cwd: '/srv/dsh-finance', logger: () => {} }),
+      apply: (ctx: Context) => applySessionEnsure(ctx, { cwd: '/srv/dsh-ia', logger: () => {} }),
     })
     await fiber
     await new Promise((r) => setTimeout(r, 25))
@@ -309,7 +309,7 @@ describe('独立复验 ③ 真实 cordis Context（装配/生命周期）', () =
     expect(createSpy).toHaveBeenCalledWith({
       sessionId: PINNED_SESSION_ID,
       agentOptions: { provider: 'deepseek', model: 'v4' },
-      meta: { cwd: '/srv/dsh-finance' },
+      meta: { cwd: '/srv/dsh-ia' },
     })
     expect(resumeSpy).not.toHaveBeenCalled()
     expect(disposeSpy).not.toHaveBeenCalled()
@@ -331,7 +331,7 @@ describe('独立复验 ③ 真实 cordis Context（装配/生命周期）', () =
     })
     const fiber = root.plugin({
       name: 'test-session-ensure',
-      apply: (ctx: Context) => applySessionEnsure(ctx, { cwd: '/srv/dsh-finance', logger: () => {} }),
+      apply: (ctx: Context) => applySessionEnsure(ctx, { cwd: '/srv/dsh-ia', logger: () => {} }),
     })
     await fiber
     await new Promise((r) => setTimeout(r, 25))
@@ -355,7 +355,7 @@ describe('独立复验 ③ 真实 cordis Context（装配/生命周期）', () =
     })
     const fiber = root.plugin({
       name: 'test-session-ensure',
-      apply: (ctx: Context) => applySessionEnsure(ctx, { cwd: '/srv/dsh-finance', logger: () => {} }),
+      apply: (ctx: Context) => applySessionEnsure(ctx, { cwd: '/srv/dsh-ia', logger: () => {} }),
     })
     await fiber
     await new Promise((r) => setTimeout(r, 25))
@@ -379,7 +379,7 @@ describe('独立复验 ③ 真实 cordis Context（装配/生命周期）', () =
     provideOn(root, { sessionPersistence: { stat: vi.fn(async () => undefined) } })
     const fiber = root.plugin({
       name: 'test-session-ensure',
-      apply: (ctx: Context) => applySessionEnsure(ctx, { cwd: '/srv/dsh-finance', logger: () => {} }),
+      apply: (ctx: Context) => applySessionEnsure(ctx, { cwd: '/srv/dsh-ia', logger: () => {} }),
     })
     await expect(fiber).resolves.toBeDefined()
     await new Promise((r) => setTimeout(r, 25))
@@ -398,7 +398,7 @@ describe('独立复验 ③ 真实 cordis Context（装配/生命周期）', () =
     })
     const fiber = root.plugin({
       name: 'test-session-ensure',
-      apply: (ctx: Context) => applySessionEnsure(ctx, { cwd: '/srv/dsh-finance', logger: () => {} }),
+      apply: (ctx: Context) => applySessionEnsure(ctx, { cwd: '/srv/dsh-ia', logger: () => {} }),
     })
     await expect(fiber).resolves.toBeDefined()
     await new Promise((r) => setTimeout(r, 25))
@@ -418,8 +418,8 @@ describe('独立复验 ④ 顶层契约不变（AC6）', () => {
 
   it('cordis.patch.yml 未被改动（id/name/inject 与 plugin.ts 一致）', () => {
     const patch = readFileSync(fileURLToPath(new URL('../cordis.patch.yml', import.meta.url)), 'utf8')
-    expect(patch).toContain('id: dsh-finance')
-    expect(patch).toContain('name: dsh-finance')
+    expect(patch).toContain('id: dsh-ia')
+    expect(patch).toContain('name: dsh-ia')
     expect(patch).toContain("inject: ['tools', 'skills', 'fs']")
   })
 

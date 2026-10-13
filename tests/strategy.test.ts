@@ -14,7 +14,7 @@ let dir: string
 let reg: StrategyRegistry
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'dsh-finance-strategy-'))
+  dir = mkdtempSync(join(tmpdir(), 'dsh-ia-strategy-'))
   reg = new StrategyRegistry(dir)
 })
 

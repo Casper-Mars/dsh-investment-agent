@@ -9,9 +9,9 @@
  *   5. 目录 0o700、文件 0o600；
  *   6. 经 `ctx.logger.exporter(...)` 注册 / 注销；追加注册不影响宿主既有 exporter；
  *   7. 降级（fs 抛错吞掉、不中断）；
- *   8. `apply(ctx)` 装配后宿主日志落地到 `DSH_FINANCE_LOG_DIR`；
+ *   8. `apply(ctx)` 装配后宿主日志落地到 `DSH_IA_LOG_DIR`；
  *   9. 目录 / 阈值解析优先级；
- *  10. name 白名单（仅 `dsh-finance[:scope]` 落盘；非本插件 name 一律丢弃；与级别过滤叠加）。
+ *  10. name 白名单（仅 `dsh-ia[:scope]` 落盘；非本插件 name 一律丢弃；与级别过滤叠加）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { execFileSync } from 'node:child_process'
@@ -52,7 +52,7 @@ function makeMessage(partial: Partial<Message> & Pick<Message, 'type'>): Message
   return {
     sn: 1,
     ts: T1,
-    name: 'dsh-finance',
+    name: 'dsh-ia',
     level: 0,
     args: [],
     ...partial,
@@ -81,7 +81,7 @@ function totalLines(dir: string): number {
 
 const tmpDirs: string[] = []
 function mkTmp(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'dsh-finance-filelog-'))
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-ia-filelog-'))
   tmpDirs.push(dir)
   return dir
 }
@@ -118,7 +118,7 @@ beforeEach(() => {
   savedLogDir = process.env[LOG_DIR_ENV]
   savedLogLevel = process.env[LOG_LEVEL_ENV]
   savedMaxSize = process.env[LOG_MAX_SIZE_ENV]
-  savedDataDir = process.env.DSH_FINANCE_DATA_DIR
+  savedDataDir = process.env.DSH_IA_DATA_DIR
   delete process.env[LOG_DIR_ENV]
   delete process.env[LOG_LEVEL_ENV]
   delete process.env[LOG_MAX_SIZE_ENV]
@@ -133,7 +133,7 @@ afterEach(() => {
   restore(LOG_DIR_ENV, savedLogDir)
   restore(LOG_LEVEL_ENV, savedLogLevel)
   restore(LOG_MAX_SIZE_ENV, savedMaxSize)
-  restore('DSH_FINANCE_DATA_DIR', savedDataDir)
+  restore('DSH_IA_DATA_DIR', savedDataDir)
   for (const d of tmpDirs.splice(0)) {
     try {
       rmSync(d, { recursive: true, force: true })
@@ -154,7 +154,7 @@ describe('① JSONL 记录形状（§4.2）', () => {
       makeMessage({
         ts: T1,
         type: 'info',
-        name: 'dsh-finance:scheduler.runner',
+        name: 'dsh-ia:scheduler.runner',
         args: ['task completed', { taskId: 'market-pulse' }],
       }),
     )
@@ -164,7 +164,7 @@ describe('① JSONL 记录形状（§4.2）', () => {
     const rec = lines[0]
     expect(rec.ts).toBe('2026-10-12T12:00:00.000Z')
     expect(rec.level).toBe('info')
-    expect(rec.name).toBe('dsh-finance:scheduler.runner')
+    expect(rec.name).toBe('dsh-ia:scheduler.runner')
     expect(rec.msg).toBe('task completed')
     expect(rec.args).toEqual({ taskId: 'market-pulse' })
     expect(rec.pid).toBe(process.pid)
@@ -285,7 +285,7 @@ describe('④ 级别过滤（方案严重度序 error≤warn≤info≤debug）',
     expect(emitFour(mkTmp(), 'debug')).toEqual(['error', 'warn', 'info', 'debug'])
   })
 
-  it('env DSH_FINANCE_LOG_LEVEL=error 生效于构造缺省', () => {
+  it('env DSH_IA_LOG_LEVEL=error 生效于构造缺省', () => {
     process.env[LOG_LEVEL_ENV] = 'error'
     expect(emitFour(mkTmp())).toEqual(['error'])
   })
@@ -320,14 +320,14 @@ describe('⑥ 经 ctx.logger.exporter 注册 / 注销', () => {
     const dir = mkTmp()
     const dispose = app.logger.exporter(createFileExporter({ dir, level: 'debug' }))
 
-    app.logger('dsh-finance').info('hello', { a: 1 })
+    app.logger('dsh-ia').info('hello', { a: 1 })
     const file = join(dir, `${today()}.jsonl`)
     expect(existsSync(file)).toBe(true)
     expect(readFileSync(file, 'utf8')).toContain('hello')
     const before = readJsonl(dir, `${today()}.jsonl`).length
 
     dispose()
-    app.logger('dsh-finance').info('after-dispose')
+    app.logger('dsh-ia').info('after-dispose')
     expect(readJsonl(dir, `${today()}.jsonl`).length).toBe(before)
     expect(readFileSync(file, 'utf8')).not.toContain('after-dispose')
   })
@@ -343,7 +343,7 @@ describe('⑥ 经 ctx.logger.exporter 注册 / 注销', () => {
     app.logger.exporter(existing)
     app.logger.exporter(createFileExporter({ dir, level: 'debug' }))
 
-    app.logger('dsh-finance').info('both')
+    app.logger('dsh-ia').info('both')
     expect(captured.map((m) => m.type)).toEqual(['info'])
     expect(readFileSync(join(dir, `${today()}.jsonl`), 'utf8')).toContain('both')
   })
@@ -373,11 +373,11 @@ describe('⑦ 降级（fs 抛错吞掉，不中断）', () => {
 // ⑧ apply(ctx) 集成
 // ===========================================================================
 describe('⑧ apply(ctx) 装配后日志落地', () => {
-  it('插件加载日志写入 DSH_FINANCE_LOG_DIR 当日文件', () => {
+  it('插件加载日志写入 DSH_IA_LOG_DIR 当日文件', () => {
     const logDir = mkTmp()
     const dataDir = makeProvisionedDataRoot()
     process.env[LOG_DIR_ENV] = logDir
-    process.env.DSH_FINANCE_DATA_DIR = dataDir
+    process.env.DSH_IA_DATA_DIR = dataDir
 
     const app = new Context()
     const ctx = {
@@ -428,22 +428,22 @@ describe('⑨ 目录 / 阈值解析优先级', () => {
 // ===========================================================================
 // ⑩ name 白名单（本插件命名空间）
 // ===========================================================================
-describe('⑩ name 白名单（仅 dsh-finance[:scope] 落盘）', () => {
-  it('裸名 `dsh-finance` 与子 scope `dsh-finance:xxx` 都要落盘', () => {
+describe('⑩ name 白名单（仅 dsh-ia[:scope] 落盘）', () => {
+  it('裸名 `dsh-ia` 与子 scope `dsh-ia:xxx` 都要落盘', () => {
     const dir = mkTmp()
     const exporter = createFileExporter({ dir, level: 'debug' })
-    exporter.export(makeMessage({ ts: T1, type: 'info', name: 'dsh-finance', args: ['bare'] }))
+    exporter.export(makeMessage({ ts: T1, type: 'info', name: 'dsh-ia', args: ['bare'] }))
     exporter.export(
-      makeMessage({ ts: T1, type: 'info', name: 'dsh-finance:scheduler.runner', args: ['sub'] }),
+      makeMessage({ ts: T1, type: 'info', name: 'dsh-ia:scheduler.runner', args: ['sub'] }),
     )
-    exporter.export(makeMessage({ ts: T1, type: 'info', name: 'dsh-finance:session', args: ['sub2'] }))
+    exporter.export(makeMessage({ ts: T1, type: 'info', name: 'dsh-ia:session', args: ['sub2'] }))
 
     const lines = readJsonl(dir, '2026-10-12.jsonl')
     expect(lines.map((r) => r.msg)).toEqual(['bare', 'sub', 'sub2'])
     expect(lines.map((r) => r.name)).toEqual([
-      'dsh-finance',
-      'dsh-finance:scheduler.runner',
-      'dsh-finance:session',
+      'dsh-ia',
+      'dsh-ia:scheduler.runner',
+      'dsh-ia:session',
     ])
   })
 
@@ -457,11 +457,11 @@ describe('⑩ name 白名单（仅 dsh-finance[:scope] 落盘）', () => {
     expect(readdirSync(dir)).toEqual([])
   })
 
-  it('边界：`dsh-financex`（前缀但非 `:` 分隔）不落盘', () => {
+  it('边界：`dsh-iax`（前缀但非 `:` 分隔）不落盘', () => {
     const dir = mkTmp()
     const exporter = createFileExporter({ dir, level: 'debug' })
-    exporter.export(makeMessage({ ts: T1, type: 'info', name: 'dsh-financex', args: ['no'] }))
-    exporter.export(makeMessage({ ts: T1, type: 'info', name: 'dsh-finance-x', args: ['no2'] }))
+    exporter.export(makeMessage({ ts: T1, type: 'info', name: 'dsh-iax', args: ['no'] }))
+    exporter.export(makeMessage({ ts: T1, type: 'info', name: 'dsh-ia-x', args: ['no2'] }))
     expect(existsSync(join(dir, '2026-10-12.jsonl'))).toBe(false)
   })
 
@@ -469,10 +469,10 @@ describe('⑩ name 白名单（仅 dsh-finance[:scope] 落盘）', () => {
     const dir = mkTmp()
     const exporter = createFileExporter({ dir, level: 'error' })
     exporter.export(
-      makeMessage({ ts: T1, type: 'info', name: 'dsh-finance:session', args: ['suppressed'] }),
+      makeMessage({ ts: T1, type: 'info', name: 'dsh-ia:session', args: ['suppressed'] }),
     )
     exporter.export(
-      makeMessage({ ts: T1, type: 'error', name: 'dsh-finance:session', args: ['kept'] }),
+      makeMessage({ ts: T1, type: 'error', name: 'dsh-ia:session', args: ['kept'] }),
     )
     expect(readJsonl(dir, '2026-10-12.jsonl').map((r) => r.msg)).toEqual(['kept'])
   })
@@ -481,14 +481,14 @@ describe('⑩ name 白名单（仅 dsh-finance[:scope] 落盘）', () => {
     const dir = mkTmp()
     const exporter = createFileExporter({ dir, level: 'debug', names: ['my-plugin'] })
     exporter.export(makeMessage({ ts: T1, type: 'info', name: 'my-plugin:svc', args: ['yes'] }))
-    exporter.export(makeMessage({ ts: T1, type: 'info', name: 'dsh-finance', args: ['no'] }))
+    exporter.export(makeMessage({ ts: T1, type: 'info', name: 'dsh-ia', args: ['no'] }))
     expect(readJsonl(dir, '2026-10-12.jsonl').map((r) => r.msg)).toEqual(['yes'])
   })
 
   it('names 传空数组 → 回落默认白名单（避免误配全丢）', () => {
     const dir = mkTmp()
     const exporter = createFileExporter({ dir, level: 'debug', names: [] })
-    exporter.export(makeMessage({ ts: T1, type: 'info', name: 'dsh-finance:scheduler', args: ['yes'] }))
+    exporter.export(makeMessage({ ts: T1, type: 'info', name: 'dsh-ia:scheduler', args: ['yes'] }))
     expect(readJsonl(dir, '2026-10-12.jsonl').map((r) => r.msg)).toEqual(['yes'])
   })
 })

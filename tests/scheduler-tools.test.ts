@@ -31,7 +31,7 @@ let reloadCalls: number
 let tools: ToolDefinition[]
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'dsh-finance-schedtools-'))
+  dir = mkdtempSync(join(tmpdir(), 'dsh-ia-schedtools-'))
   tasksDir = join(dir, 'data', 'tasks')
   store = new TaskStore(tasksDir)
   reloadCalls = 0

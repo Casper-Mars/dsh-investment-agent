@@ -6,9 +6,9 @@
  *   ② 幂等：二次调用 no-op（commit 数不增、内容逐字节不变）；
  *   ③ git 不可用 / 命令失败 → 降级不抛、不中断；
  *   ④ 目录名 / 文件名 / frontmatter.name 三者一致；
- *   ⑤ 与 `DSH_FINANCE_DATA_DIR` 覆盖联动（env 生效 + 构造注入优先）。
+ *   ⑤ 与 `DSH_IA_DATA_DIR` 覆盖联动（env 生效 + 构造注入优先）。
  *
- * 所有用例使用 `os.tmpdir()` 下随机子目录，**不污染**真实 `~/.dsh-finance`。
+ * 所有用例使用 `os.tmpdir()` 下随机子目录，**不污染**真实 `~/.dsh-ia`。
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -76,7 +76,7 @@ const savedEnv = process.env[DATA_ROOT_ENV]
 
 beforeEach(() => {
   assertGitAvailable()
-  tmp = mkdtempSync(join(tmpdir(), 'dsh-finance-skills-'))
+  tmp = mkdtempSync(join(tmpdir(), 'dsh-ia-skills-'))
 })
 
 afterEach(() => {
@@ -244,10 +244,10 @@ describe('④ 目录名 / 文件名 / frontmatter.name 三者一致', () => {
 })
 
 /* ------------------------------------------------------------------ *
- * ⑤ DSH_FINANCE_DATA_DIR 联动
+ * ⑤ DSH_IA_DATA_DIR 联动
  * ------------------------------------------------------------------ */
 
-describe('⑤ 与 DSH_FINANCE_DATA_DIR 覆盖联动', () => {
+describe('⑤ 与 DSH_IA_DATA_DIR 覆盖联动', () => {
   it('env 覆盖默认：仓库落在 <env>/skills', () => {
     const envRoot = join(tmp, 'env-data')
     process.env[DATA_ROOT_ENV] = envRoot

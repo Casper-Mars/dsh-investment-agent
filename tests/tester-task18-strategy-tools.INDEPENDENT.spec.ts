@@ -78,7 +78,7 @@ function expectMatchesOutputSchema(name: string, value: unknown): void {
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'dsh-finance-task18-'))
+  dir = mkdtempSync(join(tmpdir(), 'dsh-ia-task18-'))
   ctx = createToolContext({ dataRoot: dir })
   tools = createAllTools(ctx)
 })

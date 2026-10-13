@@ -18,7 +18,7 @@ let dir: string
 let predicts: Predicts
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'dsh-finance-predicts-'))
+  dir = mkdtempSync(join(tmpdir(), 'dsh-ia-predicts-'))
   predicts = new Predicts(dir)
 })
 

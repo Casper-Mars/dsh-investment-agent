@@ -41,12 +41,12 @@ const T1 = Date.UTC(2026, 9, 12, 12, 0, 0)
 
 /** 构造一条 cordis `Message`（仅填本任务关心字段）。 */
 function makeMessage(partial: Partial<Message> & Pick<Message, 'type'>): Message {
-  return { sn: 1, ts: T1, name: 'dsh-finance', level: 0, args: [], ...partial }
+  return { sn: 1, ts: T1, name: 'dsh-ia', level: 0, args: [], ...partial }
 }
 
 const tmpDirs: string[] = []
 function mkTmp(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'dsh-finance-redact-'))
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-ia-redact-'))
   tmpDirs.push(dir)
   return dir
 }

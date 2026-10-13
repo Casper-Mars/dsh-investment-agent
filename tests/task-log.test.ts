@@ -6,7 +6,7 @@
  *   2. 三结局既有测试全绿（本文件另附 runner 集成回归：结局不受日志旁路影响）；
  *   3. 单文件 10MB 上限（本文件用小上限驱动：超限停写 + warn，文件 ≤ 上限）；
  *   4. 落盘 `<logDir>/tasks/<taskId>/<ts>-<pid>.log`；目录 0700、文件 0600；
- *      目录可经 `DSH_FINANCE_LOG_DIR` 覆盖；
+ *      目录可经 `DSH_IA_LOG_DIR` 覆盖；
  *   5. 零第三方依赖、不改顶层 inject（构建/类型门禁覆盖）。
  *
  * 另覆盖：末行结果 JSON 不落盘、stderr 全落、中间行完整落（含 chunk 跨边界）、
@@ -32,7 +32,7 @@ import {
 let root: string
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'dsh-finance-tasklog-'))
+  root = mkdtempSync(join(tmpdir(), 'dsh-ia-tasklog-'))
 })
 
 afterEach(() => {
@@ -139,10 +139,10 @@ describe('task-log 命名 / 权限 / 路径', () => {
     expect(path?.startsWith(dir)).toBe(true)
   })
 
-  it('`DSH_FINANCE_LOG_DIR` 覆盖日志根目录', () => {
-    const prev = process.env.DSH_FINANCE_LOG_DIR
-    const envRoot = mkdtempSync(join(tmpdir(), 'dsh-finance-tasklog-env-'))
-    process.env.DSH_FINANCE_LOG_DIR = envRoot
+  it('`DSH_IA_LOG_DIR` 覆盖日志根目录', () => {
+    const prev = process.env.DSH_IA_LOG_DIR
+    const envRoot = mkdtempSync(join(tmpdir(), 'dsh-ia-tasklog-env-'))
+    process.env.DSH_IA_LOG_DIR = envRoot
     try {
       const log = createTaskLog({ taskId: 'envtask', pid: 9 }, { now: FIXED_NOW })
       log.writeStdoutChunk('hello\n{"shouldWake":false}\n')
@@ -150,8 +150,8 @@ describe('task-log 命名 / 权限 / 路径', () => {
       expect(log.path).toBe(join(envRoot, 'tasks', 'envtask', '2026-10-12T11-31-00-123Z-9.log'))
       expect(readFileSync(log.path as string, 'utf8')).toBe('hello\n')
     } finally {
-      if (prev === undefined) delete process.env.DSH_FINANCE_LOG_DIR
-      else process.env.DSH_FINANCE_LOG_DIR = prev
+      if (prev === undefined) delete process.env.DSH_IA_LOG_DIR
+      else process.env.DSH_IA_LOG_DIR = prev
       rmSync(envRoot, { recursive: true, force: true })
     }
   })
@@ -190,17 +190,17 @@ describe('task-log 单文件上限（防磁盘打爆）', () => {
   })
 
   it('resolveTaskLogMaxSize：显式 > 环境变量 > 默认 10MB', () => {
-    const prev = process.env.DSH_FINANCE_LOG_MAX_SIZE
+    const prev = process.env.DSH_IA_LOG_MAX_SIZE
     try {
-      delete process.env.DSH_FINANCE_LOG_MAX_SIZE
+      delete process.env.DSH_IA_LOG_MAX_SIZE
       expect(DEFAULT_TASK_LOG_MAX_SIZE).toBe(10 * 1024 * 1024)
       expect(resolveTaskLogMaxSize()).toBe(10 * 1024 * 1024)
-      process.env.DSH_FINANCE_LOG_MAX_SIZE = '2048'
+      process.env.DSH_IA_LOG_MAX_SIZE = '2048'
       expect(resolveTaskLogMaxSize()).toBe(2048)
       expect(resolveTaskLogMaxSize(512)).toBe(512)
     } finally {
-      if (prev === undefined) delete process.env.DSH_FINANCE_LOG_MAX_SIZE
-      else process.env.DSH_FINANCE_LOG_MAX_SIZE = prev
+      if (prev === undefined) delete process.env.DSH_IA_LOG_MAX_SIZE
+      else process.env.DSH_IA_LOG_MAX_SIZE = prev
     }
   })
 })

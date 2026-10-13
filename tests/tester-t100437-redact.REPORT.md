@@ -11,7 +11,7 @@
 - **交付物**：
   - `tests/tester-t100437-redact.INDEPENDENT.spec.ts`（**55 用例，全正向断言**，自成体系，不复用 dev 用例）
   - 本报告
-- **隔离**：全程临时目录 + `DSH_FINANCE_LOG_DIR` 覆盖，**未触碰真实 `~/.dsh-finance`**；
+- **隔离**：全程临时目录 + `DSH_IA_LOG_DIR` 覆盖，**未触碰真实 `~/.dsh-ia`**；
   `git diff src/` **为空**（`redact.ts` md5 `43081abd…` 与基线一致）；
   `scripts/jev-news-demo.*` **未触碰**（mtime 仍为 Oct 12 00:2x，保持未跟踪原样）。
 
@@ -61,10 +61,10 @@
 命令：临时 probe 经真实 `createFileExporter` 写盘（`2026-10-12.jsonl`），**已删除 probe 文件并清理临时目录**。
 
 ```jsonc
-{"ts":"2026-10-12T12:00:00.000Z","level":"info","name":"dsh-finance","msg":"upstream said: [REDACTED] (no key name)","pid":39491,"origin":"host"}
-{"ts":"2026-10-12T12:00:00.000Z","level":"warn","name":"dsh-finance","msg":"cost=[REDACTED] pnl=[REDACTED] symbol=588000","pid":39491,"origin":"host"}
-{"ts":"2026-10-12T12:00:00.000Z","level":"error","name":"dsh-finance","msg":"Error: fetch failed, leaked [REDACTED] (no key name)\n    at …",…}
-{"ts":"2026-10-12T12:00:00.000Z","level":"info","name":"dsh-finance","msg":"{\"authorization\":\"[REDACTED]\"}",…}
+{"ts":"2026-10-12T12:00:00.000Z","level":"info","name":"dsh-ia","msg":"upstream said: [REDACTED] (no key name)","pid":39491,"origin":"host"}
+{"ts":"2026-10-12T12:00:00.000Z","level":"warn","name":"dsh-ia","msg":"cost=[REDACTED] pnl=[REDACTED] symbol=588000","pid":39491,"origin":"host"}
+{"ts":"2026-10-12T12:00:00.000Z","level":"error","name":"dsh-ia","msg":"Error: fetch failed, leaked [REDACTED] (no key name)\n    at …",…}
+{"ts":"2026-10-12T12:00:00.000Z","level":"info","name":"dsh-ia","msg":"{\"authorization\":\"[REDACTED]\"}",…}
 ```
 
 对照上一轮（HEAD `4521805`）三条泄漏行 —— **均已遮蔽**：

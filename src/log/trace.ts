@@ -5,7 +5,7 @@
  *   请求内可见的关联锚点 `traceId`，使散落在各模块（scheduler / loader / runner /
  *   wake / 门面）的日志行可被同一 `traceId` 串联，便于按一次唤醒链路回溯。
  *
- * 设计要点（对齐技术方案《日志完善技术方案（dsh-finance 插件）v1.0》§5.4 / §9 M4）：
+ * 设计要点（对齐技术方案《日志完善技术方案（dsh-ia 插件）v1.0》§5.4 / §9 M4）：
  *   1. **零第三方依赖**：只用 Node 原生 `node:async_hooks` 的 `AsyncLocalStorage`
  *      与 `node:crypto` 的 `randomUUID`（均为 `node:*`）。不引 pino / winston 等。
  *   2. **纯进程内传播**：`AsyncLocalStorage` 只在**同一进程**的异步调用链内传播；

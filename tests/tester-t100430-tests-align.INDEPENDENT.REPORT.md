@@ -1,7 +1,7 @@
 # 独立验证报告：t100430 测试对齐与全量回归
 
 - 任务：t100430 ［task-authorship 固有化］ 任务-05：测试对齐与全量回归（产出 + 验证一体）
-- 仓库：`/Users/reachlucifer/project/opc/dsh-finance`
+- 仓库：`/Users/reachlucifer/project/opc/dsh-ia`
 - 目标节点：Reach的MacBook Pro（exec host=node）
 - 起点：`HEAD=fd1f08c`，工作区干净
 - **总结论：两目标测试文件已对齐，无残留错标 / 无「6 计数」断言 → 无需改动（no-op）；三命令全绿，无回归。**
@@ -33,7 +33,7 @@ bdbe116 refactor(skills): task-authorship 从可进化清单分离为固有 SKIL
 | L215 | `expect(SKILL_NAMES as readonly string[]).not.toContain(TA)` | TA 已移出可进化清单 |
 | L216 | `expect(SKILL_NAMES[SKILL_NAMES.length - 1]).toBe('analysis-decision')` | 末位非 TA |
 | L282 | `expect(got).toHaveLength(5)` | provider 恰发现 **5** 个 |
-| L284 | `for (const s of got) expect(s.provider).toBe(SKILL_PROVIDER_NAME)` | 5 个来源 = **filesystem provider**（`'dsh-finance-skills'`，见 `src/skills/provider.ts:39`） |
+| L284 | `for (const s of got) expect(s.provider).toBe(SKILL_PROVIDER_NAME)` | 5 个来源 = **filesystem provider**（`'dsh-ia-skills'`，见 `src/skills/provider.ts:39`） |
 | L287 / L372 | `expect(after.some((s) => s.name === TA)).toBe(false)` | 固有 SKILL **不经 provider 发现** |
 | L359-362 | `const intrinsic = (...).find(s => s.name === TA)` + `expect(intrinsic?.source).toBe('runtime')` | 1 个 **embedded（runtime 静态注册）** 可见，来源 = runtime |
 

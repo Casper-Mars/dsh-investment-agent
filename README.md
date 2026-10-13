@@ -1,8 +1,8 @@
-# dsh-finance
+# dsh-ia
 
 > 金融投资专家 Agent 插件（dsh）：投资建议、持仓记账、行情/交易日历与市场感知。
 
-`dsh-finance` 是一个基于 [DeepSeek Harness（dsh）](https://deepseek-harness.github.io/deepseek-harness/) 的 Cordis 插件。它以 system-prompt 注入一个「精通计算机技术的 A 股投资专家」人设，配套一套面向模型的金融工具、可进化的方法论 SKILL，以及一个独立进程的定时任务（感知）层，让 Agent 能自主完成「监听 → 研判 → 制定策略 → 记账 → 复盘 → 迭代」的全链路。
+`dsh-ia` 是一个基于 [DeepSeek Harness（dsh）](https://deepseek-harness.github.io/deepseek-harness/) 的 Cordis 插件。它以 system-prompt 注入一个「精通计算机技术的 A 股投资专家」人设，配套一套面向模型的金融工具、可进化的方法论 SKILL，以及一个独立进程的定时任务（感知）层，让 Agent 能自主完成「监听 → 研判 → 制定策略 → 记账 → 复盘 → 迭代」的全链路。
 
 - 标的范围：ETF + A 股，多标的统一管理
 - 分析方法：技术面起步
@@ -47,7 +47,7 @@
 dsh plugin --profile <name> add .
 ```
 
-安装后由 profile 的 bundle patch（`cordis.patch.yml`，单插件包 `name` 写裸包名 `dsh-finance`）自动加载。
+安装后由 profile 的 bundle patch（`cordis.patch.yml`，单插件包 `name` 写裸包名 `dsh-ia`）自动加载。
 
 ## 使用
 
@@ -66,12 +66,12 @@ dsh plugin --profile <name> add .
 
 | 环境变量 | 作用 | 默认值 |
 |----------|------|--------|
-| `DSH_FINANCE_HOME` | 工作区根目录（data / tasks / skills / workspace 归属全部跟随） | `~/.dsh-finance` |
+| `DSH_IA_HOME` | 工作区根目录（data / tasks / skills / workspace 归属全部跟随） | `~/.dsh-ia` |
 
 ## 数据目录
 
 ```
-~/.dsh-finance/
+~/.dsh-ia/
 ├── data/                              # dataRoot
 │   ├── ledger/<symbol>/…              # 台账（持仓 / 成本 / 流水）
 │   ├── strategy/<symbol>.md           # 策略文档（文本实体，当前版）
@@ -98,7 +98,7 @@ pnpm clean        # 清理 dist / dist-server
 src/
 ├── index.ts            # 包入口
 ├── plugin.ts           # Cordis 插件契约（name / inject / apply）
-├── paths.ts            # 路径解析（~/.dsh-finance、dataRoot、日志目录）
+├── paths.ts            # 路径解析（~/.dsh-ia、dataRoot、日志目录）
 ├── flags.ts            # 环境变量解析（home / session id 覆盖与派生）
 ├── session.ts          # 会话类型与工具
 ├── session-ensure.ts   # 固定会话确保（检查 → 恢复 → 新建）

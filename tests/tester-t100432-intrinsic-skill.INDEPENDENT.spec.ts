@@ -82,7 +82,7 @@ afterEach(() => {
     const dir = tempDirs.pop() as string
     rmSync(dir, { recursive: true, force: true })
   }
-  delete process.env.DSH_FINANCE_DATA_DIR
+  delete process.env.DSH_IA_DATA_DIR
 })
 
 /* ================================================================== *
@@ -270,7 +270,7 @@ function disposeMockEffects(effects: MockEffect[]): void {
 
 describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载', () => {
   it('AC3a：skills 可用 → apply 不抛，注册 2 次（2 个固有 SKILL），注册对象契约正确，含注册 disposer', () => {
-    process.env.DSH_FINANCE_DATA_DIR = mkTmp('dsh-fin-ta-mock-ok-')
+    process.env.DSH_IA_DATA_DIR = mkTmp('dsh-fin-ta-mock-ok-')
     const m = buildMockCtx('ok')
 
     expect(() => srcPlugin.apply(m.ctx as never)).not.toThrow()
@@ -290,10 +290,10 @@ describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载',
     expect(reg2?.content).toBe(parseSkillFile(loadSkillAuthorshipMarkdown()).content)
 
     // 存在标为固有 SKILL 的 effect，且其 disposer 为函数。
-    const intrinsic = m.effects.find((e) => e.label === 'dsh-finance task-authorship skill')
+    const intrinsic = m.effects.find((e) => e.label === 'dsh-ia task-authorship skill')
     expect(intrinsic, '应存在固有 SKILL 的 effect').toBeDefined()
     expect(typeof intrinsic?.disposer).toBe('function')
-    const intrinsic2 = m.effects.find((e) => e.label === 'dsh-finance skill-authorship skill')
+    const intrinsic2 = m.effects.find((e) => e.label === 'dsh-ia skill-authorship skill')
     expect(intrinsic2, '应存在 skill-authorship 固有 SKILL 的 effect').toBeDefined()
     expect(typeof intrinsic2?.disposer).toBe('function')
 
@@ -301,7 +301,7 @@ describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载',
   }, 30_000)
 
   it('AC3b：skills 不可用 → apply 降级不抛、不中断装载、不注册', () => {
-    process.env.DSH_FINANCE_DATA_DIR = mkTmp('dsh-fin-ta-mock-absent-')
+    process.env.DSH_IA_DATA_DIR = mkTmp('dsh-fin-ta-mock-absent-')
     const m = buildMockCtx('absent')
 
     // 关键对抗点：skills 缺失时 apply 必须**不抛**（降级不中断装载）。
@@ -309,7 +309,7 @@ describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载',
     expect(m.registered).toHaveLength(0)
 
     // effect 仍在（标签存在，回调体走「返回 no-op disposer」分支）。
-    const intrinsic = m.effects.find((e) => e.label === 'dsh-finance task-authorship skill')
+    const intrinsic = m.effects.find((e) => e.label === 'dsh-ia task-authorship skill')
     expect(intrinsic).toBeDefined()
     expect(typeof intrinsic?.disposer).toBe('function')
     expect(() => intrinsic?.disposer()).not.toThrow()
@@ -318,14 +318,14 @@ describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载',
   }, 30_000)
 
   it('AC3c：卸载语义 → 调用 effect disposer 后，注册的 task-authorship 被注销', () => {
-    process.env.DSH_FINANCE_DATA_DIR = mkTmp('dsh-fin-ta-mock-unload-')
+    process.env.DSH_IA_DATA_DIR = mkTmp('dsh-fin-ta-mock-unload-')
     const m = buildMockCtx('ok')
 
     srcPlugin.apply(m.ctx as never)
     expect(m.registered).toHaveLength(2)
     expect(m.removed).toHaveLength(0)
 
-    const intrinsic = m.effects.find((e) => e.label === 'dsh-finance task-authorship skill')
+    const intrinsic = m.effects.find((e) => e.label === 'dsh-ia task-authorship skill')
     intrinsic?.disposer()
 
     // 卸载后：先前注册的 task-authorship 被注销（移除计数 = 1），且不误删他人。
@@ -339,7 +339,7 @@ describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载',
     'AC3-real：真实 SkillRegistry 装载——5 可进化经 provider 发现 + task-authorship 静态注册可见；卸载后皆消失（无冲突）',
     async () => {
       const dataRoot = mkTmp('dsh-fin-ta-real-')
-      process.env.DSH_FINANCE_DATA_DIR = dataRoot
+      process.env.DSH_IA_DATA_DIR = dataRoot
 
       const distPlugin = (await import('../dist-server/index.js')) as unknown as {
         name: string
@@ -575,7 +575,7 @@ describe('[对抗性] 重复注册先到先得 + 卸载语义', () => {
 
 describe('[对抗性·补强] 注册抛错降级 与 卸载幂等', () => {
   it('AC-adv2：skills.register 抛错 → apply 不抛（降级），固有 SKILL effect 仍存在且 disposer 安全', () => {
-    process.env.DSH_FINANCE_DATA_DIR = mkTmp('dsh-fin-ta-reg-throw-')
+    process.env.DSH_IA_DATA_DIR = mkTmp('dsh-fin-ta-reg-throw-')
     const effects: MockEffect[] = []
     const ctx = {
       get(name: string): unknown {
@@ -604,7 +604,7 @@ describe('[对抗性·补强] 注册抛错降级 与 卸载幂等', () => {
     // 关键对抗点：注册本身抛错时，apply 必须**降级不抛**，不中断插件装载。
     expect(() => srcPlugin.apply(ctx as never)).not.toThrow()
 
-    const intrinsic = effects.find((e) => e.label === 'dsh-finance task-authorship skill')
+    const intrinsic = effects.find((e) => e.label === 'dsh-ia task-authorship skill')
     expect(intrinsic, '注册抛错时该 effect 仍应注册（标签存在）').toBeDefined()
     // 降级后 dispose 未被赋值 → disposer 为安全 no-op。
     expect(() => intrinsic?.disposer()).not.toThrow()
@@ -619,11 +619,11 @@ describe('[对抗性·补强] 注册抛错降级 与 卸载幂等', () => {
   }, 30_000)
 
   it('AC-adv3：卸载 disposer 幂等——连续两次调用不抛，且不重复注销', () => {
-    process.env.DSH_FINANCE_DATA_DIR = mkTmp('dsh-fin-ta-unload-idem-')
+    process.env.DSH_IA_DATA_DIR = mkTmp('dsh-fin-ta-unload-idem-')
     const m = buildMockCtx('ok')
 
     srcPlugin.apply(m.ctx as never)
-    const intrinsic = m.effects.find((e) => e.label === 'dsh-finance task-authorship skill')
+    const intrinsic = m.effects.find((e) => e.label === 'dsh-ia task-authorship skill')
     expect(intrinsic).toBeDefined()
 
     // 第一次：注销成功。

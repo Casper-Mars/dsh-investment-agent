@@ -10,8 +10,8 @@
  *   - src/scheduler/index.ts（编排层携带 taskId）
  *   - src/scheduler/types.ts（TaskProcess.pid?）
  *
- * 隔离策略：所有用例一律用临时目录（注入 TaskLogOptions.dir 或临时设 DSH_FINANCE_LOG_DIR），
- * 绝不触碰真实 ~/.dsh-finance；afterEach 清理。
+ * 隔离策略：所有用例一律用临时目录（注入 TaskLogOptions.dir 或临时设 DSH_IA_LOG_DIR），
+ * 绝不触碰真实 ~/.dsh-ia；afterEach 清理。
  */
 import {
   chmodSync,
@@ -236,10 +236,10 @@ describe('[3] 落盘位置 / 文件名 / 权限', () => {
     expect(statSync(log.path as string).mode & 0o777).toBe(0o600)
   })
 
-  it('d) DSH_FINANCE_LOG_DIR 覆盖根目录（不传 dir 时生效）', () => {
-    const prev = process.env.DSH_FINANCE_LOG_DIR
+  it('d) DSH_IA_LOG_DIR 覆盖根目录（不传 dir 时生效）', () => {
+    const prev = process.env.DSH_IA_LOG_DIR
     const envRoot = mkdtempSync(join(tmpdir(), 'tester-t100436-env-'))
-    process.env.DSH_FINANCE_LOG_DIR = envRoot
+    process.env.DSH_IA_LOG_DIR = envRoot
     try {
       const log = createTaskLog({ taskId: 'envtask', pid: 9 }, { now: FIXED_NOW })
       log.writeStdoutChunk('hit\n{"shouldWake":false}\n')
@@ -247,8 +247,8 @@ describe('[3] 落盘位置 / 文件名 / 权限', () => {
       expect(log.path).toBe(join(envRoot, TASK_LOG_SUBDIR, 'envtask', '2026-10-12T11-31-00-123Z-9.log'))
       expect(readFileSync(log.path as string, 'utf8')).toBe('hit\n')
     } finally {
-      if (prev === undefined) delete process.env.DSH_FINANCE_LOG_DIR
-      else process.env.DSH_FINANCE_LOG_DIR = prev
+      if (prev === undefined) delete process.env.DSH_IA_LOG_DIR
+      else process.env.DSH_IA_LOG_DIR = prev
       rmSync(envRoot, { recursive: true, force: true })
     }
   })
@@ -281,19 +281,19 @@ describe('[3] 落盘位置 / 文件名 / 权限', () => {
 
 describe('[4] 单文件上限（防磁盘打爆）', () => {
   it('a) 默认上限 = 10MB；解析优先级 显式 > env > 默认', () => {
-    const prev = process.env.DSH_FINANCE_LOG_MAX_SIZE
+    const prev = process.env.DSH_IA_LOG_MAX_SIZE
     try {
-      delete process.env.DSH_FINANCE_LOG_MAX_SIZE
+      delete process.env.DSH_IA_LOG_MAX_SIZE
       expect(DEFAULT_TASK_LOG_MAX_SIZE).toBe(10 * 1024 * 1024)
       expect(resolveTaskLogMaxSize()).toBe(10 * 1024 * 1024)
-      process.env.DSH_FINANCE_LOG_MAX_SIZE = '4096'
+      process.env.DSH_IA_LOG_MAX_SIZE = '4096'
       expect(resolveTaskLogMaxSize()).toBe(4096)
       expect(resolveTaskLogMaxSize(128)).toBe(128)
-      process.env.DSH_FINANCE_LOG_MAX_SIZE = '0'
+      process.env.DSH_IA_LOG_MAX_SIZE = '0'
       expect(resolveTaskLogMaxSize()).toBe(10 * 1024 * 1024) // 非正 → 回退默认
     } finally {
-      if (prev === undefined) delete process.env.DSH_FINANCE_LOG_MAX_SIZE
-      else process.env.DSH_FINANCE_LOG_MAX_SIZE = prev
+      if (prev === undefined) delete process.env.DSH_IA_LOG_MAX_SIZE
+      else process.env.DSH_IA_LOG_MAX_SIZE = prev
     }
   })
 
@@ -779,8 +779,8 @@ describe('[9] 真实 node 子进程 E2E（createTaskRunner 缺省真实 spawner�
   })
 
   it('d) 真实子进程 stderr 失控 → 文件 ≤ 上限 + warn + 结局仍正确解析（env 驱动）', async () => {
-    const prev = process.env.DSH_FINANCE_LOG_MAX_SIZE
-    process.env.DSH_FINANCE_LOG_MAX_SIZE = '8192'
+    const prev = process.env.DSH_IA_LOG_MAX_SIZE
+    process.env.DSH_IA_LOG_MAX_SIZE = '8192'
     const warn = vi.fn()
     try {
       const script = writeScript(
@@ -799,8 +799,8 @@ describe('[9] 真实 node 子进程 E2E（createTaskRunner 缺省真实 spawner�
       expect(warnCalls.length).toBeGreaterThanOrEqual(1)
       expect(String(warnCalls[0][1])).toContain('上限')
     } finally {
-      if (prev === undefined) delete process.env.DSH_FINANCE_LOG_MAX_SIZE
-      else process.env.DSH_FINANCE_LOG_MAX_SIZE = prev
+      if (prev === undefined) delete process.env.DSH_IA_LOG_MAX_SIZE
+      else process.env.DSH_IA_LOG_MAX_SIZE = prev
     }
   })
 

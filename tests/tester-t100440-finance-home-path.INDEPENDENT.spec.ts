@@ -8,8 +8,8 @@
  *   - 新：`const financeHome = resolveFinanceHomeDir(); const absTaskPath = resolve(financeHome, taskPath)`
  *
  * Bug 背景：`task_path`（如 `tasks/002156-intraday/task.ts`）语义上是相对于
- * FINANCE_HOME（`~/.dsh-finance`），而非 dataRoot（`~/.dsh-finance/data`）。
- * 旧实现多拼一层 `data`，把程序文件定位到错误的 `~/.dsh-finance/data/tasks/...`。
+ * FINANCE_HOME（`~/.dsh-ia`），而非 dataRoot（`~/.dsh-ia/data`）。
+ * 旧实现多拼一层 `data`，把程序文件定位到错误的 `~/.dsh-ia/data/tasks/...`。
  *
  * 验收标准（逐条验证）：
  *   1. absTaskPath 解析为 `<financeHome>/tasks/<id>/task.ts`（无 data 层）。
@@ -20,7 +20,7 @@
  *
  * 独立性声明：不复用 Developer 用例、不做纯代码审查。通过
  *   - vi.mock('../src/paths.js') 将 `resolveFinanceHomeDir` 重定向到一个临时目录
- *     （隔离真实 `~/.dsh-finance`，避免污染 / 被测试清理影响）；
+ *     （隔离真实 `~/.dsh-ia`，避免污染 / 被测试清理影响）；
  *   - vi.mock 注入 loader/runner 替身工厂，捕获「编排 runner」；
  *   - 对 `run(taskId, taskPath)` 逐链路验证：入口程序 + package.json 放在
  *     **mock 后的 financeHome** 下（而非 dataRoot 下），证明修复后 realpath

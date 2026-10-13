@@ -1,8 +1,8 @@
 # Task 6 测试报告：感知脚本执行层 + 自持调度（runner）
 
-- 被测：`dsh-finance` 插件 `src/runner/**` + `src/plugin.ts`
+- 被测：`dsh-ia` 插件 `src/runner/**` + `src/plugin.ts`
 - 任务：飞书任务 t100358
-- 环境：宿主机 `/Users/reachlucifer/project/opc/dsh-finance`（node v25.9.0 / pnpm / vitest 3.2.7）
+- 环境：宿主机 `/Users/reachlucifer/project/opc/dsh-ia`（node v25.9.0 / pnpm / vitest 3.2.7）
 - 独立测试文件：`tests/tester-runner-task6.INDEPENDENT.spec.ts`（57 用例，独立编写，未复用 Developer 的 `tests/runner-*.test.ts`）
 - 结论：**6/6 验收点通过**。仅 1 项非阻断测试基建缺陷（见风险点）。
 

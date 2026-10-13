@@ -3,7 +3,7 @@
 - **结论：✅ 通过（PASS）**
 - 被测分支/提交：`main` @ `5617847`（src/log/task-log.ts、src/scheduler/{runner,index,types}.ts）
 - 执行节点：`Reach的MacBook Pro`（node v25.9.0 / pnpm 11.7.0）
-- 项目路径：`/Users/reachlucifer/project/opc/dsh-finance`
+- 项目路径：`/Users/reachlucifer/project/opc/dsh-ia`
 - 独立测试文件：`tests/tester-t100436-task-log.INDEPENDENT.spec.ts`（52 用例，自成体系，不依赖 Developer 自测）
 - 测试范围：真实 node 子进程 E2E + mock 边界 + 对抗性用例；**不复读** Developer 自测。
 
@@ -17,9 +17,9 @@
 | 被测模块既有回归 | `vitest run tests/task-log.test.ts tests/runner.test.ts tests/runner-real-process.test.ts` | **61 passed**（23+32+6） |
 | 全量回归 | `vitest run` | **62 files / 1249 tests**（M3 相关全绿；EXIT=0 可复现不稳定，见下「稳定性说明」） |
 | 类型门禁 | `tsc -p tsconfig.json --noEmit` | **EXIT=0** |
-| 真实 home 污染 | `ls ~/.dsh-finance/logs` | **No such file or directory**（未污染） |
+| 真实 home 污染 | `ls ~/.dsh-ia/logs` | **No such file or directory**（未污染） |
 
-> 隔离：全部用例走临时目录（注入 `TaskLogOptions.dir` 或临时覆盖 `DSH_FINANCE_LOG_DIR`），afterEach 清理；未触碰真实 `~/.dsh-finance`。
+> 隔离：全部用例走临时目录（注入 `TaskLogOptions.dir` 或临时覆盖 `DSH_IA_LOG_DIR`），afterEach 清理；未触碰真实 `~/.dsh-ia`。
 > 既有未跟踪文件 `scripts/jev-news-demo.*` 未改动（`git status` 仅新增本 spec + 既有 demo 文件）。
 
 ### 稳定性说明（全量回归非确定性，均为**既有**用例，非 M3 回归）
@@ -54,8 +54,8 @@
 
 ### AC3 — 单文件 10MB 上限约束磁盘占用，且只约束任务日志、不影响 stdout 结果解析 ✅
 - 覆盖用例：[4]a–d、[9]d、[9]e。
-- 证据（[4]a）：`DEFAULT_TASK_LOG_MAX_SIZE=10*1024*1024`；解析优先级 `显式 > DSH_FINANCE_LOG_MAX_SIZE > 默认`；非正值回退默认。
-- 证据（[9]d，**真实子进程**）：`DSH_FINANCE_LOG_MAX_SIZE=8192` + 子进程狂写 ~512KB stderr → 日志文件 `size ≤ 8192`、`warn` 至少一次（含“上限”）、**结局仍为 `quiet`**（末行 JSON 完好解析）。
+- 证据（[4]a）：`DEFAULT_TASK_LOG_MAX_SIZE=10*1024*1024`；解析优先级 `显式 > DSH_IA_LOG_MAX_SIZE > 默认`；非正值回退默认。
+- 证据（[9]d，**真实子进程**）：`DSH_IA_LOG_MAX_SIZE=8192` + 子进程狂写 ~512KB stderr → 日志文件 `size ≤ 8192`、`warn` 至少一次（含“上限”）、**结局仍为 `quiet`**（末行 JSON 完好解析）。
 - 证据（[9]e）：`maxSize=1` 时日志文件 `size ≤ 1`，但 stdout 结果仍正确解析为 `woke/OK` → 上限仅约束日志文件。
 - 实现取「**停写 + warn**」而非「tail 截断」，符合 AC3 二选一。
 
@@ -64,7 +64,7 @@
 - 证据（[3]a）：文件名为 `<ts>-<pid>.log`（注入 `now` 后精确等于 `2026-10-12T11-31-00-123Z-4242.log`）。
 - 证据（[3]c / [9]a）：目录 `mode & 0o777 === 0o700`；文件 `=== 0o600`。
 - 证据（[9]a）：**真实子进程**日志文件名中的 pid 与子进程自身 `process.pid`（脚本 `console.error('PID='+process.pid)` 交叉校验）**完全一致**。
-- 证据（[3]d）：临时覆盖 `DSH_FINANCE_LOG_DIR` 后，不传 `dir` 的采集器落到该目录 `<envRoot>/tasks/<taskId>/`。
+- 证据（[3]d）：临时覆盖 `DSH_IA_LOG_DIR` 后，不传 `dir` 的采集器落到该目录 `<envRoot>/tasks/<taskId>/`。
 - 证据（[3]b）：`pid` 缺失 → `<ts>-unknown.log`，不抛异常。
 
 ### AC5 — 不引第三方依赖；顶层 `inject` 仍 `['tools','skills','fs']` ✅
@@ -119,7 +119,7 @@
 - 建议（可选）：`sanitizeSegment` 将纯 `.`/`..` 也回退为 `unknown`。
 
 ### ⚠️ R3（低）：任务日志上限与宿主日志 exporter 共用同一环境变量
-- `TASK_LOG_MAX_SIZE_ENV === LOG_MAX_SIZE_ENV === 'DSH_FINANCE_LOG_MAX_SIZE'`。若用户为放宽宿主日志（默认 50MB）而设大该变量，会**同时放宽任务日志上限**（默认 10MB）。属设计耦合，非缺陷；仅提示运维注意。
+- `TASK_LOG_MAX_SIZE_ENV === LOG_MAX_SIZE_ENV === 'DSH_IA_LOG_MAX_SIZE'`。若用户为放宽宿主日志（默认 50MB）而设大该变量，会**同时放宽任务日志上限**（默认 10MB）。属设计耦合，非缺陷；仅提示运维注意。
 
 ### ⚠️ R4（信息）：同一 taskId 在同一毫秒内的两次运行会撞名追加
 - 文件名时间戳精度为毫秒；极端同毫秒并发同 taskId 会落到同一文件并**追加**（非覆盖）。正常调度时间推进下不可复现。[8]a 用递增时钟验证了「同 taskId 多次运行 → 文件名互异、内容互不串扰」。
@@ -129,7 +129,7 @@
 ## 五、复现步骤（关键命令）
 
 ```bash
-cd /Users/reachlucifer/project/opc/dsh-finance
+cd /Users/reachlucifer/project/opc/dsh-ia
 
 # 独立验收（52 用例）
 ./node_modules/.bin/vitest run tests/tester-t100436-task-log.INDEPENDENT.spec.ts

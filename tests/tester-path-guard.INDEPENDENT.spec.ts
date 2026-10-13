@@ -357,6 +357,6 @@ describe('⑤ 契约复核', () => {
       'utf8',
     )
     expect(patch).toContain("inject: ['tools', 'skills', 'fs']")
-    expect(patch).toContain('name: dsh-finance')
+    expect(patch).toContain('name: dsh-ia')
   })
 })

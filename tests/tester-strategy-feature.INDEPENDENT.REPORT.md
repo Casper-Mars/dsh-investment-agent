@@ -1,6 +1,6 @@
 # 策略域改造统一独立复验 + 全量回归 —— Tester 独立报告
 
-- 被测交付物：`/Users/reachlucifer/project/opc/dsh-finance`
+- 被测交付物：`/Users/reachlucifer/project/opc/dsh-ia`
 - 被测 HEAD：`c1debcf`（`c1debcfc87e82d5178b2ab4cd57215e9becfb47a`，工作区干净，仅新增本复验文件）
 - 复验时间：2026-10-02（Asia/Shanghai）
 - 复验文件：`tests/tester-strategy-feature.INDEPENDENT.spec.ts`（24 用例，全部经**真实 ToolRuntime registry** 走工具层）

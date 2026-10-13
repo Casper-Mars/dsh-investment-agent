@@ -20,17 +20,17 @@ const HOME = homedir()
 const base = join(HOME, FINANCE_HOME)
 
 describe('路径解析（固定目录锚定）', () => {
-  it('resolveFinanceHomeDir = ~/.dsh-finance（绝对路径）', () => {
+  it('resolveFinanceHomeDir = ~/.dsh-ia（绝对路径）', () => {
     expect(resolveFinanceHomeDir()).toBe(base)
     expect(resolveFinanceHomeDir().startsWith('/')).toBe(true)
     expect(resolveFinanceHomeDir()).not.toContain('~')
   })
 
-  it('resolveFinanceDataDir = ~/.dsh-finance/data', () => {
+  it('resolveFinanceDataDir = ~/.dsh-ia/data', () => {
     expect(resolveFinanceDataDir()).toBe(join(base, 'data'))
   })
 
-  it('resolveFinanceTasksDir = ~/.dsh-finance/data/tasks', () => {
+  it('resolveFinanceTasksDir = ~/.dsh-ia/data/tasks', () => {
     expect(resolveFinanceTasksDir()).toBe(join(base, 'data', 'tasks'))
   })
 
@@ -44,7 +44,7 @@ describe('路径解析（固定目录锚定）', () => {
 
 describe('目录自动创建（幂等）', () => {
   beforeAll(() => {
-    // 幂等测试环境：确保从干净状态出发（仅删 .dsh-finance/data，不碰 home 其他内容）
+    // 幂等测试环境：确保从干净状态出发（仅删 .dsh-ia/data，不碰 home 其他内容）
     if (existsSync(base)) {
       rmSync(base, { recursive: true, force: true })
     }
@@ -56,7 +56,7 @@ describe('目录自动创建（幂等）', () => {
     expect(existsSync(dir)).toBe(true)
   })
 
-  it('ensureFinanceDataDir 递归创建 ~/.dsh-finance/data', () => {
+  it('ensureFinanceDataDir 递归创建 ~/.dsh-ia/data', () => {
     const dir = ensureFinanceDataDir()
     expect(dir).toBe(join(base, 'data'))
     expect(existsSync(dir)).toBe(true)
@@ -69,7 +69,7 @@ describe('目录自动创建（幂等）', () => {
   })
 })
 
-describe('环境变量优先级（构造注入 > DSH_FINANCE_DATA_DIR > 默认）', () => {
+describe('环境变量优先级（构造注入 > DSH_IA_DATA_DIR > 默认）', () => {
   const savedEnv = process.env[DATA_ROOT_ENV]
 
   afterAll(() => {
@@ -83,13 +83,13 @@ describe('环境变量优先级（构造注入 > DSH_FINANCE_DATA_DIR > 默认�
     expect(ctx.dataRoot).toBe(resolve('/tmp/injected-root'))
   })
 
-  it('环境变量 DSH_FINANCE_DATA_DIR 优先于默认', () => {
+  it('环境变量 DSH_IA_DATA_DIR 优先于默认', () => {
     process.env[DATA_ROOT_ENV] = '/tmp/env-root'
     const ctx = createToolContext()
     expect(ctx.dataRoot).toBe(resolve('/tmp/env-root'))
   })
 
-  it('缺省回落默认 ~/.dsh-finance/data', () => {
+  it('缺省回落默认 ~/.dsh-ia/data', () => {
     delete process.env[DATA_ROOT_ENV]
     const ctx = createToolContext()
     expect(ctx.dataRoot).toBe(join(base, 'data'))

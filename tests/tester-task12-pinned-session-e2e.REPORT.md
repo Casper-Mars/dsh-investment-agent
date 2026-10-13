@@ -1,6 +1,6 @@
 # Task-12（t100362）固定会话端到端联调与验收 —— 独立报告
 
-- **被测交付物**：`/Users/reachlucifer/project/opc/dsh-finance`（分支 `main`，HEAD `086d10f`）
+- **被测交付物**：`/Users/reachlucifer/project/opc/dsh-ia`（分支 `main`，HEAD `086d10f`）
 - **被测能力**：固定会话闭环 = 调度触发 → 定点投递进固定会话 → agent 研判；用户同会话对话；插件重载后 resume 保上下文
 - **执行环境**：宿主机 Mac（node `Reach的MacBook Pro`）；harness `deepseek-harness` @ `0.2.0-rc.2`
 - **独立测试文件**：`tests/tester-task12-pinned-session-e2e.INDEPENDENT.spec.ts`（4 用例，真实 cordis Context 端到端）
@@ -49,7 +49,7 @@ TYPECHECK_EXIT=0
 
 $ pnpm build
 $ tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json && node scripts/copy-assets.mjs
-[dsh-finance-assets] 共搬运 11 个资源文件到 dist-server/
+[dsh-ia-assets] 共搬运 11 个资源文件到 dist-server/
 BUILD_EXIT=0
 
 $ pnpm test
@@ -72,12 +72,12 @@ $ npx vitest run tests/tester-task12-pinned-session-e2e.INDEPENDENT.spec.ts
 关键运行日志（AC4 create / AC3 resume 分支的 stdout 证据）：
 
 ```
-[dsh-finance] 插件加载：name=investment-advisor inject=[tools, skills, ptcRuntime, fs]
-[dsh-finance/runner] 唤醒通道已就绪（定点投递：investment-advisor）
-[dsh-finance/runner] 会话持久化通道已就绪（pinned session = investment-advisor）
-[dsh-finance/session] 固定会话不存在，create 新建：investment-advisor（cwd=...）   # AC4
+[dsh-ia] 插件加载：name=investment-advisor inject=[tools, skills, ptcRuntime, fs]
+[dsh-ia/runner] 唤醒通道已就绪（定点投递：investment-advisor）
+[dsh-ia/runner] 会话持久化通道已就绪（pinned session = investment-advisor）
+[dsh-ia/session] 固定会话不存在，create 新建：investment-advisor（cwd=...）   # AC4
 ...
-[dsh-finance/session] 固定会话已持久化，resume 恢复：investment-advisor           # AC3
+[dsh-ia/session] 固定会话已持久化，resume 恢复：investment-advisor           # AC3
 ```
 
 ### 3.3 真实 dsh 宿主冒烟（Part B）
@@ -90,9 +90,9 @@ Done in 213ms using pnpm v11.7.0
 ADD_EXIT=0
 
 $ dsh --profile opc-finance-verify --dump-config
-# == dsh-finance
-- id: dsh-finance
-  name: dsh-finance
+# == dsh-ia
+- id: dsh-ia
+  name: dsh-ia
   inject: [tools, skills, ptcRuntime, fs]
 DUMP_EXIT=0
 ```
@@ -101,32 +101,32 @@ DUMP_EXIT=0
 
 ```
 dsh: all_proxy names a SOCKS proxy, which is not supported ...
-[dsh-finance] 插件加载：name=investment-advisor inject=[tools, skills, ptcRuntime, fs]
-[dsh-finance/scheduler] 启动（Asia/Shanghai）：脉冲每 30 秒 @ 9:30-11:30/13:00-15:00，复盘 18:30，盘前 9:25
-[dsh-finance/runner] 唤醒通道已就绪（定点投递：investment-advisor）
-[dsh-finance/runner] 会话持久化通道已就绪（pinned session = investment-advisor）
-[dsh-finance/session] 固定会话不存在，create 新建：investment-advisor（cwd=/Users/reachlucifer/project/opc/dsh-finance）
+[dsh-ia] 插件加载：name=investment-advisor inject=[tools, skills, ptcRuntime, fs]
+[dsh-ia/scheduler] 启动（Asia/Shanghai）：脉冲每 30 秒 @ 9:30-11:30/13:00-15:00，复盘 18:30，盘前 9:25
+[dsh-ia/runner] 唤醒通道已就绪（定点投递：investment-advisor）
+[dsh-ia/runner] 会话持久化通道已就绪（pinned session = investment-advisor）
+[dsh-ia/session] 固定会话不存在，create 新建：investment-advisor（cwd=/Users/reachlucifer/project/opc/dsh-ia）
 ```
 
 真实落盘会话（真实 `session-persistence-jsonl` v4 zstd 格式）：
 
 ```
-/Users/reachlucifer/.dsh/sessions/--Users-reachlucifer-project-opc-dsh-finance--/investment-advisor/session.v4.jsonl.zstd
+/Users/reachlucifer/.dsh/sessions/--Users-reachlucifer-project-opc-dsh-ia--/investment-advisor/session.v4.jsonl.zstd
 /Users/reachlucifer/.dsh/storages/session_projcache/sessions/investment-advisor.json
 ```
 
 会话 header（`projcache` 记录，权威 AC4 证据）：
 ```json
 "identity": { "formatVersion": 4, "createdAt": 1790775665570,
-  "cwd": "/Users/reachlucifer/project/opc/dsh-finance",
+  "cwd": "/Users/reachlucifer/project/opc/dsh-ia",
   "isSeeded": false, "inheritedEventCount": 0 }
 ```
 
 **真实 `headless` 第二次运行**（AC3：resume 恢复，未重复 create）：
 
 ```
-[dsh-finance/session] 固定会话已持久化，resume 恢复：investment-advisor
-[dsh-finance/scheduler] 已停止，定时器已清空
+[dsh-ia/session] 固定会话已持久化，resume 恢复：investment-advisor
+[dsh-ia/scheduler] 已停止，定时器已清空
 ```
 
 会话文件体积 298B → 378B（同一文件追加，目录未出现第二个 session 目录）→ **resume 复用同一份日志，未 create**。
@@ -157,7 +157,7 @@ dsh: all_proxy names a SOCKS proxy, which is not supported ...
 ### stub 的（已明确，不误判）
 
 1. **AgentFactory 为自建最小工厂**（非 `dsh-agent-loop`）：因为 `dsh-agent-loop` 需模型凭据，不可用于确定性测试。factory 产出的 agent 的 `followup` 把消息写进 jsonl 日志 + 产出「研判」assistant 消息，等价「agent 在会话内研判」的落盘语义，但**研判内容非真实 LLM 产出**。
-2. **sessionPersistence 为忠实复刻**（非 harness `session-persistence-jsonl` 源码）：因为该包不在 dsh-finance 依赖树可解析范围。复刻对齐了可观测契约（create 落盘 / stat 命中 / resume 复读 / 磁盘发现 / 按 cwd 分 project 目录），且**用真实宿主验证了该复刻与真实后端行为一致**（真实落盘路径与 header 字段吻合）。
+2. **sessionPersistence 为忠实复刻**（非 harness `session-persistence-jsonl` 源码）：因为该包不在 dsh-ia 依赖树可解析范围。复刻对齐了可观测契约（create 落盘 / stat 命中 / resume 复读 / 磁盘发现 / 按 cwd 分 project 目录），且**用真实宿主验证了该复刻与真实后端行为一致**（真实落盘路径与 header 字段吻合）。
 3. **tools/skills/fs/ptcRuntime 为最小 stub**：`ptcRuntime` 恒 `shouldWake:false`、`tools`/`skills` no-op，目的是让插件装载且不引入网络/真实调度副作用，不影响 session/waker 层断言。
 
 ### 风险

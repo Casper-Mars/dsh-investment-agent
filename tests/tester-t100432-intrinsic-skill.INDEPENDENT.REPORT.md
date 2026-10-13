@@ -1,7 +1,7 @@
 # 测试报告 · t100432 —— `task-authorship` 固有化（运行时验证 + 独立复核）
 
 - **被测交付物**：commit `bdbe116`（`refactor(skills): task-authorship 从可进化清单分离为固有 SKILL`）
-- **项目路径**：`/Users/reachlucifer/project/opc/dsh-finance`（分支 `main`）
+- **项目路径**：`/Users/reachlucifer/project/opc/dsh-ia`（分支 `main`）
 - **执行节点**：Reach的MacBook Pro（Darwin 25.4.0 / arm64，Node v25.9.0，pnpm 11.7.0，vitest 3.2.7）
 - **测试范围**：功能验证（运行时行为）+ 独立复核（**不复跑**开发者用例）
 - **独立测试文件**：`tests/tester-t100432-intrinsic-skill.INDEPENDENT.spec.ts`（**18 用例**）
@@ -32,7 +32,7 @@
    - (a) skills 可用 → `apply` 不抛，`register` 恰 1 次，注册对象契约（name/source=runtime/invocation 双开/content 一致）正确；
    - (b) skills 不可用 → `apply` **不抛**、不 register、effect 仍注册（走 no-op 分支）；
    - (c) 卸载 → 调用固有 SKILL 的 effect disposer，注册的实例被移除（移除计数=1，且不误删他人）。
-3. **真实环境装载（AC3-real / AC4）**：真实 `SkillRegistry` + `ToolRuntime` + `dist-server` 插件 fiber 装载（临时 `DSH_FINANCE_DATA_DIR`）；`ensureSkillAssetsRepo` 走**真实 git**（不是 mock runner）。
+3. **真实环境装载（AC3-real / AC4）**：真实 `SkillRegistry` + `ToolRuntime` + `dist-server` 插件 fiber 装载（临时 `DSH_IA_DATA_DIR`）；`ensureSkillAssetsRepo` 走**真实 git**（不是 mock runner）。
 4. **对抗性检验**：
    - **降级不抛（AC3b）**：skills 缺失时 `apply` 不抛、不中断装载；
    - **降级不抛（AC-adv2·本轮补强）**：`skills.register` **抛错**时 `apply` 不抛（try/catch 兜住），固有效应仍注册、其 disposer 安全 no-op；

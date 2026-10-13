@@ -1,9 +1,9 @@
 /**
- * 独立测试（t100419）—— dsh-finance 接入 dsh 原生 `skill-filesystem` provider。
+ * 独立测试（t100419）—— dsh-ia 接入 dsh 原生 `skill-filesystem` provider。
  *
  * 与开发者自测 `tests/skill-provider.spec.ts` 独立：本文件自行构造**真实**装配
  * （真实 `SkillRegistry` + 真实 `chokidar` watch 热更新 + 真实 scope 层），逐条对应
- * 验收标准 AC1–AC4 与任务要求的 A–H 独立验证点，**不污染** `~/.dsh-finance`。
+ * 验收标准 AC1–AC4 与任务要求的 A–H 独立验证点，**不污染** `~/.dsh-ia`。
  *
  * 覆盖：
  *   A  真实热更新闭环（改写 / 新增 / 删除 + `skills/change` 事件证据）
@@ -67,15 +67,15 @@ beforeAll(async () => {
 /* ------------------------------------------------------------------ *
  * 环境隔离：把默认 dataRoot 指向临时目录，杜绝任何回落污染真实 home。
  * ------------------------------------------------------------------ */
-const savedEnv = process.env.DSH_FINANCE_DATA_DIR
+const savedEnv = process.env.DSH_IA_DATA_DIR
 let envRoot: string
 beforeAll(() => {
   envRoot = mkdtempSync(join(tmpdir(), 'dsh-fin-t100419-env-'))
-  process.env.DSH_FINANCE_DATA_DIR = envRoot
+  process.env.DSH_IA_DATA_DIR = envRoot
 })
 afterAll(() => {
-  if (savedEnv === undefined) delete process.env.DSH_FINANCE_DATA_DIR
-  else process.env.DSH_FINANCE_DATA_DIR = savedEnv
+  if (savedEnv === undefined) delete process.env.DSH_IA_DATA_DIR
+  else process.env.DSH_IA_DATA_DIR = savedEnv
   rmSync(envRoot, { recursive: true, force: true })
 })
 
@@ -474,7 +474,7 @@ describe('C · 旧静态注册删除无残留 + 装配正确', () => {
  * F. 与 preset 默认 provider 共存（放在降级 D 之前，避免 mock 影响）
  * ================================================================== */
 describe('F · 与 preset 默认 provider 共存 / 同层重名边界', () => {
-  it('F1 同层共存：dsh-finance-skills 与默认名 filesystem 互不冲突、各自可见', async () => {
+  it('F1 同层共存：dsh-ia-skills 与默认名 filesystem 互不冲突、各自可见', async () => {
     const dataRoot = mkSeededDataRoot()
     const extraDir = mkTmpRaw()
     writeSkill(extraDir, 'preset-skill', 'PRESET-DESC', '# preset body')
@@ -599,11 +599,11 @@ describe('D · 降级对抗（不抛、可观测）', () => {
       expect(() => pluginApply(ctx)).not.toThrow()
       await new Promise((r) => setTimeout(r, 200))
 
-      // 降级：本轮没有 dsh-finance-skills provider。
+      // 降级：本轮没有 dsh-ia-skills provider。
       expect(coreNames(await list(ctx))).toHaveLength(0)
       // 其它贡献照常装载：tools effect 与 provider effect 均已登记。
-      expect(labels).toContain('dsh-finance tools')
-      expect(labels).toContain('dsh-finance skill-filesystem provider')
+      expect(labels).toContain('dsh-ia tools')
+      expect(labels).toContain('dsh-ia skill-filesystem provider')
       expect(
         errSpy.mock.calls.some((c) => String(c[0]).includes('挂载失败（降级）')),
       ).toBe(true)

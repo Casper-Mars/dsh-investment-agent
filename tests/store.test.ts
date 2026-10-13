@@ -25,7 +25,7 @@ let dir: string
 let tasksDir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'dsh-finance-store-'))
+  dir = mkdtempSync(join(tmpdir(), 'dsh-ia-store-'))
   tasksDir = join(dir, 'data', 'tasks')
 })
 
@@ -113,10 +113,10 @@ describe('依赖注入（dataDir 覆盖）', () => {
     expect(store.list().tasks.map((t) => t.id)).toEqual(['x'])
   })
 
-  it('createTaskStore 缺省使用 defaultTasksDir（~/.dsh-finance/data/tasks）', () => {
+  it('createTaskStore 缺省使用 defaultTasksDir（~/.dsh-ia/data/tasks）', () => {
     const store = createTaskStore()
     // factory 缺省目录即 defaultTasksDir；此处仅验证函数引用一致，不落盘避免污染主目录。
-    expect(defaultTasksDir()).toBe(join(homedir(), '.dsh-finance', 'data', 'tasks'))
+    expect(defaultTasksDir()).toBe(join(homedir(), '.dsh-ia', 'data', 'tasks'))
     expect(store).toBeInstanceOf(TaskStore)
   })
 })

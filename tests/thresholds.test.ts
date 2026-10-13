@@ -21,7 +21,7 @@ let dir: string
 let ctx: ToolContext
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'dsh-finance-thresholds-'))
+  dir = mkdtempSync(join(tmpdir(), 'dsh-ia-thresholds-'))
   ctx = createToolContext({ dataRoot: dir })
 })
 

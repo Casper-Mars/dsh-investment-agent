@@ -12,7 +12,7 @@
 ## 注入机制
 
 - 读取 `advisor.md`（`new URL('./advisor.md', import.meta.url)`，源码态 / 编译态路径一致）。
-- 组装为 `systemPrompt` 的一个 `PromptSection`：`name='dsh-finance:advisor'`、`order=100`、`text=() => advisorMd`，**不使用 `complete`**（避免覆盖部署 persona）。
+- 组装为 `systemPrompt` 的一个 `PromptSection`：`name='dsh-ia:advisor'`、`order=100`、`text=() => advisorMd`，**不使用 `complete`**（避免覆盖部署 persona）。
 - 经 `ctx.inject(['systemPrompt'], cb)` **动态声明依赖**注入 —— 顶层插件 `inject` 保持 `['tools','skills','fs']` 不变。
 
 ## 构建搬运

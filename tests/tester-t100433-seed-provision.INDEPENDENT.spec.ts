@@ -3,7 +3,7 @@
  * ==================================================================
  * Tester 独立复验（任务卡 t100433）：为「种子预置与构建搬运」做**运行时 / 产物级**
  * 核验（非仅代码审查）。被测交付物：
- *   - `/Users/reachlucifer/project/opc/dsh-finance`（HEAD=0d13441 + 未提交改动：
+ *   - `/Users/reachlucifer/project/opc/dsh-ia`（HEAD=0d13441 + 未提交改动：
  *     `src/skills/provider.ts` / `src/skills/repo.ts` 各 1 行注释，把「6 个技术面
  *     SKILL」表述同步为「5 个可进化 + 1 个固有」）。
  *
@@ -78,7 +78,7 @@ afterEach(() => {
     const dir = tempDirs.pop() as string
     rmSync(dir, { recursive: true, force: true })
   }
-  delete process.env.DSH_FINANCE_DATA_DIR
+  delete process.env.DSH_IA_DATA_DIR
 })
 
 /** 直接调系统 git（仅用于测试断言，显式注入身份以脱离宿主全局配置）。 */

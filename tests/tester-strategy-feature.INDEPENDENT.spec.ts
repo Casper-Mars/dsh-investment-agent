@@ -83,7 +83,7 @@ async function bootRegistry(dataRoot: string): Promise<Booted> {
     dispose: () => Promise<void>
   }
   const pluginFiber = app.plugin({
-    name: 'dsh-finance-tools',
+    name: 'dsh-ia-tools',
     inject: ['tools'],
     apply(ctx: Context) {
       registerAllTools(ctx, { dataRoot })
@@ -407,7 +407,7 @@ describe('4. 运行时可见性：真实插件装载路径', () => {
   it('顶层 inject 契约 + 真实装载后工具 21 / SKILL 5 可进化（+ 1 固有，skill-filesystem provider）', async () => {
     expect(topLevelInject).toEqual(['tools', 'skills', 'fs'])
 
-    process.env.DSH_FINANCE_DATA_DIR = dir
+    process.env.DSH_IA_DATA_DIR = dir
     const app = new Context()
     app.provide('systemPrompt', systemPromptStub())
     await (app.plugin(SkillRegistry as never) as Promise<unknown>)
@@ -453,7 +453,7 @@ describe('4. 运行时可见性：真实插件装载路径', () => {
 
     await pluginFiber.dispose()
     await toolsFiber.dispose()
-    delete process.env.DSH_FINANCE_DATA_DIR
+    delete process.env.DSH_IA_DATA_DIR
   }, 20000)
 
   it('随包种子 frontmatter 合法（5 个可进化；strategy-authorship 在目次）', () => {

@@ -1,5 +1,5 @@
 /**
- * 【独立验证】Tester 复测：dsh-finance Prompt 与 Skills 层（飞书任务 t100355）。
+ * 【独立验证】Tester 复测：dsh-ia Prompt 与 Skills 层（飞书任务 t100355）。
  *
  * 本文件由 Tester 独立编写，**不依赖** Developer 已写的 tests/prompt-skills.spec.ts，
  * 从「外部行为 + 权威 harness 契约」角度重跑 5 条验收点，并对边界与运行时注册机制
@@ -53,7 +53,7 @@ const tmpDirs: string[] = []
 
 /** 建临时 dataRoot 并预置 5 个可进化 skill 资产（真实 git 仓库）。 */
 function makeSeededDataRoot(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'dsh-finance-tester-prompt-skills-'))
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-ia-tester-prompt-skills-'))
   tmpDirs.push(dir)
   ensureSkillAssetsRepo({ dataRoot: dir, logger: () => {} })
   return dir
@@ -265,7 +265,7 @@ describe('[4] advisor 人设注入 system-prompt', () => {
     expect(capturedSections).toHaveLength(1)
     const s = capturedSections[0]
     expect(s.name).toBe(ADVISOR_SECTION_NAME)
-    expect(ADVISOR_SECTION_NAME).toBe('dsh-finance:advisor')
+    expect(ADVISOR_SECTION_NAME).toBe('dsh-ia:advisor')
     expect(typeof s.order).toBe('number')
     expect(s.order).toBe(ADVISOR_SECTION_ORDER)
     expect(typeof s.text).toBe('function')
@@ -277,7 +277,7 @@ describe('[4] advisor 人设注入 system-prompt', () => {
 
   it('createAdvisorSection 惰性取值、非 complete', () => {
     const s = createAdvisorSection()
-    expect(s.name).toBe('dsh-finance:advisor')
+    expect(s.name).toBe('dsh-ia:advisor')
     expect(Number.isFinite(s.order)).toBe(true)
     expect(typeof s.text).toBe('function')
     expect((s.text as () => string)().length).toBeGreaterThan(300)
@@ -295,7 +295,7 @@ describe('[4] advisor 人设注入 system-prompt', () => {
     })
     applyAdvisorPrompt(ctx)
     await new Promise((r) => setTimeout(r, 0))
-    expect(sections.some((s) => s.name === 'dsh-finance:advisor')).toBe(true)
+    expect(sections.some((s) => s.name === 'dsh-ia:advisor')).toBe(true)
     await ctx.fiber.dispose()
   })
 })
@@ -312,10 +312,10 @@ describe('[5] 顶层 inject 契约', () => {
   })
 
   it('apply(ctx) 后顶层 inject 未被改写', () => {
-    // 防 ensureSkillAssetsRepo 回落到默认 `~/.dsh-finance`（污染 home）。
+    // 防 ensureSkillAssetsRepo 回落到默认 `~/.dsh-ia`（污染 home）。
     const dataRoot = makeSeededDataRoot()
-    const prev = process.env.DSH_FINANCE_DATA_DIR
-    process.env.DSH_FINANCE_DATA_DIR = dataRoot
+    const prev = process.env.DSH_IA_DATA_DIR
+    process.env.DSH_IA_DATA_DIR = dataRoot
     try {
       const ctx = {
         effect(body: () => unknown) {
@@ -329,8 +329,8 @@ describe('[5] 顶层 inject 契约', () => {
       apply(ctx)
       expect(topLevelInject).toEqual(['tools', 'skills', 'fs'])
     } finally {
-      if (prev === undefined) delete process.env.DSH_FINANCE_DATA_DIR
-      else process.env.DSH_FINANCE_DATA_DIR = prev
+      if (prev === undefined) delete process.env.DSH_IA_DATA_DIR
+      else process.env.DSH_IA_DATA_DIR = prev
     }
   })
 })
@@ -365,8 +365,8 @@ describe('[0] advisor.md 人设结构', () => {
 describe('[5b] 真实 cordis 下 apply(ctx) 端到端装配', () => {
   it('apply 后 5 个可进化 skill 经 provider 可发现（+ 固有 SKILL 静态注册），且 advisor section 被注入', async () => {
     const dataRoot = makeSeededDataRoot()
-    const prev = process.env.DSH_FINANCE_DATA_DIR
-    process.env.DSH_FINANCE_DATA_DIR = dataRoot
+    const prev = process.env.DSH_IA_DATA_DIR
+    process.env.DSH_IA_DATA_DIR = dataRoot
     try {
       const ctx = new Context()
       await (ctx.plugin(SkillRegistry as never) as Promise<unknown>)
@@ -399,12 +399,12 @@ describe('[5b] 真实 cordis 下 apply(ctx) 端到端装配', () => {
       expect(intrinsic, '固有 SKILL 应经静态注册可见').toBeDefined()
       expect(intrinsic?.source).toBe('runtime')
 
-      expect(sections.some((s) => s.name === 'dsh-finance:advisor')).toBe(true)
+      expect(sections.some((s) => s.name === 'dsh-ia:advisor')).toBe(true)
 
       await ctx.fiber.dispose()
     } finally {
-      if (prev === undefined) delete process.env.DSH_FINANCE_DATA_DIR
-      else process.env.DSH_FINANCE_DATA_DIR = prev
+      if (prev === undefined) delete process.env.DSH_IA_DATA_DIR
+      else process.env.DSH_IA_DATA_DIR = prev
     }
   })
 })

@@ -83,7 +83,7 @@ for (const rel of assets) {
   const from = path.join(srcDir, rel)
   const to = path.join(outDir, rel)
   copyAssetIdempotent(from, to)
-  console.log(`[dsh-finance-assets] ${path.relative(root, from)} -> ${path.relative(root, to)}`)
+  console.log(`[dsh-ia-assets] ${path.relative(root, from)} -> ${path.relative(root, to)}`)
 }
 
-console.log(`[dsh-finance-assets] 共搬运 ${assets.length} 个资源文件到 dist-server/`)
+console.log(`[dsh-ia-assets] 共搬运 ${assets.length} 个资源文件到 dist-server/`)

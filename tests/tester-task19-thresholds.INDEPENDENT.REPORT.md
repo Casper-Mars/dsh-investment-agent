@@ -1,6 +1,6 @@
 # 测试报告：Task-19 阈值来源迁移（策略 front-matter 三级优先级）
 
-- 被测交付物：`/Users/reachlucifer/project/opc/dsh-finance`（HEAD `add5a29` + 未提交改动）
+- 被测交付物：`/Users/reachlucifer/project/opc/dsh-ia`（HEAD `add5a29` + 未提交改动）
 - 被测文件：`src/domain/strategy.ts`（parseStrategyDoc）、`src/tools/context.ts`（getThresholds 三级优先级）、`src/domain/store.ts`（saveThresholds @deprecated）
 - 独立测试：`tests/tester-task19-thresholds.INDEPENDENT.spec.ts`（新增，未改 src/** / 既有测试）
 - 测试方式：真实 `createToolContext` + 真实文件落盘 + `createAllTools` 走工具 `execute` 链路，一律临时目录做 dataRoot（`mkdtempSync`），结束 `rmSync` 清理。

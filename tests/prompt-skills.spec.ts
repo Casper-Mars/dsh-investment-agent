@@ -54,7 +54,7 @@ const tmpDirs: string[] = []
 
 /** 建临时 dataRoot 并预置 5 个可进化 skill 资产（真实 git 仓库）。 */
 function makeSeededDataRoot(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'dsh-finance-prompt-skills-'))
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-ia-prompt-skills-'))
   tmpDirs.push(dir)
   ensureSkillAssetsRepo({ dataRoot: dir, logger: () => {} })
   return dir
@@ -369,10 +369,10 @@ describe('插件 apply 接入', () => {
   }
 
   it('apply 仅静态注册 2 个固有 SKILL（task-authorship / skill-authorship），5 个可进化 SKILL 改由 provider 承担；注入 1 个 prompt section，且不抛异常', () => {
-    // 防止 ensureSkillAssetsRepo 回落到默认 `~/.dsh-finance`（污染 home）。
+    // 防止 ensureSkillAssetsRepo 回落到默认 `~/.dsh-ia`（污染 home）。
     const dataRoot = makeSeededDataRoot()
-    const prev = process.env.DSH_FINANCE_DATA_DIR
-    process.env.DSH_FINANCE_DATA_DIR = dataRoot
+    const prev = process.env.DSH_IA_DATA_DIR
+    process.env.DSH_IA_DATA_DIR = dataRoot
     try {
       const { ctx, registeredSkills, injectedSections } = makeMockCtx()
       expect(() => apply(ctx)).not.toThrow()
@@ -387,15 +387,15 @@ describe('插件 apply 接入', () => {
       expect(injectedSections).toHaveLength(1)
       expect(injectedSections[0].name).toBe(ADVISOR_SECTION_NAME)
     } finally {
-      if (prev === undefined) delete process.env.DSH_FINANCE_DATA_DIR
-      else process.env.DSH_FINANCE_DATA_DIR = prev
+      if (prev === undefined) delete process.env.DSH_IA_DATA_DIR
+      else process.env.DSH_IA_DATA_DIR = prev
     }
   })
 
   it('缺失 skills 服务时不抛错（安全降级）', () => {
     const dataRoot = makeSeededDataRoot()
-    const prev = process.env.DSH_FINANCE_DATA_DIR
-    process.env.DSH_FINANCE_DATA_DIR = dataRoot
+    const prev = process.env.DSH_IA_DATA_DIR
+    process.env.DSH_IA_DATA_DIR = dataRoot
     try {
       const ctx = {
         effect(body: () => unknown) {
@@ -408,8 +408,8 @@ describe('插件 apply 接入', () => {
       } as unknown as Context
       expect(() => apply(ctx)).not.toThrow()
     } finally {
-      if (prev === undefined) delete process.env.DSH_FINANCE_DATA_DIR
-      else process.env.DSH_FINANCE_DATA_DIR = prev
+      if (prev === undefined) delete process.env.DSH_IA_DATA_DIR
+      else process.env.DSH_IA_DATA_DIR = prev
     }
   })
 })

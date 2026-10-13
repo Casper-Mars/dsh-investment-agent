@@ -18,7 +18,7 @@ import { StrategyRegistry } from '../src/domain/strategy.js'
 let dir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'dsh-finance-pathguard-'))
+  dir = mkdtempSync(join(tmpdir(), 'dsh-ia-pathguard-'))
 })
 
 afterEach(() => {

@@ -1,7 +1,7 @@
 /**
  * scheduler/loader.ts 单元测试。
  *
- * 唯一权威设计文档：《感知层详细设计（dsh-finance 插件）》 v0.7。
+ * 唯一权威设计文档：《感知层详细设计（dsh-ia 插件）》 v0.7。
  *
  * 覆盖任务卡验收点：
  * - 成功路径：exitCode 0 → resolve（mock spawner）

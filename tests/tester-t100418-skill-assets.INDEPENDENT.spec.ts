@@ -17,10 +17,10 @@
  *      不落盘，仅存在于 `src/skills/` 随包源）；
  *   ⑤ 空 / 半初始化判定：缺失 / 无 .git / 有 .git 无提交 / 仅空目录 / 无 skill
  *      内容 → 均需预置且恰一次首版 commit；
- *   ⑥ 路径护栏：不污染真实 `~/.dsh-finance`，dataRoot 优先级注入 > env > 默认；
+ *   ⑥ 路径护栏：不污染真实 `~/.dsh-ia`，dataRoot 优先级注入 > env > 默认；
  *   ⑦ 插件装配：`apply` 在最小上下文 + env 指向临时目录时不抛、并落盘到临时目录。
  *
- * 所有用例使用 `os.tmpdir()` 随机子目录，**不触碰**真实 `~/.dsh-finance`。
+ * 所有用例使用 `os.tmpdir()` 随机子目录，**不触碰**真实 `~/.dsh-ia`。
  */
 import { execFileSync } from 'node:child_process'
 import {
@@ -123,7 +123,7 @@ let tmp: string
 const savedEnv = process.env[DATA_ROOT_ENV]
 const REAL_SKILLS_DIR = join(
   process.env.HOME ?? '',
-  '.dsh-finance',
+  '.dsh-ia',
   'data',
   SKILLS_REPO_DIRNAME,
 )
@@ -131,7 +131,7 @@ let realSkillsExistedAtStart = false
 
 beforeEach(() => {
   assertGitAvailable()
-  tmp = mkdtempSync(join(tmpdir(), 'dsh-finance-t100418-'))
+  tmp = mkdtempSync(join(tmpdir(), 'dsh-ia-t100418-'))
 })
 
 afterEach(() => {
@@ -492,7 +492,7 @@ describe('⑤ 空 / 半初始化 → 均预置且恰一次首版 commit', () => 
 /* ================================================================== *
  * ⑥ 路径护栏 / 优先级 / 不污染
  * ================================================================== */
-describe('⑥ 路径护栏：优先级与不污染真实 ~/.dsh-finance', () => {
+describe('⑥ 路径护栏：优先级与不污染真实 ~/.dsh-ia', () => {
   it('resolveDataRoot：构造注入 > env > 默认（空串回落）', () => {
     const envRoot = join(tmp, 'env-data')
     const injectRoot = join(tmp, 'inject-data')
@@ -517,7 +517,7 @@ describe('⑥ 路径护栏：优先级与不污染真实 ~/.dsh-finance', () => 
     expect(existsSync(join(out.dir, SKILL_NAMES[0], SKILL_FILENAME))).toBe(true)
   })
 
-  it('本文件所有用例产物均在 os.tmpdir() 下，且未新建真实 ~/.dsh-finance/skills', () => {
+  it('本文件所有用例产物均在 os.tmpdir() 下，且未新建真实 ~/.dsh-ia/skills', () => {
     const out = ensureSkillAssetsRepo({ dataRoot: join(tmp, 'data'), logger: noop })
     expect(out.dir.startsWith(tmpdir())).toBe(true)
     if (!realSkillsExistedAtStart) {
@@ -575,7 +575,7 @@ describe('⑦ 插件装配：apply 接线与安全降级', () => {
 })
 
 /* ------------------------------------------------------------------ *
- * beforeAll：记录真实 ~/.dsh-finance/skills 起始状态（不污染判定基线）
+ * beforeAll：记录真实 ~/.dsh-ia/skills 起始状态（不污染判定基线）
  * ------------------------------------------------------------------ */
 beforeEach(() => {
   realSkillsExistedAtStart = existsSync(REAL_SKILLS_DIR)

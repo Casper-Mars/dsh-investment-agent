@@ -1,13 +1,13 @@
 /**
  * scheduler/wake.ts 单元测试。
  *
- * 唯一权威设计文档：《感知层详细设计（dsh-finance 插件）》 v0.7，§8（定点投递 /
+ * 唯一权威设计文档：《感知层详细设计（dsh-ia 插件）》 v0.7，§8（定点投递 /
  * 消息源 / 正文组装）、§9.1~§9.3（降级 / 文本预算 / 冷却）。
  *
  * 覆盖验收标准（逐条）：
  *  1. 定点投递：agents.get('investment-advisor') 命中且 followup 可调用 → delivered:true/count:1/targets:['investment-advisor']
  *  2. 正文组装：buildWakeText('xxx') === 'xxx\n\n> 本内容不构成投资建议'
- *  3. 复用 message-source：followup 收到的消息 source.kind==='dsh-finance' && source.form==='notice'（禁 'plugin'）
+ *  3. 复用 message-source：followup 收到的消息 source.kind==='dsh-ia' && source.form==='notice'（禁 'plugin'）
  *  4. 降级（§9.1）：a) 无 investment-advisor；b) followup 非函数；c) followup 抛异常 → delivered:false/count:0/targets:[]，且不向外抛
  *  5. 文本预算（§9.2/§9.3）：超 budget 截断；budget<=0 不截断
  *  6. 冷却（§9.3）：窗口内同 taskId 二次 wake 不投递；cooldownMs<=0 关闭冷却；不同 taskId 互不影响；降级不写 lastDeliveredAt
@@ -194,23 +194,23 @@ describe('Waker.wake（唤醒投递）', () => {
 
   // --- 验收点 3：复用 message-source（source.kind/form）---
 
-  it('followup 收到的消息 source.kind==="dsh-finance" 且 form==="notice"，无 "plugin"（验收点 3）', () => {
+  it('followup 收到的消息 source.kind==="dsh-ia" 且 form==="notice"，无 "plugin"（验收点 3）', () => {
     let captured: CapturedMessage | undefined
     const agent = makeCaptureAgent((m) => (captured = m))
     const waker = createWaker({ agents: makeRegistry(() => agent) })
 
     waker.wake('task-3', '今天行情波动')
     expect(captured).toBeDefined()
-    expect(captured!.source?.kind).toBe('dsh-finance')
+    expect(captured!.source?.kind).toBe('dsh-ia')
     expect(captured!.source?.form).toBe('notice')
     expect(captured!.source?.kind).not.toBe('plugin')
     // 显式断言不出现任何 'plugin' 字符串
     expect(JSON.stringify(captured!.source)).not.toContain('plugin')
   })
 
-  it('createNoticeMessage 本身产出 dsh-finance/notice 源（辅助断言）', () => {
+  it('createNoticeMessage 本身产出 dsh-ia/notice 源（辅助断言）', () => {
     const msg = createNoticeMessage('body', 'summary') as unknown as CapturedMessage
-    expect(msg.source?.kind).toBe('dsh-finance')
+    expect(msg.source?.kind).toBe('dsh-ia')
     expect(msg.source?.form).toBe('notice')
     expect(JSON.stringify(msg.source)).not.toContain('plugin')
   })

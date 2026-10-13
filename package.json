@@ -1,5 +1,5 @@
 {
-  "name": "dsh-finance",
+  "name": "dsh-ia",
   "version": "0.1.0",
   "type": "module",
   "description": "金融投资专家 Agent 插件（dsh）：投资建议、持仓记账、行情/交易日历与市场感知",

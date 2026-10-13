@@ -306,7 +306,7 @@ describe('AC5 顶层 inject 与 cordis.patch.yml 未改', () => {
     const patch = readFileSync(patchPath, 'utf-8')
     // 断言关键行存在：inject 三项
     expect(patch).toContain("inject: ['tools', 'skills', 'fs']")
-    expect(patch).toContain('id: dsh-finance')
-    expect(patch).toContain('name: dsh-finance')
+    expect(patch).toContain('id: dsh-ia')
+    expect(patch).toContain('name: dsh-ia')
   })
 })

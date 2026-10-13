@@ -1,13 +1,13 @@
 /**
  * scheduler/wake.ts —— 唤醒投递器（把 shouldWake=true 的任务 data 定点投递给固定会话）。
  *
- * 唯一权威设计文档：《感知层详细设计（dsh-finance 插件）》 v0.7，§8（定点投递 /
+ * 唯一权威设计文档：《感知层详细设计（dsh-ia 插件）》 v0.7，§8（定点投递 /
  * 消息源 / 正文组装）、§9.1~§9.3（降级 / 文本预算 / 冷却）。
  *
  * 职责（§8「定点投递」）：
  * 任务程序被判读为「唤醒」后，waker 负责把其 `data`（唤醒正文）投递给固定会话
  * `investment-advisor`。正文 = `data 原文 + 末尾合规声明`（§8.4）；消息源复用
- * `message-source.ts` 的 {@link createNoticeMessage}（producer kind `'dsh-finance'` +
+ * `message-source.ts` 的 {@link createNoticeMessage}（producer kind `'dsh-ia'` +
  * `form: 'notice'`），**不自行造 producer kind，禁用 V3 退役的 `'plugin'` 包装**。
  *
  * 三段安全护栏（§9）：
@@ -244,7 +244,7 @@ export class Waker {
       //
       // 类型桥接说明：types.ts 的 AgentLike.followup 参数是最小结构本地类型
       // `NoticeUserMessage`（`{kind, text}`），而 message-source 的 `createNoticeMessage`
-      // 返回真实 harness `UserMessage`（`source.kind === 'dsh-finance'` +
+      // 返回真实 harness `UserMessage`（`source.kind === 'dsh-ia'` +
       // `source.form === 'notice'` + `content`）。二者是同一概念的两套结构表述：
       // 本模块按任务要求「复用 createNoticeMessage（不重写/不自行造 kind）」产出真实
       // 消息，仅在此处做一次无信息损失的窄化桥接以对齐 types.ts 的最小结构契约。

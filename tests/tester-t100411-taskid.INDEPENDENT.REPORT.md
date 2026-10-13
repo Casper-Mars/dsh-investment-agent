@@ -1,6 +1,6 @@
 # Tester 独立测试报告 —— t100411 调度契约收紧（携带 taskId）+ 去反查
 
-- 被测交付物：`/Users/reachlucifer/project/opc/dsh-finance`（工作树未提交改动，branch=main）
+- 被测交付物：`/Users/reachlucifer/project/opc/dsh-ia`（工作树未提交改动，branch=main）
 - 改动文件：`src/scheduler/index.ts`、`src/scheduler/scheduler.ts` + 8 个既有 spec 同步签名 + 新增 `tests/t100411-taskid-contract.spec.ts`
 - 目标节点：Reach的MacBook Pro（Node v25.9.0 / pnpm 11.7.0）
 - 测试者：Tester（独立复跑 + 独立自建，不信任自述）

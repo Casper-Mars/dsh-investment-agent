@@ -178,7 +178,7 @@ describe('③ 降级：一律 skip、不抛异常', () => {
 })
 
 describe('④ buildOpeningNoticeMessage 形态（V4 producer-owned source）', () => {
-  it('kind=dsh-finance（非 plugin 且非空）、form=notice、summary 存在且 ≤120、单一 text 块、非空 id', () => {
+  it('kind=dsh-ia（非 plugin 且非空）、form=notice、summary 存在且 ≤120、单一 text 块、非空 id', () => {
     const msg = buildOpeningNoticeMessage()
     expect(msg.role).toBe('user')
     expect(typeof msg.id).toBe('string')
@@ -186,7 +186,7 @@ describe('④ buildOpeningNoticeMessage 形态（V4 producer-owned source）', (
     expect(msg.content).toHaveLength(1)
     expect(msg.content[0]).toEqual({ type: 'text', text: OPENING_NOTICE_TEXT })
     // V4 契约：producer 自有 kind，非退役 'plugin'，且非空。
-    expect(msg.source.kind).toBe('dsh-finance')
+    expect(msg.source.kind).toBe('dsh-ia')
     expect(msg.source.kind).not.toBe('plugin')
     expect(msg.source.kind.length).toBeGreaterThan(0)
     // notice 形态：summary 必须存在且 ≤ 120。

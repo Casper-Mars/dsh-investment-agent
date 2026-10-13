@@ -1,5 +1,5 @@
 /**
- * dsh-finance 生产者消息源契约（V4 producer-owned source kind）。
+ * dsh-ia 生产者消息源契约（V4 producer-owned source kind）。
  *
  * 背景（Task-15 修复轮 2 · 阻断缺陷）：旧实现用 V3 退役的「plugin 包装」形态
  * （`source.kind` 取退役字符串 `'plugin'` 并额外携带 `plugin` 字段），被 harness
@@ -9,7 +9,7 @@
  * 固定会话恒 blank（AC1 失败、AC2 随之失效）。
  *
  * 修复（对齐 harness 官方契约，参考 `packages/context/tmux-context/src/index.ts`）：
- *   1. 声明 producer 自有 kind `'dsh-finance'`（非空字符串且 ≠ `'plugin'`）；
+ *   1. 声明 producer 自有 kind `'dsh-ia'`（非空字符串且 ≠ `'plugin'`）；
  *   2. 经 `declare module '@deepseek-ai/dsh-llm'` 增补 `MessageSourceMap`；
  *   3. 用官方 `createUserMessage(...)` 构造消息（冻结 + 稳定 id）。
  *
@@ -22,7 +22,7 @@ import type { ContextFormed, UserMessage } from '@deepseek-ai/dsh-llm'
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
     /**
-     * dsh-finance 感知唤醒 / 开场 notice 的生产者归属。
+     * dsh-ia 感知唤醒 / 开场 notice 的生产者归属。
      * 消费者按 kind 保留该来源，投影据此去重。
      *
      * `traceId`（可选）为 M4 引入的跨进程关联锚点：唤醒消息**显式**携带，
@@ -31,12 +31,12 @@ declare module '@deepseek-ai/dsh-llm' {
      * `kind`（非空且 ≠ `plugin`）并**保留未知归属字段**，故为向后兼容的加法扩展。
      * @persistenceAttribution
      */
-    'dsh-finance': { kind: 'dsh-finance' } & ContextFormed & { readonly traceId?: string }
+    'dsh-ia': { kind: 'dsh-ia' } & ContextFormed & { readonly traceId?: string }
   }
 }
 
-/** dsh-finance 生产者自有 kind（V4 要求非空字符串且 ≠ `'plugin'`）。 */
-export const PRODUCER_KIND = 'dsh-finance' as const
+/** dsh-ia 生产者自有 kind（V4 要求非空字符串且 ≠ `'plugin'`）。 */
+export const PRODUCER_KIND = 'dsh-ia' as const
 
 /**
  * notice 形态的消息源：`form: 'notice'` 要求携带 `summary`（one-line account）。
@@ -53,7 +53,7 @@ export type NoticeMessageSource = {
   readonly traceId?: string
 }
 
-/** notice 形态的 user 消息（`role: 'user'`，source 为 dsh-finance notice）。 */
+/** notice 形态的 user 消息（`role: 'user'`，source 为 dsh-ia notice）。 */
 export type NoticeUserMessage = UserMessage & {
   readonly role: 'user'
   readonly source: NoticeMessageSource
@@ -65,7 +65,7 @@ export type NoticeUserMessage = UserMessage & {
  * @param text 模型可见正文。
  * @param summary notice 一行摘要（≤ 120 字符）。
  * @param traceId 可选跨进程关联锚点（M4）；缺省（`undefined`）时**不写**该字段。
- * @returns 冻结的 user 消息，`source.kind === 'dsh-finance'`、`form === 'notice'`。
+ * @returns 冻结的 user 消息，`source.kind === 'dsh-ia'`、`form === 'notice'`。
  */
 export function createNoticeMessage(
   text: string,

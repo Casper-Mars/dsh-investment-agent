@@ -15,8 +15,8 @@
  *     ④ 注册时机在 ensureSkillAssetsRepo / mountSkillFilesystemProvider 之后；
  *     ⑤ 卸载归零 + 幂等。
  *
- * 环境隔离：所有用例只在临时 `DSH_FINANCE_DATA_DIR` / 临时 dataRoot 内预置，
- *   不污染真实 `~/.dsh-finance`（真实进程 / 真实 git）。
+ * 环境隔离：所有用例只在临时 `DSH_IA_DATA_DIR` / 临时 dataRoot 内预置，
+ *   不污染真实 `~/.dsh-ia`（真实进程 / 真实 git）。
  *
  * 注意（仓库级守卫规避，见 t100419 C1）：本文件**不写字面量**“ctx 点 skills 点 register
  *   左括号”这一整串（也不写该守卫列出的其余几个旧注册符号名）；取 skills 注册表一律
@@ -52,13 +52,13 @@ const EVOLVABLE: readonly string[] = [...SKILL_NAMES]
 /** 固有 SKILL 名。 */
 const TA = TASK_AUTHORSHIP_SKILL_NAME
 /** filesystem provider 唯一名（`src/skills/provider.ts`）。 */
-const PROVIDER_NAME = 'dsh-finance-skills'
+const PROVIDER_NAME = 'dsh-ia-skills'
 /** 固有 SKILL 的 effect label（`src/plugin.ts`）。 */
-const TA_EFFECT_LABEL = 'dsh-finance task-authorship skill'
+const TA_EFFECT_LABEL = 'dsh-ia task-authorship skill'
 /** 新增固有 SKILL 的 effect label（`src/plugin.ts`）。 */
-const SA_EFFECT_LABEL = 'dsh-finance skill-authorship skill'
+const SA_EFFECT_LABEL = 'dsh-ia skill-authorship skill'
 /** provider 的 effect label。 */
-const PROVIDER_EFFECT_LABEL = 'dsh-finance skill-filesystem provider'
+const PROVIDER_EFFECT_LABEL = 'dsh-ia skill-filesystem provider'
 
 /* ------------------------------------------------------------------ *
  * 临时目录 & 环境隔离
@@ -70,9 +70,9 @@ function mkTmp(prefix: string): string {
   return dir
 }
 
-const savedEnv = process.env.DSH_FINANCE_DATA_DIR
+const savedEnv = process.env.DSH_IA_DATA_DIR
 function useDataRoot(dir: string): void {
-  process.env.DSH_FINANCE_DATA_DIR = dir
+  process.env.DSH_IA_DATA_DIR = dir
 }
 
 afterEach(() => {
@@ -83,8 +83,8 @@ afterEach(() => {
       /* ignore */
     }
   }
-  if (savedEnv === undefined) delete process.env.DSH_FINANCE_DATA_DIR
-  else process.env.DSH_FINANCE_DATA_DIR = savedEnv
+  if (savedEnv === undefined) delete process.env.DSH_IA_DATA_DIR
+  else process.env.DSH_IA_DATA_DIR = savedEnv
 })
 
 /* ------------------------------------------------------------------ *
@@ -388,9 +388,9 @@ describe('[AC1] 固有 SKILL 经 runtime 内存注册可见，来源与 provider
 /* ================================================================== *
  * [AC2] 5 个可进化 SKILL 仍由 skill-filesystem provider 发现
  * ================================================================== */
-describe('[AC2] 5 可进化 SKILL 经 provider（providerName=dsh-finance-skills，指向 <dataRoot>/skills）', () => {
+describe('[AC2] 5 可进化 SKILL 经 provider（providerName=dsh-ia-skills，指向 <dataRoot>/skills）', () => {
   it(
-    'AC2a：5 可进化皆 provider=dsh-finance-skills 且 source=custom（非 runtime）',
+    'AC2a：5 可进化皆 provider=dsh-ia-skills 且 source=custom（非 runtime）',
     async () => {
       const dataRoot = seedDataRoot()
       useDataRoot(dataRoot)
@@ -503,7 +503,7 @@ describe('[AC3] skills.register 抛错降级不中断装载，其它贡献照常
       expect(() => srcPlugin.apply(m.ctx as never)).not.toThrow()
 
       // (a) 其它贡献 1：tools effect 存在（label），且 tools 服务被实际调用（惰性注册）。
-      expect(m.effectOrder).toContain('dsh-finance tools')
+      expect(m.effectOrder).toContain('dsh-ia tools')
       await vi.waitFor(() => {
         expect(m.toolsCalls.length).toBeGreaterThanOrEqual(14)
       }, { timeout: 5_000, interval: 25 })
@@ -514,8 +514,8 @@ describe('[AC3] skills.register 抛错降级不中断装载，其它贡献照常
       expect(m.systemPromptSection.mock.calls.length).toBeGreaterThanOrEqual(1)
 
       // (c) 其它贡献 3：scheduler 贡献照常（两个 effect）。
-      expect(m.effectOrder).toContain('dsh-finance scheduler tools')
-      expect(m.effectOrder).toContain('dsh-finance scheduler')
+      expect(m.effectOrder).toContain('dsh-ia scheduler tools')
+      expect(m.effectOrder).toContain('dsh-ia scheduler')
 
       // (d) TA effect 仍注册（标签存在）；因注册抛错 → dispose 未赋值 → disposer 安全 no-op。
       const taEffect = m.effects.find((e) => e.label === TA_EFFECT_LABEL)
@@ -528,7 +528,7 @@ describe('[AC3] skills.register 抛错降级不中断装载，其它贡献照常
         '[EVIDENCE AC3a] applyNoThrow=true toolsCalls=%d inject=%s schedulerEffects=%s',
         m.toolsCalls.length,
         JSON.stringify(m.injectCalls),
-        m.effectOrder.filter((l) => l.startsWith('dsh-finance scheduler')).join('|'),
+        m.effectOrder.filter((l) => l.startsWith('dsh-ia scheduler')).join('|'),
       )
       disposeMockEffects(m.effects)
     },
@@ -571,10 +571,10 @@ describe('[AC4] TA 静态注册时机在预置与 provider 挂载之后', () => 
 
       srcPlugin.apply(m.ctx as never)
 
-      const idxTools = m.effectOrder.indexOf('dsh-finance tools')
+      const idxTools = m.effectOrder.indexOf('dsh-ia tools')
       const idxProvider = m.effectOrder.indexOf(PROVIDER_EFFECT_LABEL)
       const idxTa = m.effectOrder.indexOf(TA_EFFECT_LABEL)
-      const idxScheduler = m.effectOrder.indexOf('dsh-finance scheduler')
+      const idxScheduler = m.effectOrder.indexOf('dsh-ia scheduler')
 
       expect(idxTools).toBe(0)
       expect(idxProvider).toBeGreaterThan(-1)

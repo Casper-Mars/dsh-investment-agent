@@ -2,10 +2,10 @@
  * 文件落地 exporter（里程碑 M2「文件落地」）。
  *
  * 目标：在 M1 统一门面（`src/log/logger.ts`）之上，追加一个**文件 exporter**，
- * 把宿主内日志以 **JSONL** 形式落地到 `~/.dsh-finance/logs/<date>.jsonl`，并支持
+ * 把宿主内日志以 **JSONL** 形式落地到 `~/.dsh-ia/logs/<date>.jsonl`，并支持
  * 「按天轮转 + 同日超阈值后缀 + 级别过滤 + 文件权限」。
  *
- * 设计要点（对齐技术方案《日志完善技术方案（dsh-finance 插件）v1.0》§4.2 / §5.2 / §9 M2）：
+ * 设计要点（对齐技术方案《日志完善技术方案（dsh-ia 插件）v1.0》§4.2 / §5.2 / §9 M2）：
  *   1. **复用 cordis `Exporter` 契约**：本模块导出一个符合
  *      `import type { Exporter, Message } from '@deepseek-ai/cordis'` 的工厂
  *      {@link createFileExporter}，经 `ctx.logger.exporter(exporter)` **追加注册**
@@ -16,7 +16,7 @@
  *      写盘前经 M5 {@link ./redact.js} 的 {@link redactRecord} 做**字段级去敏**（`msg` 文本级 /
  *      `args` 深遍历）；`sessionId/taskId/traceId` 由 M4 trace 上下文自动并入 `meta`。
  *   3. **按天轮转**：文件名带日期（`message.ts` 的 UTC 日期）→ 跨天自然新开当日文件；
- *      同日若当前文件已达阈值 `DSH_FINANCE_LOG_MAX_SIZE`（默认 50 MB），则递增后缀
+ *      同日若当前文件已达阈值 `DSH_IA_LOG_MAX_SIZE`（默认 50 MB），则递增后缀
  *      `-1`、`-2`… 选下一个未达阈值的文件。
  *   4. **写策略**：`fs.appendFileSync` 逐行追加（单条 JSON + `\n`）——同步写保证
  *      「`export()` 返回后内容已在盘上」，崩溃不丢已写行，且天然保证同进程内写入有序。
@@ -31,13 +31,13 @@
  *        - 在 `export()` 内按 `message.type` 的方案严重度 {@link LEVEL_RANK}
  *          （`error=0, warn=1, info=2, debug=3`）判定：`rank(type) > rank(threshold)`
  *          即丢弃。
- *      阈值取 `options.level` → 环境变量 `DSH_FINANCE_LOG_LEVEL` → 默认 `info`
+ *      阈值取 `options.level` → 环境变量 `DSH_IA_LOG_LEVEL` → 默认 `info`
  *      （复用 M1 门面的 {@link resolveLogLevel} / {@link LEVEL_RANK}，避免口径漂移）。
  *   7. **name 白名单（本插件命名空间）**：本 exporter 追加注册在**共享** `ctx.logger`
  *      上，会长到宿主核心 / 其它插件（如 `skill-filesystem`）的日志。方案 §3.1 的
  *      日志出口针对的是**本插件宿主侧日志**，故只接受 name 属于本插件命名空间的消息：
  *      `name === p` 或 `name` 以 `p + ':'` 为前缀（子 scope），`p ∈ options.names`
- *      （默认 `['dsh-finance']`）。与上面的级别过滤**叠加**（两者都满足才落盘）。
+ *      （默认 `['dsh-ia']`）。与上面的级别过滤**叠加**（两者都满足才落盘）。
  *
  * 8. **去敏（M5）**：写盘前对 `msg` 与 `args` 统一去敏——敏感 / 金额键值 → `[REDACTED]`、
  *    长文本截断、`Error` 仅记 message + 前 N 行 stack。去敏口径见 `src/log/redact.ts`。
@@ -56,7 +56,7 @@ import { redactRecord, type RedactOptions } from './redact.js'
 import { ensureFinanceLogDir, resolveFinanceLogDir } from '../paths.js'
 
 /** 环境变量：轮转 / 封顶阈值（字节）。默认 {@link DEFAULT_LOG_MAX_SIZE}。 */
-export const LOG_MAX_SIZE_ENV = 'DSH_FINANCE_LOG_MAX_SIZE'
+export const LOG_MAX_SIZE_ENV = 'DSH_IA_LOG_MAX_SIZE'
 
 /** 默认单文件大小阈值：50 MB（宿主日志）。 */
 export const DEFAULT_LOG_MAX_SIZE = 50 * 1024 * 1024
@@ -68,18 +68,18 @@ const MAX_ROTATION_INDEX = 9999
  * 默认接受落盘的 logger name 白名单（本插件命名空间）。
  *
  * 匹配规则：`name === p` 或 `name` 以 `p + ':'` 为前缀（子 scope，如
- * `dsh-finance:scheduler`）。`exporter` 注册在**共享** `ctx.logger` 上，故须收窄到
+ * `dsh-ia:scheduler`）。`exporter` 注册在**共享** `ctx.logger` 上，故须收窄到
  * 本插件命名的日志，避免宿主核心 / 其它插件的日志被落盘。
  */
-export const DEFAULT_EXPORT_NAMES: readonly string[] = ['dsh-finance']
+export const DEFAULT_EXPORT_NAMES: readonly string[] = ['dsh-ia']
 
 /** {@link createFileExporter} 选项。 */
 export interface FileExporterOptions {
-  /** 日志目录；缺省时取 `DSH_FINANCE_LOG_DIR` → `~/.dsh-finance/logs`。 */
+  /** 日志目录；缺省时取 `DSH_IA_LOG_DIR` → `~/.dsh-ia/logs`。 */
   dir?: string
-  /** 单文件大小阈值（字节，> 0）；缺省取 `DSH_FINANCE_LOG_MAX_SIZE` → 50 MB。 */
+  /** 单文件大小阈值（字节，> 0）；缺省取 `DSH_IA_LOG_MAX_SIZE` → 50 MB。 */
   maxSize?: number
-  /** 最低级别；缺省取 `DSH_FINANCE_LOG_LEVEL` → `info`。 */
+  /** 最低级别；缺省取 `DSH_IA_LOG_LEVEL` → `info`。 */
   level?: LogLevel | string
   /**
    * 接受落盘的 logger name 白名单（本插件命名空间）；缺省 {@link DEFAULT_EXPORT_NAMES}。
@@ -369,7 +369,7 @@ class FileExporter implements Exporter {
  * ctx.logger.exporter(exporter) // 追加注册，注销随 ctx.effect
  * ```
  *
- * 注意：默认只接受 name 属于本插件命名空间（`dsh-finance[:scope]`）的消息；
+ * 注意：默认只接受 name 属于本插件命名空间（`dsh-ia[:scope]`）的消息；
  * 如需扩展可经 `options.names` 注入更多前缀。
  */
 export function createFileExporter(options: FileExporterOptions = {}): Exporter {

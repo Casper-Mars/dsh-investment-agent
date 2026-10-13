@@ -1,7 +1,7 @@
 /**
  * scheduler/scheduler.ts 单元测试。
  *
- * 唯一权威设计文档：《感知层详细设计（dsh-finance 插件）》 v0.7。
+ * 唯一权威设计文档：《感知层详细设计（dsh-ia 插件）》 v0.7。
  *
  * 覆盖任务卡验收点（AC-2 多任务模型 / AC-9 调度 / §7 调度器设计）：
  * - 幂等：start 两次不双份 timer；stop 两次不抛错；running 只读反映状态

@@ -29,7 +29,7 @@
 | 幂等：已就绪再次调用 → 完全 no-op（commit 不增、内容不变） | ✅ | ①-3（调用序列）、②-2（commit 数 & 逐字节不变）、⑤-4（半初始化后二次 no-op） |
 | 降级：git 不可用 / 命令失败 / 无写权限 / 种子异常 → 记日志、降级不抛、不中断装载 | ✅ | ③-1/2/3/4；⑦-2（插件层仍装载） |
 | 6 份 `SKILL.md` 与随包种子逐字节一致 | ✅ | ②-1（同时对比 `src` 与 `dist-server` 种子）、②-3（编译态） |
-| 不污染真实 `~/.dsh-finance`（用 `os.tmpdir()`） | ✅ | ⑥-3 断言产物均在 tmpdir 下、真实 `~/.dsh-finance/data/skills` 未被本文件新建 |
+| 不污染真实 `~/.dsh-ia`（用 `os.tmpdir()`） | ✅ | ⑥-3 断言产物均在 tmpdir 下、真实 `~/.dsh-ia/data/skills` 未被本文件新建 |
 
 ---
 
@@ -47,7 +47,7 @@
 
 **原始证据（真实运行，dist-server 产物）：**
 ```
-[dsh-finance/skills] 冷启动预置完成：/…/T/tmp.iCJrAxU9ye/skills（6 个 skill，message="init: skill 资产首版"）
+[dsh-ia/skills] 冷启动预置完成：/…/T/tmp.iCJrAxU9ye/skills（6 个 skill，message="init: skill 资产首版"）
 === git log --oneline ===
 b3838b0 init: skill 资产首版
 === git status --porcelain (expect empty) ===
@@ -76,7 +76,7 @@ b3838b0 init: skill 资产首版
 ### ⑥ 路径护栏 / 优先级 / 不污染
 - `resolveDataRoot`：注入 > env > 默认（空白注入回落 env）：✅ 注入优先时 env 目录未被创建。
 - env 生效：✅ 仓库落在 `<env>/skills`。
-- 不污染：✅ 产物均在 `os.tmpdir()` 下；真实 `~/.dsh-finance/data/skills` 未被本文件新建。
+- 不污染：✅ 产物均在 `os.tmpdir()` 下；真实 `~/.dsh-ia/data/skills` 未被本文件新建。
 
 ### ⑦ 插件装配（`apply` 接线）
 - 最小上下文 + env 指向临时目录：✅ `apply` 不抛，落盘 `<env>/skills`（`.git` + 6 skill + commit 1）。
@@ -117,7 +117,7 @@ b3838b0 init: skill 资产首版
 
 3. **提示（非缺陷）** — `apply` 内另有独立 `try/catch` 包裹 `ensureSkillAssetsRepo()`；因该函数内部已「降级不抛」，外层 catch 为冗余保险带（未单独以 mock 触发，本次以真实降级路径 ⑦-2 验证装载不中断）。
 
-4. **测试卫生** — 本独立 spec 全部使用 `os.tmpdir()` 临时目录、`afterEach` 清理，`DSH_FINANCE_DATA_DIR` 保存/还原；未产生项目内残留文件。
+4. **测试卫生** — 本独立 spec 全部使用 `os.tmpdir()` 临时目录、`afterEach` 清理，`DSH_IA_DATA_DIR` 保存/还原；未产生项目内残留文件。
 
 ---
 

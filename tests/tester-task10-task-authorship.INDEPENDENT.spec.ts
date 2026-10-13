@@ -263,7 +263,7 @@ describe('[验收4] 固有 SKILL 静态读取入口契约', () => {
 describe('[验收5] 真实装载：5 可进化经 provider 发现 + 固有经静态注册可见', () => {
   it('真实 SkillRegistry + skill-filesystem provider：5 个可进化可发现，注销后归 0', async () => {
     const dataRoot = mkdtempSync(join(tmpdir(), 'dsh-fin-ta-'))
-    process.env.DSH_FINANCE_DATA_DIR = dataRoot
+    process.env.DSH_IA_DATA_DIR = dataRoot
     try {
       ensureSkillAssetsRepo({ dataRoot, logger: () => {} })
 
@@ -302,13 +302,13 @@ describe('[验收5] 真实装载：5 可进化经 provider 发现 + 固有经静
       await ctx.fiber.dispose()
     } finally {
       rmSync(dataRoot, { recursive: true, force: true })
-      delete process.env.DSH_FINANCE_DATA_DIR
+      delete process.env.DSH_IA_DATA_DIR
     }
   }, 30000)
 
   it('真实构建产物 dist-server 装载：5 可进化经 provider 发现 + task-authorship 静态注册可见，注销后皆消失', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-fin-ta-'))
-    process.env.DSH_FINANCE_DATA_DIR = dir
+    process.env.DSH_IA_DATA_DIR = dir
 
     const systemPromptStub = {
       name: 'systemPrompt',
@@ -373,7 +373,7 @@ describe('[验收5] 真实装载：5 可进化经 provider 发现 + 固有经静
     } finally {
       await toolsFiber.dispose()
       rmSync(dir, { recursive: true, force: true })
-      delete process.env.DSH_FINANCE_DATA_DIR
+      delete process.env.DSH_IA_DATA_DIR
     }
   }, 20000)
 })

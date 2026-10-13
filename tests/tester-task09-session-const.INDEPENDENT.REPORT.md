@@ -1,6 +1,6 @@
 # Task-09（t100359）独立复验报告
 
-- 被测交付物：`/Users/reachlucifer/project/opc/dsh-finance`（分支 `main`，HEAD `ef18031`，含未提交改动）
+- 被测交付物：`/Users/reachlucifer/project/opc/dsh-ia`（分支 `main`，HEAD `ef18031`，含未提交改动）
 - 复验人：Tester（独立，不复用 developer 的 `tests/session-const.test.ts` 作为唯一依据）
 - 时间：2026-09-30
 - 执行环境：宿主机 Mac（`Reach的MacBook Pro`）；harness `deepseek-harness` dsh `0.2.0-rc.2`
@@ -53,8 +53,8 @@
 - `cordis.patch.yml`（git diff 未涉及该文件）：
   ```yaml
   - insert:
-      - id: dsh-finance
-        name: dsh-finance
+      - id: dsh-ia
+        name: dsh-ia
         inject: ['tools', 'skills', 'ptcRuntime', 'fs']
   ```
   与 `src/plugin.ts` 的 `inject` 完全一致。`sessionPersistence` 仅以 `ctx.inject([...])` 动态声明，**未**进入顶层 `inject`。
@@ -85,16 +85,16 @@ Done in 209ms using pnpm v11.7.0
 EXIT=0
 
 $ dsh --profile opc-finance-verify --dump-config
-# == dsh-finance
-- id: dsh-finance
-  name: dsh-finance
+# == dsh-ia
+- id: dsh-ia
+  name: dsh-ia
   inject:
     - tools
     - skills
     - ptcRuntime
     - fs
 ```
-`--dump-config` 仍识别 `id=dsh-finance` 与 inject 四项，无回退，且 dsh-finance 段无新增 `config:` 会话配置项。
+`--dump-config` 仍识别 `id=dsh-ia` 与 inject 四项，无回退，且 dsh-ia 段无新增 `config:` 会话配置项。
 
 ---
 

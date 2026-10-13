@@ -29,7 +29,7 @@
  * 设计约束：
  *   - **不新增第三方依赖**：git 一律经 `node:child_process`（`execFileSync`）调用；
  *   - **路径来源统一**：dataRoot 复用 `src/paths.ts` 的 {@link resolveDataRoot}
- *     （构造注入 > `DSH_FINANCE_DATA_DIR` > `~/.dsh-finance/data`），**不**用
+ *     （构造注入 > `DSH_IA_DATA_DIR` > `~/.dsh-ia/data`），**不**用
  *     `process.cwd()` 锚定（历史漂移问题，已修）；
  *   - **降级语义**：git 不可用 / 命令非零退出 / 无写权限等 → 记日志、降级不抛、
  *     不中断插件装载（对齐 `src/plugin.ts` / `src/session-ensure.ts` 的软取 +
@@ -58,8 +58,8 @@ export const SKILL_FILENAME = 'SKILL.md'
 export const INITIAL_COMMIT_MESSAGE = 'init: skill 资产首版'
 
 /** git 作者身份：显式提供，避免依赖宿主机全局 git config。 */
-export const GIT_IDENTITY_NAME = 'dsh-finance'
-export const GIT_IDENTITY_EMAIL = 'dsh-finance@localhost'
+export const GIT_IDENTITY_NAME = 'dsh-ia'
+export const GIT_IDENTITY_EMAIL = 'dsh-ia@localhost'
 
 /** 仓库内 `.gitignore` 内容：**不**忽略 skill 内容，仅忽略系统/临时文件。 */
 export const SKILLS_GITIGNORE = '# 仅忽略系统/临时文件；skill 内容一律纳入版本管理。\n.DS_Store\n*.tmp\n'
@@ -99,7 +99,7 @@ function defaultGitRunner(args: string[], cwd: string): string {
 
 /** 预置选项。 */
 export interface EnsureSkillAssetsOptions {
-  /** 数据根目录（可选）；省略时依次取环境变量 `DSH_FINANCE_DATA_DIR` → 默认值。 */
+  /** 数据根目录（可选）；省略时依次取环境变量 `DSH_IA_DATA_DIR` → 默认值。 */
   dataRoot?: string
   /** 日志函数（默认走统一日志门面，info 级）。 */
   logger?: (message: string) => void
@@ -272,7 +272,7 @@ function provisionRepo(repoDir: string, seeds: SkillSeed[], run: GitRunner): voi
 export function ensureSkillAssetsRepo(
   options: EnsureSkillAssetsOptions = {},
 ): SkillAssetsRepoOutcome {
-  const logger = options.logger ?? createLogFunction('dsh-finance:skills')
+  const logger = options.logger ?? createLogFunction('dsh-ia:skills')
   const run = options.gitRunner ?? defaultGitRunner
 
   let dir = ''
@@ -289,12 +289,12 @@ export function ensureSkillAssetsRepo(
     const seeds = loadSkillSeeds()
     provisionRepo(dir, seeds, run)
     logger(
-      `[dsh-finance/skills] 冷启动预置完成：${dir}（${seeds.length} 个 skill，message="${INITIAL_COMMIT_MESSAGE}"）`,
+      `[dsh-ia/skills] 冷启动预置完成：${dir}（${seeds.length} 个 skill，message="${INITIAL_COMMIT_MESSAGE}"）`,
     )
     return { dir, provisioned: true, degraded: false, reason: state.reason }
   } catch (err: unknown) {
     const reason = err instanceof Error ? err.message : String(err)
-    logger(`[dsh-finance/skills] 警告 skill 资产仓库预置失败（降级跳过）：${reason}`)
+    logger(`[dsh-ia/skills] 警告 skill 资产仓库预置失败（降级跳过）：${reason}`)
     return { dir, provisioned: false, degraded: true, reason }
   }
 }

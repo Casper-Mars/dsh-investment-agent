@@ -16,7 +16,7 @@ let dir: string
 let ledger: Ledger
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'dsh-finance-ledger-'))
+  dir = mkdtempSync(join(tmpdir(), 'dsh-ia-ledger-'))
   ledger = new Ledger(dir)
 })
 

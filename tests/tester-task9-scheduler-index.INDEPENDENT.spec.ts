@@ -342,8 +342,8 @@ describe('T9-B 装配链完整性：store → 编排runner → scheduler → 工
 
     // 两个 effect：工具注销 + 自持启停
     const labels = ctx.effects.map((e) => e.label)
-    expect(labels).toContain('dsh-finance scheduler tools')
-    expect(labels).toContain('dsh-finance scheduler')
+    expect(labels).toContain('dsh-ia scheduler tools')
+    expect(labels).toContain('dsh-ia scheduler')
 
     // apply 即启动，且只启动一次
     expect(H.cap.startCalls).toBe(1)
@@ -681,7 +681,7 @@ describe('T9-E 生命周期：幂等 start、卸载 stop', () => {
     const ctx = boot(dataRoot)
     expect(H.cap.startCalls).toBe(1)
 
-    const startEffect = ctx.effects.find((e) => e.label === 'dsh-finance scheduler')!
+    const startEffect = ctx.effects.find((e) => e.label === 'dsh-ia scheduler')!
     // 模拟多会话 / 依赖重复就绪：再次执行 effect body
     startEffect.body()
     startEffect.body()
@@ -692,7 +692,7 @@ describe('T9-E 生命周期：幂等 start、卸载 stop', () => {
   it('卸载：effect 注销 → scheduler.stop() 清 timer（running=false）；二次卸载不再 stop', () => {
     const dataRoot = mkTmp()
     const ctx = boot(dataRoot)
-    const startEffect = ctx.effects.find((e) => e.label === 'dsh-finance scheduler')!
+    const startEffect = ctx.effects.find((e) => e.label === 'dsh-ia scheduler')!
     expect((H.cap.scheduler as { running: boolean }).running).toBe(true)
 
     startEffect.dispose()
@@ -713,7 +713,7 @@ describe('T9-E 生命周期：幂等 start、卸载 stop', () => {
       interval: 10,
     })
 
-    const toolsEffect = ctx.effects.find((e) => e.label === 'dsh-finance scheduler tools')!
+    const toolsEffect = ctx.effects.find((e) => e.label === 'dsh-ia scheduler tools')!
     toolsEffect.dispose()
     expect(tools.unregistered).toHaveLength(7)
   })

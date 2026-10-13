@@ -10,7 +10,7 @@
  *      方经 scope 链均可见（固定会话与 workspace 会话均可见）；
  *   4. 注销（dispose）后 provider 从注册表移除，不得残留。
  *
- * 数据隔离：所有用例使用临时目录作为 dataRoot，**不污染** `~/.dsh-finance`。
+ * 数据隔离：所有用例使用临时目录作为 dataRoot，**不污染** `~/.dsh-ia`。
  */
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -34,7 +34,7 @@ const tmpDirs: string[] = []
 
 /** 建临时 dataRoot 并预置 `<dataRoot>/skills` 内的 5 个可进化 skill（真实 git 仓库）。 */
 function makeSeededDataRoot(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'dsh-finance-provider-'))
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-ia-provider-'))
   tmpDirs.push(dir)
   const outcome = ensureSkillAssetsRepo({ dataRoot: dir, logger: () => {} })
   expect(outcome.degraded, `预置降级：${outcome.reason}`).toBe(false)
@@ -246,7 +246,7 @@ describe('skill-filesystem provider：降级', () => {
 })
 
 describe('数据目录隔离', () => {
-  it('测试只在临时 dataRoot 内预置，不触碰默认 ~/.dsh-finance', () => {
+  it('测试只在临时 dataRoot 内预置，不触碰默认 ~/.dsh-ia', () => {
     const dataRoot = makeSeededDataRoot()
     expect(existsSync(join(dataRoot, SKILLS_REPO_DIRNAME, SKILL_NAMES[0], SKILL_FILENAME))).toBe(true)
   })

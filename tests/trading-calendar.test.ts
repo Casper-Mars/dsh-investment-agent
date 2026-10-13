@@ -132,7 +132,7 @@ describe('AC2：ledger_trade 时段闸门', () => {
   let tool: ReturnType<typeof createLedgerTradeTool>
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'dsh-finance-tradingcal-'))
+    dir = mkdtempSync(join(tmpdir(), 'dsh-ia-tradingcal-'))
     const m = makeCtx(dir)
     ctx = m.ctx
     ledger = m.ledger

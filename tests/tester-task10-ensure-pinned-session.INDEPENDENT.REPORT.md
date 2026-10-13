@@ -1,6 +1,6 @@
 # Task-10（t100360）固定会话「启动即 ensure」独立复验报告
 
-- **被测交付物**：`/Users/reachlucifer/project/opc/dsh-finance`（分支 `main`，HEAD `d751abd` + 未提交改动）
+- **被测交付物**：`/Users/reachlucifer/project/opc/dsh-ia`（分支 `main`，HEAD `d751abd` + 未提交改动）
 - **被测改动**：新建 `src/session-ensure.ts`；修改 `src/plugin.ts`（apply 内新增装配调用 + re-export）、`src/session.ts`（仅头部注释同步）
 - **测试者**：Tester（独立复验，不复用 developer 测试作为唯一依据）
 - **独立测试文件**：`tests/tester-task10-ensure-pinned-session.INDEPENDENT.spec.ts`（18 用例）
@@ -46,9 +46,9 @@ EXIT=0
 ```bash
 $ pnpm build
 $ tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json && node scripts/copy-assets.mjs
-[dsh-finance-assets] src/domain/README.md -> dist-server/domain/README.md
+[dsh-ia-assets] src/domain/README.md -> dist-server/domain/README.md
 ...
-[dsh-finance-assets] 共搬运 11 个资源文件到 dist-server/
+[dsh-ia-assets] 共搬运 11 个资源文件到 dist-server/
 EXIT=0
 ```
 
@@ -79,9 +79,9 @@ Done in 205ms using pnpm v11.7.0
 EXIT=0
 
 $ dsh --profile opc-finance-verify --dump-config
-# == dsh-finance
-- id: dsh-finance
-  name: dsh-finance
+# == dsh-ia
+- id: dsh-ia
+  name: dsh-ia
   inject:
     - tools
     - skills
@@ -89,7 +89,7 @@ $ dsh --profile opc-finance-verify --dump-config
     - fs
 EXIT=0
 ```
-`--dump-config` 仍识别 `id=dsh-finance` 与 inject 四项，无回退、无新增会话配置项。
+`--dump-config` 仍识别 `id=dsh-ia` 与 inject 四项，无回退、无新增会话配置项。
 
 ---
 

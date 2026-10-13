@@ -1,6 +1,6 @@
 # 测试报告 —— t100364 / Ta*** §9.7 固定会话 Workspace 归属修复
 
-- 被测交付物：`/Users/reachlucifer/project/opc/dsh-finance`（分支 `main`，HEAD `ed35231` + 未提交改动）
+- 被测交付物：`/Users/reachlucifer/project/opc/dsh-ia`（分支 `main`，HEAD `ed35231` + 未提交改动）
 - 环境：宿主机 Mac（`Reach的MacBook Pro`）；harness `deepseek-harness` @ `0.2.0-rc.2`（`639ed01539`）
 - 测试者：Tester（独立产出，未修改 `src/` 与既有测试）
 - 独立测试文件：`tests/tester-task15-workspace-attach.INDEPENDENT.spec.ts`（11 用例，全绿）
@@ -17,27 +17,27 @@
 数据层（workspace.json，权威落盘）✅ 正确：
 
 ```bash
-$ cd /Users/reachlucifer/project/opc/dsh-finance && dsh web --no-open --port 3080 \
+$ cd /Users/reachlucifer/project/opc/dsh-ia && dsh web --no-open --port 3080 \
     < /dev/null > /tmp/tester-web.log 2>&1 &
 # 等待启动后：
 $ python3 -c "import json; d=json.load(open('/Users/reachlucifer/.dsh/storages/workspace.json'));
 [print(w, v['path'], v['sessionIds']) for w,v in d['tables']['workspaces'].items()]"
-118df9a2-3b66-47c1-b2ef-392b136847f4 -> /Users/reachlucifer/project/opc/dsh-finance sessionIds= ['investment-advisor']   # ← 新增，归属正确
+118df9a2-3b66-47c1-b2ef-392b136847f4 -> /Users/reachlucifer/project/opc/dsh-ia sessionIds= ['investment-advisor']   # ← 新增，归属正确
 31e54df5-c056-4042-9e65-a88748416f7d -> /Users/reachlucifer/Documents/dsh sessionIds= [ ...10 项... ]               # 既有，未动
 ```
 
 启动日志（`/tmp/tester-web.log`）✅ 归属链路成功、无降级告警：
 
 ```
-[dsh-finance] 插件加载：name=investment-advisor inject=[tools, skills, ptcRuntime, fs]
-[dsh-finance/session] 固定会话已持久化，resume 恢复：investment-advisor
+[dsh-ia] 插件加载：name=investment-advisor inject=[tools, skills, ptcRuntime, fs]
+[dsh-ia/session] 固定会话已持久化，resume 恢复：investment-advisor
 dsh web: http://127.0.0.1:3080/?token=...
 ```
 
 但**浏览器实测（真实 web 宿主）❌ 会话行不可见**。打开 `dsh web` 打印的 URL 后，左侧「会话」树 `innerText` 为：
 
 ```
-dsh-finance        ← 工作区分组已出现（说明 workspace 注册成功）
+dsh-ia        ← 工作区分组已出现（说明 workspace 注册成功）
 新会话              ← 仅此一个 blank 占位行（selected）
 dsh                ← 既有另一工作区（折叠）
 ```
@@ -46,12 +46,12 @@ DOM 探测确认：
 
 ```js
 document.body.innerText.includes('investment-advisor')  // => false  ❌
-document.body.innerText.includes('dsh-finance')         // => true   ✅（分组可见）
+document.body.innerText.includes('dsh-ia')         // => true   ✅（分组可见）
 ```
 
 即：**固定会话 `investment-advisor` 已归属工作区（workspace.json 正确），但并未出现在左侧会话列表**，AC1 的「可点开查看内容」不成立。
 
-**根因（非 dsh-finance `src/` 缺陷，是 §9.7 设计缺口）：**
+**根因（非 dsh-ia `src/` 缺陷，是 §9.7 设计缺口）：**
 
 1. 该会话经 `ctx.agents.create` 创建后，从未发生 `turn/start` 事件（会话文件仅含 seed 事件，无任何用户/助手轮次），因此会话列表投影里 `blank` 恒为 `true`：
    - `packages/api/session-controller/src/list.ts` → `applySessionListMetadata`：`init: () => ({ blank: true, ... })`，仅当 `event.type === 'turn/start'` 时才翻转为 `false`。
@@ -59,7 +59,7 @@ document.body.innerText.includes('dsh-finance')         // => true   ✅（分�
    - `packages/client/ui-workspace/src/client/tree.ts` → `sessionVisible`：`if (session.blank && session.id !== current) return false`。
 3. §9.7 的修复只做了 `resolveByPath(cwd) ?? create(cwd)` → `attachSession(...)`，把会话变成 workspace 成员，但**没有让它非 blank / 可见**。因此「归属 workspace」是可见的必要不充分条件。
 
-**最小复现**：`pnpm build` → 在 dsh-finance 目录 `dsh web --no-open --port 3080` → 浏览器打开打印的 URL → 左侧列表仅见「dsh-finance / 新会话」，不见 `investment-advisor`。
+**最小复现**：`pnpm build` → 在 dsh-ia 目录 `dsh web --no-open --port 3080` → 浏览器打开打印的 URL → 左侧列表仅见「dsh-ia / 新会话」，不见 `investment-advisor`。
 
 > 说明：非市场时段（测试于 23:29）scheduler 无脉冲、不产生 `turn/start`，会话保持 blank。即使市场时段投递消息使会话非 blank 后才可见，也仍不满足「**启动后**即出现在列表」的 AC1 要求。
 
@@ -68,7 +68,7 @@ document.body.innerText.includes('dsh-finance')         // => true   ✅（分�
 ### AC2 归属幂等 —— ✅ 通过
 
 - 单测：`attachPinnedSessionToWorkspace` 命中即复用 → `create` 0 次、`attach` 幂等；连续两次命中 → `create` 始终 0 次。
-- 真实宿主：kill 后重启 `dsh web`，`workspace.json` 仍为 **2 个工作区**、dsh-finance 工作区 id 不变（`118df9a2...`）、`sessionIds` 仍 `['investment-advisor']`（无重复登记）。
+- 真实宿主：kill 后重启 `dsh web`，`workspace.json` 仍为 **2 个工作区**、dsh-ia 工作区 id 不变（`118df9a2...`）、`sessionIds` 仍 `['investment-advisor']`（无重复登记）。
 
 ### AC3 服务缺失 / reject / attach 失败降级 —— ✅ 通过
 
@@ -105,7 +105,7 @@ document.body.innerText.includes('dsh-finance')         // => true   ✅（分�
 ## 环境清理与数据影响说明
 
 - 已停止 `dsh web` 进程（两次启动均已 kill，端口 3080 已释放）。
-- 数据影响：测试在 `~/.dsh/storages/workspace.json` **新增**了 1 条工作区记录（`118df9a2...` → `/Users/reachlucifer/project/opc/dsh-finance`，sessionIds 含 `investment-advisor`）。这是修复的正常落盘结果，**未删除/未改动**任何用户既有 workspace 记录（原 `31e54df5...` 保持不变）。如需回滚到测试前状态，可由 Leader 决定删除该新增记录（我未擅自删除）。
+- 数据影响：测试在 `~/.dsh/storages/workspace.json` **新增**了 1 条工作区记录（`118df9a2...` → `/Users/reachlucifer/project/opc/dsh-ia`，sessionIds 含 `investment-advisor`）。这是修复的正常落盘结果，**未删除/未改动**任何用户既有 workspace 记录（原 `31e54df5...` 保持不变）。如需回滚到测试前状态，可由 Leader 决定删除该新增记录（我未擅自删除）。
 - 未污染既有会话：`investment-advisor` 会话文件本就是被测固定会话，未改动其内容。
 
 ---

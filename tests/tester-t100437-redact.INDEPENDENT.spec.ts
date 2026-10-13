@@ -10,8 +10,8 @@
  * 本文件**不复用** dev 自测的用例 / 辅助函数，独立构造对抗性 / 边界 / 端到端输入，
  * 逐条对应：原始验收标准 1–3 与任务卡列出的对抗性用例清单。
  *
- * 隔离：全程使用临时目录，并以 `DSH_FINANCE_LOG_DIR` 环境变量覆盖落盘目录，
- * 不触碰真实 `~/.dsh-finance`；`scripts/jev-news-demo.*` 未触碰。
+ * 隔离：全程使用临时目录，并以 `DSH_IA_LOG_DIR` 环境变量覆盖落盘目录，
+ * 不触碰真实 `~/.dsh-ia`；`scripts/jev-news-demo.*` 未触碰。
  *
  * 说明：`[修复验证]` 前缀的用例，是上一轮判「❌ 不通过」的 GAP 用例（原以 `it.fails` 刻画
  * 已知缺陷）；Developer 提交 `99f8e48` 修复后，已翻转为**正向断言 `it`**（修复后应通过）。
@@ -52,7 +52,7 @@ import { LOG_DIR_ENV } from '../src/paths.js'
 const T1 = Date.UTC(2026, 9, 12, 12, 0, 0) // 2026-10-12T12:00Z → 文件名 2026-10-12.jsonl
 
 function msg(partial: Partial<Message> & Pick<Message, 'type'>): Message {
-  return { sn: 1, ts: T1, name: 'dsh-finance', level: 0, args: [], ...partial }
+  return { sn: 1, ts: T1, name: 'dsh-ia', level: 0, args: [], ...partial }
 }
 
 const dirs: string[] = []
@@ -485,7 +485,7 @@ describe('⑧ 端到端落盘与全局泄密扫描', () => {
     else process.env[LOG_DIR_ENV] = saved
   })
 
-  it('H1 `DSH_FINANCE_LOG_DIR` 覆盖生效（createFileExporter 无 dir 参数）', () => {
+  it('H1 `DSH_IA_LOG_DIR` 覆盖生效（createFileExporter 无 dir 参数）', () => {
     const dir = tmp()
     process.env[LOG_DIR_ENV] = dir
     const ex = createFileExporter({ level: 'debug' })
@@ -595,14 +595,14 @@ describe('⑨ redactRecord', () => {
     const rec = redactRecord({
       ts: 'T',
       level: 'info',
-      name: 'dsh-finance',
+      name: 'dsh-ia',
       msg: 'token=sk-abcdefghijkl',
       args: { password: 'hunter2', symbol: '588000', cost: 1.95, nested: { apiKey: 'k' } },
     })
     expect(rec.msg).toBe('token=[REDACTED]')
     expect(rec.args).toEqual({ password: REDACTED, symbol: '588000', cost: REDACTED, nested: { apiKey: REDACTED } })
     expect(rec.ts).toBe('T')
-    expect(rec.name).toBe('dsh-finance')
+    expect(rec.name).toBe('dsh-ia')
   })
 
   it('I2 args 缺省 → 不新增 `args` 键；msg 非字符串 → 不动', () => {

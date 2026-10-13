@@ -21,7 +21,7 @@ let predicts: Predicts
 let reviews: Reviews
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'dsh-finance-indep-'))
+  dir = mkdtempSync(join(tmpdir(), 'dsh-ia-indep-'))
   predicts = new Predicts(dir)
   reviews = new Reviews(dir)
 })

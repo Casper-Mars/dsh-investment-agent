@@ -3,7 +3,7 @@
  *
  * 14 个工具需共享同一份数据根目录。本工厂在构造时：
  *   1. 解析 dataRoot（构造注入优先，缺省回退到环境变量
- *      `DSH_FINANCE_DATA_DIR`，再回退到 `~/.dsh-finance/data`）；
+ *      `DSH_IA_DATA_DIR`，再回退到 `~/.dsh-ia/data`）；
  *   2. 用该 dataRoot 实例化四个 domain 类（Ledger / Predicts / Reviews /
  *      StrategyRegistry）各一次；
  *   3. 工具闭包通过捕获这些实例共享同一数据源，保证「single dataRoot」。
@@ -12,7 +12,7 @@
  * 自有 fs/data 目录后传入（本任务先用构造注入 + 默认值）。
  *
  * 默认值不再锚定 `process.cwd()`（历史漂移问题），固定到 {@link DEFAULT_DATA_DIR}
- * 指向的 `~/.dsh-finance/data`。
+ * 指向的 `~/.dsh-ia/data`。
  *
  * 依赖约束参照 dsh-tasks：工具层唯一可依赖外部包是 `@deepseek-ai/dsh-tools`
  * （defineTool），domain 层仅依赖 node:fs，不接触 dsh/cordis API。
@@ -27,7 +27,7 @@ import { resolveDataRoot } from '../paths.js'
 import { createLogger } from '../log/logger.js'
 
 /** 策略阈值解析日志出口（统一门面；无 `ctx` 注入位，走降级实现）。 */
-const strategyLog = createLogger('dsh-finance:strategy')
+const strategyLog = createLogger('dsh-ia:strategy')
 
 /**
  * 环境变量：覆盖默认数据根目录。
@@ -37,8 +37,8 @@ const strategyLog = createLogger('dsh-finance:strategy')
  */
 export { DATA_ROOT_ENV } from '../paths.js'
 
-/** 默认数据根目录（固定 `~/.dsh-finance/data`，由 {@link ensureFinanceDataDir} 确保存在）。 */
-export const DEFAULT_DATA_DIR = '.dsh-finance/data'
+/** 默认数据根目录（固定 `~/.dsh-ia/data`，由 {@link ensureFinanceDataDir} 确保存在）。 */
+export const DEFAULT_DATA_DIR = '.dsh-ia/data'
 
 /** 默认阈值（标的未显式配置时回落）。 */
 export const DEFAULT_THRESHOLDS: Thresholds = {
@@ -129,7 +129,7 @@ export function createToolContext(opts: ToolContextOptions = {}): ToolContext {
           // front-matter 解析失败时记录告警（否则阈值静默回落默认值，故障难排查）。
           if (parsed.parseError) {
             strategyLog.warn(
-              `[dsh-finance][strategy] ${symbol} 策略文档 front-matter 解析失败，阈值回落默认值：${parsed.parseError}`,
+              `[dsh-ia][strategy] ${symbol} 策略文档 front-matter 解析失败，阈值回落默认值：${parsed.parseError}`,
             )
           }
           // thresholds 字段存在但形态非法（非对象，如写成数组/标量）时同样告警。
@@ -139,7 +139,7 @@ export function createToolContext(opts: ToolContextOptions = {}): ToolContext {
             (rawThresholds === null || typeof rawThresholds !== 'object' || Array.isArray(rawThresholds))
           ) {
             strategyLog.warn(
-              `[dsh-finance][strategy] ${symbol} 策略文档 thresholds 字段形态非法（应为对象），已忽略并回落默认值：${JSON.stringify(rawThresholds)}`,
+              `[dsh-ia][strategy] ${symbol} 策略文档 thresholds 字段形态非法（应为对象），已忽略并回落默认值：${JSON.stringify(rawThresholds)}`,
             )
           }
           const t = thresholdsFromFrontmatter(rawThresholds)
@@ -148,7 +148,7 @@ export function createToolContext(opts: ToolContextOptions = {}): ToolContext {
       } catch (err) {
         // 策略文档不可读/解析异常：记录后降级到旧表。
         strategyLog.warn(
-          `[dsh-finance][strategy] ${symbol} 策略文档读取异常，阈值回落默认值：${err instanceof Error ? err.message : String(err)}`,
+          `[dsh-ia][strategy] ${symbol} 策略文档读取异常，阈值回落默认值：${err instanceof Error ? err.message : String(err)}`,
         )
       }
 

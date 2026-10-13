@@ -1,7 +1,7 @@
 # 独立测试报告 · t100444 · 固件 skill `skill-authorship`
 
-- 被测交付物：`dsh-finance` 插件新增固件 skill `skill-authorship`（改动在工作区，**未 commit**）
-- 项目路径：`/Users/reachlucifer/project/opc/dsh-finance`
+- 被测交付物：`dsh-ia` 插件新增固件 skill `skill-authorship`（改动在工作区，**未 commit**）
+- 项目路径：`/Users/reachlucifer/project/opc/dsh-ia`
 - 测试文件：`tests/tester-t100444-skill-authorship.INDEPENDENT.spec.ts`（本文件由 Tester **独立编写**）
 - 被测 HEAD：`4c3bead`（+ 工作区未提交改动：`src/skills/skill-authorship/SKILL.md`、`src/skills/index.ts`、`src/plugin.ts`、`src/skills/README.md` 及 Developer 同步修正的 6 个既有测试）
 - 测试时间：2026-10-13

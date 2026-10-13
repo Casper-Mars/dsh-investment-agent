@@ -1,8 +1,8 @@
 # T11 测试报告：scheduler 层（定时任务层）全套测试审计 + 补齐
 
 - 任务卡：t100384（scheduler 层单测/集成/契约 + 全量回归）
-- 被测路径：`/Users/reachlucifer/project/opc/dsh-finance`，branch `main`（HEAD `546f06e`）
-- 唯一权威设计文档：《感知层详细设计（dsh-finance 插件）》 v0.7
+- 被测路径：`/Users/reachlucifer/project/opc/dsh-ia`，branch `main`（HEAD `546f06e`）
+- 唯一权威设计文档：《感知层详细设计（dsh-ia 插件）》 v0.7
 - 结论：**审计通过 + 缺口补齐**。新增 2 个测试文件 / 18 用例；全量 `pnpm test` 全绿；`pnpm typecheck`、`pnpm build` 均 EXIT=0；旧测试零回归；**未改动任何 `src/**`**；**未 commit**。
 
 ---
@@ -17,7 +17,7 @@
 | `runner.ts` | `runner.test.ts` + `runner-real-process.test.ts` | ✅ **已足**：末行非空 JSON 解析、四结局映射、契约违约→skipped、failureKind（spawn/exec）、超时强杀时序、真实进程 e2e | 不重写；集成层用真实 runner + mock Spawner 复核 |
 | `scheduler.ts` | `scheduler.test.ts` + `tester-scheduler-task.INDEPENDENT.spec.ts` + `tester-scheduler-real-faketimers.spec.ts` | ✅ **已足**：生命周期幂等、多 timer 独立、链式自调度、异常隔离、reload 全量重建、无泄漏、全可注入、真实定时器 | 不重写 |
 | `tools.ts` | `scheduler-tools.test.ts` | ✅ **基本足**：7 工具、写后 reload、持久化复用、路径守卫、cron 校验、enabled、错误处理。**缺口**：用 **mock scheduler**（reload 仅计数），未验证「真实 Scheduler 在写库+reload 后确实调度新任务」 | 新增真实 tools→store→scheduler 端到端（文件 B `T11-I1`） |
-| `wake.ts` | `scheduler-wake.test.ts` | ✅ **已足**：正文组装（+合规声明）、预算截断、摘要派生、定点投递、descriptor（dsh-finance/notice）、降级、冷却 | 不重写；集成层经由真实 Waker 复核投递 |
+| `wake.ts` | `scheduler-wake.test.ts` | ✅ **已足**：正文组装（+合规声明）、预算截断、摘要派生、定点投递、descriptor（dsh-ia/notice）、降级、冷却 | 不重写；集成层经由真实 Waker 复核投递 |
 | `index.ts` | `tester-task9-scheduler-index.INDEPENDENT.spec.ts` | ✅ **基本足**：装配链、编排 runner 接线（mock runner）、软取降级、生命周期、真实 e2e、fake timers 触发链。**缺口**：T9 用 **mock runner**，从未让「真实 loader + 真实 runner」跑完 §4.3 全链路 | 新增真实全链路集成（文件 A `T11-I2`）+ failureKind 契约矩阵（文件 A `T11-C2`） |
 
 **总览**：8 个模块的单测覆盖已相当完整，本次**未重写任何既有用例**，只做两类补齐——①「真实模块组合」的跨模块集成；②「文件结构 / failureKind」的契约固化。

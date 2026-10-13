@@ -71,7 +71,7 @@ function systemPromptStub() {
 const tmpDirs: string[] = []
 
 function makeTmpDataRoot(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'dsh-finance-plugin-tools-'))
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-ia-plugin-tools-'))
   tmpDirs.push(dir)
   return dir
 }
@@ -91,7 +91,7 @@ afterEach(() => {
  * 插件顶层 `inject`。返回可 dispose 的 fiber 与 registry 视图。
  */
 async function bootPlugin(dataRoot: string) {
-  process.env.DSH_FINANCE_DATA_DIR = dataRoot
+  process.env.DSH_IA_DATA_DIR = dataRoot
 
   const app = new Context()
   app.provide('systemPrompt', systemPromptStub())
@@ -178,9 +178,9 @@ describe('t100363 插件装配：21 个工具经 apply 注册', () => {
   })
 
   it('tools 服务缺省时 apply 仍安全降级（5 个可进化 SKILL 改由 provider 承担，仅静态注册 2 个固有 SKILL）', () => {
-    // 防 ensureSkillAssetsRepo 回落到默认 `~/.dsh-finance`（污染 home）。
-    const prev = process.env.DSH_FINANCE_DATA_DIR
-    process.env.DSH_FINANCE_DATA_DIR = makeTmpDataRoot()
+    // 防 ensureSkillAssetsRepo 回落到默认 `~/.dsh-ia`（污染 home）。
+    const prev = process.env.DSH_IA_DATA_DIR
+    process.env.DSH_IA_DATA_DIR = makeTmpDataRoot()
     try {
       const registered: Array<{ name: string }> = []
       const skillsService = {
@@ -212,8 +212,8 @@ describe('t100363 插件装配：21 个工具经 apply 注册', () => {
         ['task-authorship', 'skill-authorship'].sort(),
       )
     } finally {
-      if (prev === undefined) delete process.env.DSH_FINANCE_DATA_DIR
-      else process.env.DSH_FINANCE_DATA_DIR = prev
+      if (prev === undefined) delete process.env.DSH_IA_DATA_DIR
+      else process.env.DSH_IA_DATA_DIR = prev
     }
   })
 })

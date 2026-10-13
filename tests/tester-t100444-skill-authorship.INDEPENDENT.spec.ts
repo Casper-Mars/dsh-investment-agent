@@ -1,7 +1,7 @@
 /**
  * tester-t100444-skill-authorship.INDEPENDENT.spec.ts
  * ==================================================================
- * Tester 独立复验（任务卡 t100444）：dsh-finance 插件新增「固件 skill」
+ * Tester 独立复验（任务卡 t100444）：dsh-ia 插件新增「固件 skill」
  * `skill-authorship` 的功能正确性 / 静态注册运行时行为 / 隔离性 / 编译态可解析。
  *
  * 独立性声明（关键）：
@@ -114,9 +114,9 @@ function mkTmp(prefix: string): string {
   return dir
 }
 
-const savedEnv = process.env.DSH_FINANCE_DATA_DIR
+const savedEnv = process.env.DSH_IA_DATA_DIR
 function useDataRoot(dir: string): void {
-  process.env.DSH_FINANCE_DATA_DIR = dir
+  process.env.DSH_IA_DATA_DIR = dir
 }
 
 afterEach(() => {
@@ -127,8 +127,8 @@ afterEach(() => {
       /* ignore */
     }
   }
-  if (savedEnv === undefined) delete process.env.DSH_FINANCE_DATA_DIR
-  else process.env.DSH_FINANCE_DATA_DIR = savedEnv
+  if (savedEnv === undefined) delete process.env.DSH_IA_DATA_DIR
+  else process.env.DSH_IA_DATA_DIR = savedEnv
 })
 
 /** 递归收集文件（相对路径，跳过 .git）。 */
@@ -449,8 +449,8 @@ function disposeAllEffects(effects: Array<{ disposer: () => unknown }>): void {
   }
 }
 
-const SA_EFFECT_LABEL = 'dsh-finance skill-authorship skill'
-const TA_EFFECT_LABEL = 'dsh-finance task-authorship skill'
+const SA_EFFECT_LABEL = 'dsh-ia skill-authorship skill'
+const TA_EFFECT_LABEL = 'dsh-ia task-authorship skill'
 
 describe('[AC3-runtime] apply(ctx) 三态：注册 / 降级 / 卸载', () => {
   it('AC3a：skills 可用 → 注册恰 2 个固件 skill，契约正确，effect 标签齐备', () => {

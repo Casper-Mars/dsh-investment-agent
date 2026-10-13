@@ -2,7 +2,7 @@
 
 - **任务卡**：t100386
 - **被测交付物**：`src/skills/task-authorship/SKILL.md`（新增）+ `src/skills/index.ts`（SKILL_NAMES 5→6）+ `src/skills/README.md` / `src/plugin.ts`（计数注释同步）
-- **项目**：`/Users/reachlucifer/project/opc/dsh-finance`（branch `main`，未 commit，HEAD `f9cbc55`）
+- **项目**：`/Users/reachlucifer/project/opc/dsh-ia`（branch `main`，未 commit，HEAD `f9cbc55`）
 - **测试范围**：功能（SKILL 注册数量/名称）/ 内容完整性（对照 §10.2）/ 解析契约 / 既有测试契约同步
 - **测试时间**：2026-10-08
 - **结论**：✅ **全部通过**。`pnpm test` 全量 EXIT=0（58 个测试文件 / 1148 用例全绿）；新增独立测试 27 用例全绿。**未发现产品缺陷**（1 项测试启发式适配见「风险与说明」）。

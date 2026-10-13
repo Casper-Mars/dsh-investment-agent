@@ -1,6 +1,6 @@
 # 测试报告 · t100433 —— 种子预置与构建搬运 独立验证
 
-- **被测交付物**：`/Users/reachlucifer/project/opc/dsh-finance`
+- **被测交付物**：`/Users/reachlucifer/project/opc/dsh-ia`
   - 分支 `main`，**HEAD=`0d13441`**（`test(t100429): plugin 静态注册固有 SKILL 独立验证`）
   - **未提交改动**：`src/skills/provider.ts`、`src/skills/repo.ts` 各 1 行注释——将「6 个技术面 SKILL」表述同步为「5 个可进化 + 1 个固有」
 - **测试范围**：t100433 的 **AC1–AC4 独立验证**（对「种子预置与构建搬运」做**运行时 / 产物级**核验，非仅代码审查）
@@ -38,10 +38,10 @@
 
 ## 二、独立验证手段（与 Developer 自测的差异）
 
-1. **运行时冷启动而非代码审查**：AC1 走**真实进程 + 真实 `git init/commit`** 的 `ensureSkillAssetsRepo`（临时 dataRoot，不污染真实 `~/.dsh-finance`），并在预置产物上做**递归文件树**核验（`walkFiles` 遍历，排除 `.git`），确保「无 task-authorship」覆盖任意层级——而非只看顶层目录。
+1. **运行时冷启动而非代码审查**：AC1 走**真实进程 + 真实 `git init/commit`** 的 `ensureSkillAssetsRepo`（临时 dataRoot，不污染真实 `~/.dsh-ia`），并在预置产物上做**递归文件树**核验（`walkFiles` 遍历，排除 `.git`），确保「无 task-authorship」覆盖任意层级——而非只看顶层目录。
 2. **产物级（非源态）核验 AC2**：用**编译态** `dist-server/skills/index.js` 动态 import 读固有 SKILL 原文，并逐字比对 `dist-server` 磁盘文件与 `src` 源文件；同时核验 8 个关键 JS 构建产物齐备。
 3. **独立扫描器 + 检测器自检**：AC3 自写递归扫描器（不复用任何现有测试逻辑），并对扫描器做「正/负样本」自检，排除「检测器失灵导致假绿」。
-4. **环境隔离**：所有用例在 `os.tmpdir()` 随机子目录内，用例结束 `rmSync` 清理；`DSH_FINANCE_DATA_DIR` 在 `afterEach` 复位。
+4. **环境隔离**：所有用例在 `os.tmpdir()` 随机子目录内，用例结束 `rmSync` 清理；`DSH_IA_DATA_DIR` 在 `afterEach` 复位。
 5. **规避仓库级守卫**：`tests/tester-t100419-skill-provider.INDEPENDENT.spec.ts :: C1` 会 walk `src/**` 与 `tests/**`，凡文本含拼接 needle `ctx.skills.`+`register(` 即判 offender。本独立文件全程**规避该字面量**（只调用 `loadSkillSeeds` / `ensureSkillAssetsRepo` / `resolveSkillsRepoDir`，无任何注册调用），故全量 `pnpm test` 保持全绿。
 
 ---

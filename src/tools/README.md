@@ -34,7 +34,7 @@ src/tools/
 
 - **dataRoot 统一注入**：`createToolContext({ dataRoot })` 构造时实例化 Ledger / Predicts /
   Reviews / StrategyRegistry 各一次，14 个工具闭包共享同一数据源。dataRoot 缺省取
-  `DSH_FINANCE_DATA_DIR` 环境变量，再回退 `.dsh-finance/data`。
+  `DSH_IA_DATA_DIR` 环境变量，再回退 `.dsh-ia/data`。
 - **字段映射**：domain 返回驼峰，output.schema 用蛇形（§4 契约），execute 内做显式蛇形映射，
   二者逐字段对齐（lossless JSON）。
 - **错误处理**：错误通过 throw 表达（registry 归一为 isError、跳过 schema 校验），

@@ -1,7 +1,7 @@
 # Task-13 独立复验报告 —— 16 个模型工具经 plugin.apply 注册
 
 - **测试者**：Tester（独立复验，不复用 Developer 的 `tests/plugin-tools-registration.spec.ts`）
-- **项目**：`/Users/reachlucifer/project/opc/dsh-finance`
+- **项目**：`/Users/reachlucifer/project/opc/dsh-ia`
 - **被测提交**：`ae1e14f`（fix(task-13): 插件 apply 装配阶段补齐 16 个模型工具注册）
 - **运行时**：Node v25.9.0 / pnpm 11.7.0 / vitest 3.2.7
 - **独立 spec**：`tests/tester-task13-tools-registration.INDEPENDENT.spec.ts`（8 用例）
@@ -65,7 +65,7 @@ sense_archive_commit, sense_archive_get, sense_archive_list, sense_archive_rollb
 - sense_archives：`sense_archive_commit / sense_archive_list / sense_archive_rollback / sense_archive_get` ✔
 
 插件契约：`pluginNs.name === 'investment-advisor'`，`apply` 为函数。
-装载期日志：`[dsh-finance] 插件加载：name=investment-advisor inject=[tools, skills, ptcRuntime, fs]`。
+装载期日志：`[dsh-ia] 插件加载：name=investment-advisor inject=[tools, skills, ptcRuntime, fs]`。
 
 ### ✅ 2. 注销验证
 
@@ -85,7 +85,7 @@ sense_archive_commit, sense_archive_get, sense_archive_list, sense_archive_rollb
 ```
 - `apply(ctx)` **不抛错**；
 - 触发 effect 返回的注销器亦不抛错；
-- 捕获到告警 `"[dsh-finance] tools 服务不可用，跳过工具注册"`。
+- 捕获到告警 `"[dsh-ia] tools 服务不可用，跳过工具注册"`。
 
 ### ✅ 4. 契约一致性
 
@@ -164,7 +164,7 @@ Tests  473 passed (473)
 ## 附录：复现命令
 
 ```bash
-cd /Users/reachlucifer/project/opc/dsh-finance
+cd /Users/reachlucifer/project/opc/dsh-ia
 # 独立复验（8 用例）
 npx vitest run tests/tester-task13-tools-registration.INDEPENDENT.spec.ts
 # 全量回归

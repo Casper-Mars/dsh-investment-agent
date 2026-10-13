@@ -1,8 +1,8 @@
-# t100419 独立测试报告 —— dsh-finance 接入 dsh 原生 `skill-filesystem` provider（热更新）
+# t100419 独立测试报告 —— dsh-ia 接入 dsh 原生 `skill-filesystem` provider（热更新）
 
 - **任务编号**：t100419（[skill重构任务清单]任务-2）
-- **被测交付物**：`dsh-finance` 接入 dsh 原生 `skill-filesystem` provider（指向 `<dataRoot>/skills`，`watch:true` 热更新），替换旧静态注册。
-- **项目路径**：`/Users/reachlucifer/project/opc/dsh-finance`（exec host=node，node="Reach的MacBook Pro"）
+- **被测交付物**：`dsh-ia` 接入 dsh 原生 `skill-filesystem` provider（指向 `<dataRoot>/skills`，`watch:true` 热更新），替换旧静态注册。
+- **项目路径**：`/Users/reachlucifer/project/opc/dsh-ia`（exec host=node，node="Reach的MacBook Pro"）
 - **执行环境**：macOS（12 核），Node **v25.9.0**、pnpm **11.7.0**、vitest **3.2.7**；被测代码基线 commit `79c3408`（working tree 期间 HEAD 曾推进到 `2843008`）。
 - **测试范围**：**运行时行为验证**（真实装配 + 真实 chokidar + 真实 scope），非静态/格式复查。
 - **独立测试文件**：`tests/tester-t100419-skill-provider.INDEPENDENT.spec.ts`（15 用例，含真实 chokidar，单用例 30s 超时）。
@@ -33,7 +33,7 @@
 
 ## 1. 验证方法与数据隔离
 
-- **数据隔离**：全部用例/探针使用 `mkdtempSync` 临时 `dataRoot`，并在独立 spec 内将 `DSH_FINANCE_DATA_DIR` 强制指向临时目录；**显式传 `dataRoot`** 给 `ensureSkillAssetsRepo`/provider 挂载。**本 t100419 流程不向 `~/.dsh-finance` 写入任何内容**。
+- **数据隔离**：全部用例/探针使用 `mkdtempSync` 临时 `dataRoot`，并在独立 spec 内将 `DSH_IA_DATA_DIR` 强制指向临时目录；**显式传 `dataRoot`** 给 `ensureSkillAssetsRepo`/provider 挂载。**本 t100419 流程不向 `~/.dsh-ia` 写入任何内容**。
 - **真实装配**：
   - 注册表：`new Context()` + `await ctx.plugin(SkillRegistry)`（`@deepseek-ai/dsh-skill` 真实 `SkillRegistry`）。
   - provider：`mountSkillFilesystemProviderAsync(ctx,{dataRoot})` → 真实 `@deepseek-ai/dsh-skill-filesystem`，`watch:true`（chokidar 稳定阈值 200ms）。
@@ -69,11 +69,11 @@
 provider 在**未 scoped** 的 root ctx 挂载 → 注册进 **global 层**（`SkillRegistry` 读数固定合并 `[global, ...scopeChain]`）。真实 scope 验证：
 
 ```
-[EVIDENCE B1] fixed-session & workspace-session scope both see 6 via dsh-finance-skills
+[EVIDENCE B1] fixed-session & workspace-session scope both see 6 via dsh-ia-skills
 [EVIDENCE B2] ws sees scoped; fx & global do not; global still 6
 ```
 
-- B1：`固定会话`（独立根 scope）与 `workspace→session`（父子链 `scopeChainOf` 长度=2）两类读取方，`list({scope})` 均命中全部 6 个，且来源 provider 名均为 `dsh-finance-skills`。
+- B1：`固定会话`（独立根 scope）与 `workspace→session`（父子链 `scopeChainOf` 长度=2）两类读取方，`list({scope})` 均命中全部 6 个，且来源 provider 名均为 `dsh-ia-skills`。
 - B2（**反向**验证「真的分在 global 层、且分层生效」）：在 workspace scope 内注册**第二个** provider（`fs-scoped`）→ workspace 可见 `6 + 1`；固定 scope 与无 scope 的 global 视图**看不到**该 scoped skill，但**仍见 global 的 6 个**。
 
 ### AC3 无残留引用 + 装配正确 ✅
@@ -122,8 +122,8 @@ MODIFY_FAILS=0/8  ADD_FIRSTTRY_FAILS=3/8
 **为让独立 spec 确定性通过**：A2/A3 采用「**下一次可失效事件**」兜底——首帧未命中时改写一个已存在 skill 文件，产生可靠 `change → invalidate → 重列`，新目录随之被发现；并把首帧结果如实打印为证据：
 
 ```
-[EVIDENCE A2] added "tester-added-skill" provider=dsh-finance-skills; firstTryAddDirVisible=true changeEvents=1
-[EVIDENCE A2] added "tester-added-skill" provider=dsh-finance-skills; firstTryAddDirVisible=false changeEvents=1   # 另一轮：首帧漏报、兜底后可见
+[EVIDENCE A2] added "tester-added-skill" provider=dsh-ia-skills; firstTryAddDirVisible=true changeEvents=1
+[EVIDENCE A2] added "tester-added-skill" provider=dsh-ia-skills; firstTryAddDirVisible=false changeEvents=1   # 另一轮：首帧漏报、兜底后可见
 [EVIDENCE A3] deleted "stop-rule" firstTryRemoveVisible=true (remaining core=5)
 ```
 （本 spec 单文件隔离运行 **5/5 轮 15 passed（15）**。）
@@ -137,7 +137,7 @@ MODIFY_FAILS=0/8  ADD_FIRSTTRY_FAILS=3/8
 
 ## 5. 独立验证点 C —— 无残留 & 装配正确 ✅
 见 AC3。另核对：
-- `src/skills/provider.ts`：`SKILL_PROVIDER_NAME='dsh-finance-skills'`；`mountSkillFilesystemProviderAsync` 动态 `import('@deepseek-ai/dsh-skill-filesystem')` → `ctx.plugin(mod,{providerName,includeDefaultRoots:false,customSkillDirs:[<dataRoot>/skills],watch:true})`；`mountSkillFilesystemProvider` 同步入口经 `ctx.effect` 托管注销器、失败降级不抛。
+- `src/skills/provider.ts`：`SKILL_PROVIDER_NAME='dsh-ia-skills'`；`mountSkillFilesystemProviderAsync` 动态 `import('@deepseek-ai/dsh-skill-filesystem')` → `ctx.plugin(mod,{providerName,includeDefaultRoots:false,customSkillDirs:[<dataRoot>/skills],watch:true})`；`mountSkillFilesystemProvider` 同步入口经 `ctx.effect` 托管注销器、失败降级不抛。
 - `plugin.ts` 的 `inject` 未变、`cordis.patch.yml` 未破坏。
 
 ---
@@ -147,11 +147,11 @@ MODIFY_FAILS=0/8  ADD_FIRSTTRY_FAILS=3/8
 ```
 [EVIDENCE D1] sync wrapper degraded-logged; async wrapper rejected
 [EVIDENCE D2] unresolvable module → sync degraded, no throw
-[EVIDENCE D3] apply not thrown; effect labels=dsh-finance tools|ctx.plugin()|dsh-finance skill-filesystem provider|ctx.plugin()|ctx.plugin()|dsh-finance scheduler tools|dsh-finance scheduler; skills degraded to 0
+[EVIDENCE D3] apply not thrown; effect labels=dsh-ia tools|ctx.plugin()|dsh-ia skill-filesystem provider|ctx.plugin()|ctx.plugin()|dsh-ia scheduler tools|dsh-ia scheduler; skills degraded to 0
 ```
-- **D1**：`ctx.plugin` 抛错 → `mountSkillFilesystemProviderAsync` **reject**；同步入口 `mountSkillFilesystemProvider` **不抛**，并打 `[dsh-finance] skill-filesystem provider 挂载失败（降级）`。
+- **D1**：`ctx.plugin` 抛错 → `mountSkillFilesystemProviderAsync` **reject**；同步入口 `mountSkillFilesystemProvider` **不抛**，并打 `[dsh-ia] skill-filesystem provider 挂载失败（降级）`。
 - **D2**：`vi.doMock('@deepseek-ai/dsh-skill-filesystem', ()=>{throw …})`（模拟**依赖不可解析**）→ 同上降级、不抛、有日志。
-- **D3**：**真实** `apply(ctx)`（真实 `SkillRegistry`）在模块不可解析时**不抛**；`ctx.effect` 标签仍登记 `dsh-finance tools` 与 `dsh-finance skill-filesystem provider`（**其它贡献照常装载**）；skill 发现降级为 0，且有明确 `console.error`。
+- **D3**：**真实** `apply(ctx)`（真实 `SkillRegistry`）在模块不可解析时**不抛**；`ctx.effect` 标签仍登记 `dsh-ia tools` 与 `dsh-ia skill-filesystem provider`（**其它贡献照常装载**）；skill 发现降级为 0，且有明确 `console.error`。
 
 ---
 
@@ -173,10 +173,10 @@ spec E1/E2：
 
 ```
 [EVIDENCE F1] coexisting providers: 6 core + preset-skill
-[EVIDENCE F2] duplicate providerName "dsh-finance-skills" rejected
+[EVIDENCE F2] duplicate providerName "dsh-ia-skills" rejected
 ```
-- **F1**：同一（global）层再注册 `providerName:'filesystem'` 的 provider（模拟 preset 默认名）→ 与 `dsh-finance-skills` **同层不冲突**，各自可见（`preset-skill` 来源 `filesystem`，其余 6 个来源 `dsh-finance-skills`）。
-- **F2**：同层重复 `providerName='dsh-finance-skills'` → 按注册表「同层重名即抛」语义 **reject**（唯一性边界成立）。
+- **F1**：同一（global）层再注册 `providerName:'filesystem'` 的 provider（模拟 preset 默认名）→ 与 `dsh-ia-skills` **同层不冲突**，各自可见（`preset-skill` 来源 `filesystem`，其余 6 个来源 `dsh-ia-skills`）。
+- **F2**：同层重复 `providerName='dsh-ia-skills'` → 按注册表「同层重名即抛」语义 **reject**（唯一性边界成立）。
 
 ---
 
@@ -228,15 +228,15 @@ FAIL tests/tester-prompt-skills.INDEPENDENT.spec.ts > …
 ### R1 ·【低—中】新增 skill 目录的 watch 首帧偶发漏报
 - **现象**：新增 `<dataRoot>/skills/<name>/SKILL.md` 后，首帧 `list()` 可能**不发** `skills/change`（`changeEvents=0`）、新 skill 暂不可见；下一次可失效事件后恢复。受控探针 **3/8** 首帧漏报；全文件 vitest 运行 **2/3** 轮复现。
 - **影响**：AC1 的「**修改**」路径不受影响（0/8 失败）；仅**外部直写新增目录**的边界场景偶发。生产中经 fs 服务写入会额外触发 `fs/observed→invalidate`，影响进一步降低。
-- **根因**：上游 `@deepseek-ai/dsh-skill-filesystem` 的 chokidar 装配（`depth:1` + `atomic:true` + macOS FSEvents）在「新建目录」时的 `addDir` 上报偶发丢失；**非** `dsh-finance` 本任务代码。
+- **根因**：上游 `@deepseek-ai/dsh-skill-filesystem` 的 chokidar 装配（`depth:1` + `atomic:true` + macOS FSEvents）在「新建目录」时的 `addDir` 上报偶发丢失；**非** `dsh-ia` 本任务代码。
 - **建议**：不改本任务代码即可，作为**已知边界**记录；若要收敛，可在上游调整 watch 选项（如放宽 `depth`/关闭 `atomic`/改 `usePolling`），或在 provider 侧对「目录级 `add`/`addDir`」增加一次延迟复核。
 
 ### R2 ·【低】`pnpm test` 在干净 HOME 下**非稳定全绿**（跨用例污染）
 - **现象**：干净环境首跑曾失败 1 例：
-  `tests/tester-t100418-skill-assets.INDEPENDENT.spec.ts > ⑥ … 未新建真实 ~/.dsh-finance/skills` → `expected true to be false`。
-- **根因**：`tests/tester-task9-scheduler-index.INDEPENDENT.spec.ts` 的 `T9-D` 用例以**最小 ctx 直接 `plugin.apply(ctx)`** 且**未隔离 `DSH_FINANCE_DATA_DIR`** → `apply()` 内的 `ensureSkillAssetsRepo()` 回落到**默认 dataRoot** `~/.dsh-finance/data`，**并发地**创建了真实 `skills/` 目录，从而踩中 `t100418` ⑥ 的「不得新建真实目录」守卫。
+  `tests/tester-t100418-skill-assets.INDEPENDENT.spec.ts > ⑥ … 未新建真实 ~/.dsh-ia/skills` → `expected true to be false`。
+- **根因**：`tests/tester-task9-scheduler-index.INDEPENDENT.spec.ts` 的 `T9-D` 用例以**最小 ctx 直接 `plugin.apply(ctx)`** 且**未隔离 `DSH_IA_DATA_DIR`** → `apply()` 内的 `ensureSkillAssetsRepo()` 回落到**默认 dataRoot** `~/.dsh-ia/data`，**并发地**创建了真实 `skills/` 目录，从而踩中 `t100418` ⑥ 的「不得新建真实目录」守卫。
 - **归属**：**非本任务引入**——`git show HEAD:src/plugin.ts`（任务-2 之前的基线）同样在 `apply()` 中调用 `ensureSkillAssetsRepo()`；污染链在任务-2 之前即存在。
-- **建议（测试卫生）**：`tester-task9` 的 `T9-D` 用 `DSH_FINANCE_DATA_DIR` 指向临时目录（或在 `<spec>` 内 `beforeEach` 隔离 env）；`t100418` ⑥ 守卫可容忍「运行期被并发创建」。
+- **建议（测试卫生）**：`tester-task9` 的 `T9-D` 用 `DSH_IA_DATA_DIR` 指向临时目录（或在 `<spec>` 内 `beforeEach` 隔离 env）；`t100418` ⑥ 守卫可容忍「运行期被并发创建」。
 
 ### R3 ·【低】异步 provider/装配用例在 CPU 争用下超时
 - **现象**：全量 @`--maxWorkers=11`：`tester-prompt-skills.INDEPENDENT.spec.ts [3]/[5b]` **超时**（5s 默认预算），退出码 1（`990/992`）。
@@ -273,7 +273,7 @@ for(let it=0; it<n; it++){
   const dataRoot = mkdtempSync(join(tmpdir(),'seed-')); const dir = join(dataRoot,'skills')
   for(const x of names) w(dir,x,'DESC-'+x)
   const ctx=new Context(); await ctx.plugin(SkillRegistry)
-  await ctx.plugin(mod,{providerName:'dsh-finance-skills',includeDefaultRoots:false,customSkillDirs:[dir],watch:true})
+  await ctx.plugin(mod,{providerName:'dsh-ia-skills',includeDefaultRoots:false,customSkillDirs:[dir],watch:true})
   await ctx.skills.list({})
   writeFileSync(join(dir,'trend-analysis','SKILL.md'),'---\nname: trend-analysis\ndescription: MOD\n---\n\nb\n')
   let mok=false

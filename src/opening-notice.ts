@@ -27,7 +27,7 @@
  *
  * 本模块采用定点投递 + 降级语义：
  *   1. 消息形态用官方 `createUserMessage`（`@deepseek-ai/dsh-llm`）构造，
- *      `source.kind` 取 producer 自有 kind `'dsh-finance'`（V4 契约，非退役的
+ *      `source.kind` 取 producer 自有 kind `'dsh-ia'`（V4 契约，非退役的
  *      `'plugin'` 包装，见 `src/message-source.ts`），`form: 'notice'` + `summary`；
  *   2. 投递目标固定为 `agents.get(PINNED_SESSION_ID)`，`followup(openingNotice)`；
  *   3. 降级固定为 **skip**：`agents` 不可达 / `followup` 抛错 / 判读失败 → 记日志、
@@ -103,7 +103,7 @@ export interface OpeningNoticeDeps {
 
 /**
  * 构造一条开场 notice UserMessage（官方 `createUserMessage` 产物，`source.kind`
- * 为 producer 自有 `'dsh-finance'`、`form: 'notice'`）。
+ * 为 producer 自有 `'dsh-ia'`、`form: 'notice'`）。
  */
 export function buildOpeningNoticeMessage(): NoticeUserMessage {
   return createNoticeMessage(OPENING_NOTICE_TEXT, OPENING_NOTICE_SUMMARY)
@@ -190,7 +190,7 @@ export type OpeningNoticeResult =
 export async function deliverOpeningNotice(
   deps: OpeningNoticeDeps,
 ): Promise<OpeningNoticeResult> {
-  const log = deps.logger ?? createLogFunction('dsh-finance:notice')
+  const log = deps.logger ?? createLogFunction('dsh-ia:notice')
   const id = deps.pinnedId ?? getPinnedSessionId()
 
   // 解析投递目标 agent（同时取 live session 供投影软取）。
@@ -198,7 +198,7 @@ export async function deliverOpeningNotice(
   try {
     agent = deps.agents.get(id)
   } catch (err: unknown) {
-    log(`[dsh-finance/notice] 警告 agents.get 失败（降级 skip）：${String(err)}`)
+    log(`[dsh-ia/notice] 警告 agents.get 失败（降级 skip）：${String(err)}`)
     return { kind: 'skipped', id, detail: `agents.get failed: ${String(err)}` }
   }
 
@@ -214,7 +214,7 @@ export async function deliverOpeningNotice(
       agent?.session,
     )
   } catch (err: unknown) {
-    log(`[dsh-finance/notice] 警告 判读会话 blank 失败（降级 skip）：${String(err)}`)
+    log(`[dsh-ia/notice] 警告 判读会话 blank 失败（降级 skip）：${String(err)}`)
     return { kind: 'skipped', id, detail: `blank check failed: ${String(err)}` }
   }
 
@@ -226,22 +226,22 @@ export async function deliverOpeningNotice(
     // 判读失败（服务不可读 / open 拖错 / 投影与兜底均无法判定）→ 按 §9.6 语义
     // 降级 skip（**不投**，避免误判导致重复投递）；会话若仍 blank，会由其它
     // 真实 turn 或下次可判读时自愈。
-    log(`[dsh-finance/notice] 警告 无法判读会话 blank 状态，跳过开场 notice（降级）`)
+    log(`[dsh-ia/notice] 警告 无法判读会话 blank 状态，跳过开场 notice（降级）`)
     return { kind: 'skipped', id, detail: 'blank state unknown' }
   }
 
   if (!agent || typeof agent.followup !== 'function') {
-    log(`[dsh-finance/notice] 警告 固定会话不可达（${id}），跳过开场 notice（降级）`)
+    log(`[dsh-ia/notice] 警告 固定会话不可达（${id}），跳过开场 notice（降级）`)
     return { kind: 'skipped', id, detail: 'agent unreachable' }
   }
 
   // 投递（仅当判读为 blank 时）。
   try {
     agent.followup(buildOpeningNoticeMessage())
-    log(`[dsh-finance/notice] 已投递开场 notice（固定会话 ${id}）`)
+    log(`[dsh-ia/notice] 已投递开场 notice（固定会话 ${id}）`)
     return { kind: 'delivered', id }
   } catch (err: unknown) {
-    log(`[dsh-finance/notice] 警告 投递开场 notice 失败（降级 skip）：${String(err)}`)
+    log(`[dsh-ia/notice] 警告 投递开场 notice 失败（降级 skip）：${String(err)}`)
     return { kind: 'skipped', id, detail: `followup failed: ${String(err)}` }
   }
 }

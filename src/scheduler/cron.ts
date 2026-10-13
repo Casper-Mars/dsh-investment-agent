@@ -1,7 +1,7 @@
 /**
  * scheduler/cron.ts —— 标准 5 段 cron 解析与「下一触发时刻」计算。
  *
- * 唯一权威设计文档：《感知层详细设计（dsh-finance 插件）》 v0.7。
+ * 唯一权威设计文档：《感知层详细设计（dsh-ia 插件）》 v0.7。
  *
  * 硬约束（§2.2 / §7）：
  *   - **时区锁定 `Asia/Shanghai`**：next() 以 Asia/Shanghai 视角计算，与本机时区无关。

@@ -6,7 +6,7 @@
  *   2. `child(scope)` 派生命名 logger（scope 以 `:` 追加）；
  *   3. 结构化 meta 合并（基础 meta ⊕ 调用级 meta，调用级优先）；
  *   4. `ctx.logger` 缺失 / 形态非法 → 降级实现（内部走 `console`）；
- *   5. level 过滤（降级路径；阈值取 options.level / env `DSH_FINANCE_LOG_LEVEL` / 默认 info）；
+ *   5. level 过滤（降级路径；阈值取 options.level / env `DSH_IA_LOG_LEVEL` / 默认 info）；
  *   6. 两个「既有注入位」适配器（`(message)` / `(level, message)`）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -168,7 +168,7 @@ describe('③ 结构化 meta 合并', () => {
 
 describe('④ 降级：ctx.logger 缺失 / 形态非法', () => {
   it('native 缺失 → 走 console（四级别分别映射 error/warn/log）', () => {
-    const logger = createFinanceLogger({ scope: 'dsh-finance:test' })
+    const logger = createFinanceLogger({ scope: 'dsh-ia:test' })
     logger.error('E')
     logger.warn('W')
     logger.info('I')
@@ -191,7 +191,7 @@ describe('④ 降级：ctx.logger 缺失 / 形态非法', () => {
   })
 
   it('createLogger 便捷工厂等价于无 native 门面', () => {
-    createLogger('dsh-finance:x').info('hi')
+    createLogger('dsh-ia:x').info('hi')
     expect(logSpy).toHaveBeenCalledWith('hi')
   })
 })
@@ -240,7 +240,7 @@ describe('⑤ level 过滤（降级路径）', () => {
     expect(resolveLogLevel()).toBe(DEFAULT_LOG_LEVEL)
   })
 
-  it('env DSH_FINANCE_LOG_LEVEL 生效于降级路径', () => {
+  it('env DSH_IA_LOG_LEVEL 生效于降级路径', () => {
     process.env[LOG_LEVEL_ENV] = 'error'
     const logger = createLogger('x')
     logger.info('i')
@@ -252,12 +252,12 @@ describe('⑤ level 过滤（降级路径）', () => {
 
 describe('⑥ 既有注入位适配器', () => {
   it('createLogFunction → info 级 console.log', () => {
-    createLogFunction('dsh-finance:session')('M')
+    createLogFunction('dsh-ia:session')('M')
     expect(logSpy).toHaveBeenCalledWith('M')
   })
 
   it('createLeveledLogFunction → 按 level 分流到 console.error/warn/log', () => {
-    const log = createLeveledLogFunction('dsh-finance:scheduler')
+    const log = createLeveledLogFunction('dsh-ia:scheduler')
     log('error', 'E')
     log('warn', 'W')
     log('info', 'I')

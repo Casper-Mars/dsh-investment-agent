@@ -52,7 +52,7 @@ import { applyScheduler } from '../src/scheduler/index.js'
 /** 项目根（tests/ 的上一级）。 */
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 /** 插件真实数据根环境变量（`src/paths.ts` 的 DATA_ROOT_ENV）。 */
-const DATA_ROOT_ENV = 'DSH_FINANCE_DATA_DIR'
+const DATA_ROOT_ENV = 'DSH_IA_DATA_DIR'
 
 // ---------------------------------------------------------------------------
 // 通用夹具
@@ -186,7 +186,7 @@ afterEach(() => {
 
 describe('AC1 门面契约（src/log/logger.ts）', () => {
   it('AC1a：实例暴露 error/warn/info/debug 四级 + child(scope)，child 返回同构门面', () => {
-    const logger = createFinanceLogger({ scope: 'dsh-finance' })
+    const logger = createFinanceLogger({ scope: 'dsh-ia' })
     for (const m of ['error', 'warn', 'info', 'debug'] as const) {
       expect(typeof logger[m]).toBe('function')
     }
@@ -224,16 +224,16 @@ describe('AC1 门面契约（src/log/logger.ts）', () => {
 // ===========================================================================
 
 describe('AC2 真实 cordis Context → native exporter（非 console 兜底）', () => {
-  it('AC2a：门面委托 ctx.logger 派生的命名 Logger，exporter 收到 name=dsh-finance 且 type/args 正确', () => {
+  it('AC2a：门面委托 ctx.logger 派生的命名 Logger，exporter 收到 name=dsh-ia 且 type/args 正确', () => {
     const app = new Context()
     const { exporter, messages } = captureExporter()
     app.logger.exporter(exporter)
 
-    const logger = createFinanceLogger({ native: app.logger, scope: 'dsh-finance' })
+    const logger = createFinanceLogger({ native: app.logger, scope: 'dsh-ia' })
     logger.info('加载完成', { part: 'plugin' })
 
     expect(messages).toHaveLength(1)
-    expect(messages[0].name).toBe('dsh-finance')
+    expect(messages[0].name).toBe('dsh-ia')
     expect(messages[0].type).toBe('info')
     expect(messages[0].args[0]).toBe('加载完成')
     expect(messages[0].args[1]).toEqual({ part: 'plugin' })
@@ -248,7 +248,7 @@ describe('AC2 真实 cordis Context → native exporter（非 console 兜底）'
     const { exporter, messages } = captureExporter()
     app.logger.exporter(exporter)
 
-    const logger = createFinanceLogger({ native: app.logger, scope: 'dsh-finance' })
+    const logger = createFinanceLogger({ native: app.logger, scope: 'dsh-ia' })
     logger.error('E')
     logger.warn('W')
     logger.info('I')
@@ -256,10 +256,10 @@ describe('AC2 真实 cordis Context → native exporter（非 console 兜底）'
 
     expect(messages.map((m) => m.type)).toEqual(['error', 'warn', 'info', 'debug'])
     expect(messages.map((m) => m.name)).toEqual([
-      'dsh-finance',
-      'dsh-finance',
-      'dsh-finance',
-      'dsh-finance',
+      'dsh-ia',
+      'dsh-ia',
+      'dsh-ia',
+      'dsh-ia',
     ])
     expect(messages.map((m) => m.args[0])).toEqual(['E', 'W', 'I', 'D'])
     expect(logSpy).not.toHaveBeenCalled()
@@ -273,7 +273,7 @@ describe('AC2 真实 cordis Context → native exporter（非 console 兜底）'
     app.logger.exporter(exporter)
 
     // 模拟 ctx.logger 缺失：显式不传 native。
-    const logger = createFinanceLogger({ scope: 'dsh-finance' })
+    const logger = createFinanceLogger({ scope: 'dsh-ia' })
     logger.info('降级信息')
     logger.error('降级错误')
 
@@ -310,13 +310,13 @@ describe('AC3 child 命名 与 结构化 meta 合并', () => {
     const { exporter, messages } = captureExporter()
     app.logger.exporter(exporter)
 
-    const root = createFinanceLogger({ native: app.logger, scope: 'dsh-finance' })
+    const root = createFinanceLogger({ native: app.logger, scope: 'dsh-ia' })
     root.child('tools').info('t')
     root.child('tools').child('registry').warn('r')
 
     expect(messages.map((m) => m.name)).toEqual([
-      'dsh-finance:tools',
-      'dsh-finance:tools:registry',
+      'dsh-ia:tools',
+      'dsh-ia:tools:registry',
     ])
   })
 
@@ -364,7 +364,7 @@ describe('AC3 child 命名 与 结构化 meta 合并', () => {
 describe('AC4 level 过滤', () => {
   it('AC4a：降级路径 env=error → info/debug 抑制，error 输出', () => {
     process.env[LOG_LEVEL_ENV] = 'error'
-    const logger = createLogger('dsh-finance:x')
+    const logger = createLogger('dsh-ia:x')
     logger.error('e')
     logger.warn('w')
     logger.info('i')
@@ -442,7 +442,7 @@ describe('AC5 全仓无散乱 console（门面内部 + 注释除外）', () => {
     )
     expect(/console\./.test(code)).toBe(false)
     // 默认日志出口改为门面适配器。
-    expect(code).toMatch(/createLeveledLogFunction\s*\(\s*'dsh-finance:scheduler'/)
+    expect(code).toMatch(/createLeveledLogFunction\s*\(\s*'dsh-ia:scheduler'/)
   })
 })
 
@@ -496,8 +496,8 @@ describe('AC7 apply(ctx) / applyScheduler(ctx) 装配不回归', () => {
     const { ctx, disposeAll } = makeMockCtx({ logger: nativeCtx.logger })
     try {
       expect(() => applyScheduler(ctx as never, { dataRoot })).not.toThrow()
-      // scheduler 的「tools 服务不可用」告警 → 经门面 native 出口，name=dsh-finance:scheduler。
-      const sched = messages.filter((m) => m.name === 'dsh-finance:scheduler')
+      // scheduler 的「tools 服务不可用」告警 → 经门面 native 出口，name=dsh-ia:scheduler。
+      const sched = messages.filter((m) => m.name === 'dsh-ia:scheduler')
       expect(sched.length).toBeGreaterThan(0)
       expect(sched.some((m) => m.type === 'warn')).toBe(true)
     } finally {
@@ -505,7 +505,7 @@ describe('AC7 apply(ctx) / applyScheduler(ctx) 装配不回归', () => {
     }
   })
 
-  it('AC7c：真实 native ctx 驱动 apply，加载日志经 native 出口（name=dsh-finance），非 console', () => {
+  it('AC7c：真实 native ctx 驱动 apply，加载日志经 native 出口（name=dsh-ia），非 console', () => {
     const dataRoot = makeProvisionedDataRoot()
     tmpDirs.push(dataRoot)
     process.env[DATA_ROOT_ENV] = dataRoot
@@ -517,7 +517,7 @@ describe('AC7 apply(ctx) / applyScheduler(ctx) 装配不回归', () => {
     const { ctx, disposeAll } = makeMockCtx({ logger: nativeCtx.logger })
     try {
       expect(() => apply(ctx as never)).not.toThrow()
-      const load = messages.filter((m) => m.name === 'dsh-finance')
+      const load = messages.filter((m) => m.name === 'dsh-ia')
       expect(load.length).toBeGreaterThan(0)
       expect(load.some((m) => String(m.args[0]).includes('插件加载'))).toBe(true)
       // 健康路径不落 console。
@@ -538,9 +538,9 @@ describe('AC2/AC7 附加：既有注入位适配器', () => {
     const { exporter, messages } = captureExporter()
     app.logger.exporter(exporter)
 
-    createLogFunction('dsh-finance:notice', app.logger)('hi')
+    createLogFunction('dsh-ia:notice', app.logger)('hi')
     expect(messages).toHaveLength(1)
-    expect(messages[0].name).toBe('dsh-finance:notice')
+    expect(messages[0].name).toBe('dsh-ia:notice')
     expect(messages[0].type).toBe('info')
     expect(messages[0].args[0]).toBe('hi')
   })
@@ -550,11 +550,11 @@ describe('AC2/AC7 附加：既有注入位适配器', () => {
     const { exporter, messages } = captureExporter()
     app.logger.exporter(exporter)
 
-    const log = createLeveledLogFunction('dsh-finance:scheduler', app.logger)
+    const log = createLeveledLogFunction('dsh-ia:scheduler', app.logger)
     log('error', 'E')
     log('warn', 'W')
     log('info', 'I')
     expect(messages.map((m) => m.type)).toEqual(['error', 'warn', 'info'])
-    expect(messages.every((m) => m.name === 'dsh-finance:scheduler')).toBe(true)
+    expect(messages.every((m) => m.name === 'dsh-ia:scheduler')).toBe(true)
   })
 })

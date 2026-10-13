@@ -1,7 +1,7 @@
 /**
  * scheduler/store.ts —— 定时任务清单持久化（`data/tasks/<id>.json`）。
  *
- * 唯一权威设计文档：《感知层详细设计（dsh-finance 插件）》 v0.7。
+ * 唯一权威设计文档：《感知层详细设计（dsh-ia 插件）》 v0.7。
  *
  * 职责（§2.1 / 持久化）：把「任务清单」持久化在 `data/tasks/<id>.json`，每条记录是
  * {@link TaskDef}。store 只负责机制的读写，不做调度、不做唤醒判读（那由 runner /
@@ -10,7 +10,7 @@
  *
  * 关键约束：
  * - **数据目录依赖注入**：`tasksDir`（或 `baseDir`）通过工厂参数注入，不写死绝对 /
- *   相对路径。默认值 `~/.dsh-finance/data/tasks`（经 {@link resolveFinanceTasksDir}
+ *   相对路径。默认值 `~/.dsh-ia/data/tasks`（经 {@link resolveFinanceTasksDir}
  *   展开，不再锚定 `process.cwd()`），可被覆盖。
  * - **id 防目录穿越**：所有 id 拼入路径前必须经 `assertSafeSegment(id, 'task-id')`
  *   校验（复用 `../domain/path-guard.js`，不自建守卫）。
@@ -45,7 +45,7 @@ export interface TaskListResult {
 /** 任务清单文件扩展名（不含点）。 */
 const TASK_FILE_EXT = '.json'
 
-/** 默认任务清单目录：`~/.dsh-finance/data/tasks`（固定目录，可被注入覆盖）。 */
+/** 默认任务清单目录：`~/.dsh-ia/data/tasks`（固定目录，可被注入覆盖）。 */
 export function defaultTasksDir(): string {
   return resolveFinanceTasksDir()
 }

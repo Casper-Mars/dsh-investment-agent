@@ -1,7 +1,7 @@
 /**
  * scheduler/runner.ts 真实进程 end-to-end 测试。
  *
- * 唯一权威设计文档：《感知层详细设计（dsh-finance 插件）》 v0.7。
+ * 唯一权威设计文档：《感知层详细设计（dsh-ia 插件）》 v0.7。
  *
  * 为什么需要本文件：
  * 原 tests/runner.test.ts 的 21 个用例全部 mock 了 spawner，从未驱动真实的
@@ -28,7 +28,7 @@ import type { TaskRunOutcome } from '../src/scheduler/types.js'
 let dir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'dsh-finance-runner-real-'))
+  dir = mkdtempSync(join(tmpdir(), 'dsh-ia-runner-real-'))
 })
 
 afterEach(() => {

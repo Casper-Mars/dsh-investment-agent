@@ -260,7 +260,7 @@ describe('④ 跨进程唤醒消息显式携带 traceId', () => {
     })
 
     expect(sink).toHaveLength(1)
-    expect(sink[0].source?.kind).toBe('dsh-finance')
+    expect(sink[0].source?.kind).toBe('dsh-ia')
     expect(sink[0].source?.form).toBe('notice')
     expect(sink[0].source?.traceId).toBe('WAKE-TRACE-1')
     // 源中可检出（跨进程携带的可检证据）。
@@ -289,7 +289,7 @@ describe('④ 跨进程唤醒消息显式携带 traceId', () => {
   it('createNoticeMessage 第 3 参缺省时行为兼容（无 traceId）；传值时可检出', () => {
     const a = createNoticeMessage('body', 'sum') as unknown as CapturedMessage
     expect('traceId' in (a.source ?? {})).toBe(false)
-    expect(a.source?.kind).toBe('dsh-finance')
+    expect(a.source?.kind).toBe('dsh-ia')
 
     const b = createNoticeMessage('body', 'sum', 'TR-9') as unknown as CapturedMessage
     expect(b.source?.traceId).toBe('TR-9')

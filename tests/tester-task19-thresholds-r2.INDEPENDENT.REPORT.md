@@ -1,6 +1,6 @@
 # 测试报告（复验轮 2）：Task-19 阈值来源迁移 —— `miss_streak_max` 守卫修复
 
-- 被测交付物：`/Users/reachlucifer/project/opc/dsh-finance`（HEAD `add5a29` + 未提交改动）
+- 被测交付物：`/Users/reachlucifer/project/opc/dsh-ia`（HEAD `add5a29` + 未提交改动）
 - 被测文件：`src/tools/context.ts`（`thresholdsFromFrontmatter()` 守卫修复）、`src/domain/strategy.ts`（`parseStrategyDoc`）、`src/domain/store.ts`（`saveThresholds` @deprecated）
 - 独立测试：`tests/tester-task19-thresholds.INDEPENDENT.spec.ts`（上轮 14 项 + 本轮新增 11 项边界，未改 `src/**` / 既有测试 / `thresholds.test.ts`）
 - 测试方式：真实 `createToolContext` + 真实文件落盘 + `createAllTools` 走工具 `execute` 链路，一律临时目录做 dataRoot（`mkdtempSync`），结束 `rmSync` 清理。

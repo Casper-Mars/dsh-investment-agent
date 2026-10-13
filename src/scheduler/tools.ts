@@ -2,7 +2,7 @@
  * scheduler/tools.ts —— 定时任务层（感知层）工具：task_create / task_list / task_get /
  * task_update / task_delete / task_enable / task_disable。
  *
- * 唯一权威设计文档：《感知层详细设计（dsh-finance 插件）》 v0.7。
+ * 唯一权威设计文档：《感知层详细设计（dsh-ia 插件）》 v0.7。
  *
  * 职责：把「定时任务清单」的增删改查暴露为 agent 工具。工具层**不重写持久化**，
  * 数据后端复用 `store.ts` 的 {@link TaskStore}（list/get/save/remove）；写类工具在

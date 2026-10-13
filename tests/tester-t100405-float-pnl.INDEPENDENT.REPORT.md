@@ -1,6 +1,6 @@
 # 测试报告 — t100405：[P1] ledger_query 浮动盈亏 float_pnl
 
-- 被测目录：`/Users/reachlucifer/project/opc/dsh-finance`
+- 被测目录：`/Users/reachlucifer/project/opc/dsh-ia`
 - 被测态：工作区未提交改动（6 文件），branch = `main`
 - 目标节点：Reach的MacBook Pro
 - 测试方式：独立复跑（typecheck / 全量 test）＋ 独立自建场景验证（不复用 Developer 断言）

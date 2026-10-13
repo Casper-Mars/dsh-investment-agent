@@ -139,7 +139,7 @@ export function mountDefaultPresetSetup(
     try {
       await agentPresets.mount(agentCtx, presetId)
     } catch (err: unknown) {
-      log(`[dsh-finance/session] 警告 默认 preset 挂载失败（降级，base 工具可能缺失）：${String(err)}`)
+      log(`[dsh-ia/session] 警告 默认 preset 挂载失败（降级，base 工具可能缺失）：${String(err)}`)
     }
   }
 }
@@ -173,7 +173,7 @@ export type EnsureOutcome =
 export async function ensurePinnedSession(
   deps: SessionEnsureDeps,
 ): Promise<{ outcome: EnsureOutcome; handle: EnsureAgentHandle | undefined }> {
-  const log = deps.logger ?? createLogFunction('dsh-finance:session')
+  const log = deps.logger ?? createLogFunction('dsh-ia:session')
   const id = getPinnedSessionId()
 
   // 默认 preset 的挂载 setup（无 preset 服务 → undefined，不挂 setup、不设 meta.agentPreset）。
@@ -186,12 +186,12 @@ export async function ensurePinnedSession(
     // 1) live 命中 → 直接复用
     const live = deps.agents.get(id)
     if (live !== undefined) {
-      log(`[dsh-finance/session] 固定会话已 live，直接复用：${id}`)
+      log(`[dsh-ia/session] 固定会话已 live，直接复用：${id}`)
       return { outcome: { kind: 'reuse', id }, handle: undefined }
     }
   } catch (err: unknown) {
     // 服务不足：不中断，落入下方 skip 判定前的安全处理
-    log(`[dsh-finance/session] 警告 agents.get 失败：${String(err)}`)
+    log(`[dsh-ia/session] 警告 agents.get 失败：${String(err)}`)
     detail = `agents.get failed: ${String(err)}`
     return { outcome: { kind: 'skipped', id, detail }, handle: undefined }
   }
@@ -200,7 +200,7 @@ export async function ensurePinnedSession(
   try {
     const stat = await deps.sessionPersistence.stat(id)
     if (stat !== undefined) {
-      log(`[dsh-finance/session] 固定会话已持久化，resume 恢复：${id}`)
+      log(`[dsh-ia/session] 固定会话已持久化，resume 恢复：${id}`)
       const handle = await deps.agents.resume({
         resumeSessionId: id,
         agentOptions: deps.agentOptions,
@@ -209,14 +209,14 @@ export async function ensurePinnedSession(
       return { outcome: { kind: 'resumed', id }, handle }
     }
   } catch (err: unknown) {
-    log(`[dsh-finance/session] 警告 恢复固定会话失败：${String(err)}`)
+    log(`[dsh-ia/session] 警告 恢复固定会话失败：${String(err)}`)
     detail = `resume failed: ${String(err)}`
     return { outcome: { kind: 'skipped', id, detail }, handle: undefined }
   }
 
   // 3) 都不存在 → create 新建（带 cwd / agentOptions）
   try {
-    log(`[dsh-finance/session] 固定会话不存在，create 新建：${id}（cwd=${deps.cwd}）`)
+    log(`[dsh-ia/session] 固定会话不存在，create 新建：${id}（cwd=${deps.cwd}）`)
     const handle = await deps.agents.create({
       sessionId: id,
       agentOptions: deps.agentOptions,
@@ -228,7 +228,7 @@ export async function ensurePinnedSession(
     })
     return { outcome: { kind: 'created', id }, handle }
   } catch (err: unknown) {
-    log(`[dsh-finance/session] 警告 新建固定会话失败：${String(err)}`)
+    log(`[dsh-ia/session] 警告 新建固定会话失败：${String(err)}`)
     detail = `create failed: ${String(err)}`
     return { outcome: { kind: 'skipped', id, detail }, handle: undefined }
   }
@@ -336,19 +336,19 @@ function attachSessionToWorkspaceSafely(
         | WorkspaceRegistryLike
         | undefined
       if (!workspaceRegistry || typeof workspaceRegistry.resolveByPath !== 'function') {
-        log('[dsh-finance/session] 警告 workspaceRegistry 服务不可用，跳过会话归属（降级）')
+        log('[dsh-ia/session] 警告 workspaceRegistry 服务不可用，跳过会话归属（降级）')
         return
       }
       void attachPinnedSessionToWorkspace(workspaceRegistry, cwd).then(
         () => {},
         (err: unknown) => {
-          log(`[dsh-finance/session] 警告 会话归属失败（降级 skip）：${String(err)}`)
+          log(`[dsh-ia/session] 警告 会话归属失败（降级 skip）：${String(err)}`)
         },
       )
     })
   } catch (err: unknown) {
     // inject 自身异常（极端）：降级，不中断装载。
-    log(`[dsh-finance/session] 警告 会话归属装配失败（降级 skip）：${String(err)}`)
+    log(`[dsh-ia/session] 警告 会话归属装配失败（降级 skip）：${String(err)}`)
   }
 }
 
@@ -378,11 +378,11 @@ function deliverOpeningNoticeSafely(
       | undefined
 
     if (!agents || typeof agents.get !== 'function') {
-      log('[dsh-finance/notice] 警告 agents 服务不可用，跳过开场 notice（降级）')
+      log('[dsh-ia/notice] 警告 agents 服务不可用，跳过开场 notice（降级）')
       return
     }
     if (!sessionPersistence || typeof sessionPersistence.open !== 'function') {
-      log('[dsh-finance/notice] 警告 sessionPersistence 服务不可用，跳过开场 notice（降级）')
+      log('[dsh-ia/notice] 警告 sessionPersistence 服务不可用，跳过开场 notice（降级）')
       return
     }
     // 拆出 open 到局部（TS 收窄后仍可选，显式绑定避免闭包内 possibly-undefined）。
@@ -412,7 +412,7 @@ function deliverOpeningNoticeSafely(
       pinnedId: getPinnedSessionId(),
       logger: log,
     }).catch((err: unknown) => {
-      log(`[dsh-finance/notice] 警告 开场 notice 投递异常：${String(err)}`)
+      log(`[dsh-ia/notice] 警告 开场 notice 投递异常：${String(err)}`)
     })
   })
 }
@@ -440,9 +440,9 @@ export function applySessionEnsure(
   options: { logger?: (message: string) => void; cwd?: string } = {},
 ): void {
   // 默认走统一日志门面；原生 logger 取自本 ctx（`ctx.logger`），缺失则门面内降级。
-  const log = options.logger ?? createLogFunction('dsh-finance:session', ctx.logger)
+  const log = options.logger ?? createLogFunction('dsh-ia:session', ctx.logger)
 
-  // cwd：固定到 `~/.dsh-finance`（展开后的绝对路径，目录不存在时自动创建）。
+  // cwd：固定到 `~/.dsh-ia`（展开后的绝对路径，目录不存在时自动创建）。
   // 这是新建会话落地的工作目录来源，也是 workspace 归属（canonical 路径）锚点；
   // 若随 `process.cwd()` 漂移，每次从不同目录启动 dsh web 都会产生全新 workspace。
   // `workspaceRegistry.create` 要求 path 为**已存在的目录**，故此处先 `ensureFinanceHomeDir()`。
@@ -468,11 +468,11 @@ export function applySessionEnsure(
       | undefined
 
     if (!agents || typeof agents.get !== 'function') {
-      log('[dsh-finance/session] 警告 agents 服务不可用，跳过会话确保（降级）')
+      log('[dsh-ia/session] 警告 agents 服务不可用，跳过会话确保（降级）')
       return
     }
     if (!sessionPersistence || typeof sessionPersistence.stat !== 'function') {
-      log('[dsh-finance/session] 警告 sessionPersistence 服务不可用，跳过会话确保（降级）')
+      log('[dsh-ia/session] 警告 sessionPersistence 服务不可用，跳过会话确保（降级）')
       return
     }
     // 拆出 stat 到局部（TS 收窄后仍可选，显式绑定避免闭包内 possibly-undefined）。
@@ -507,7 +507,7 @@ export function applySessionEnsure(
           case 'created':
             break
           case 'skipped':
-            log(`[dsh-finance/session] 固定会话确保跳过：${outcome.detail}`)
+            log(`[dsh-ia/session] 固定会话确保跳过：${outcome.detail}`)
             break
         }
 
@@ -522,13 +522,13 @@ export function applySessionEnsure(
           deliverOpeningNoticeSafely(ctx, log)
         }
       }).catch((err: unknown) => {
-        log(`[dsh-finance/session] 警告 会话确保异常：${String(err)}`)
+        log(`[dsh-ia/session] 警告 会话确保异常：${String(err)}`)
       })
 
       return () => {
         cancelled = true
         if (disposeHandle) disposeHandle()
       }
-    }, 'dsh-finance session')
+    }, 'dsh-ia session')
   })
 }

@@ -2,10 +2,10 @@
  * 任务进程日志采集器（里程碑 M3「任务进程日志独立采集」）。
  *
  * 目标：把**独立任务子进程**的 stdout（非末行内容）+ 全部 stderr **行级**落盘到
- *   `~/.dsh-finance/logs/tasks/<taskId>/<ts>-<pid>.log`，与宿主侧日志（M2 文件 exporter）
+ *   `~/.dsh-ia/logs/tasks/<taskId>/<ts>-<pid>.log`，与宿主侧日志（M2 文件 exporter）
  *   分开存储，便于「一个任务一个目录」按任务追溯。
  *
- * 设计要点（对齐技术方案《日志完善技术方案（dsh-finance 插件）v1.0》§5.3 / §9 / §10）：
+ * 设计要点（对齐技术方案《日志完善技术方案（dsh-ia 插件）v1.0》§5.3 / §9 / §10）：
  *
  *   1. **末行判定（本任务核心难点）**：runner 把 stdout 的**最后一个非空行**当作结果
  *      JSON（`parseLastJsonLine`），其余行才是「日志」。但 stdout 是**流式 chunk**，
@@ -23,7 +23,7 @@
  *
  *   3. **单文件上限（防磁盘打爆）**：任务程序不可信；stderr 不受 runner 的 1 MiB
  *      stdout 上限约束，失控输出可无限增长。故本采集器对**单个日志文件**设上限
- *      {@link DEFAULT_TASK_LOG_MAX_SIZE}（10 MB，可经 `DSH_FINANCE_LOG_MAX_SIZE` 覆盖）：
+ *      {@link DEFAULT_TASK_LOG_MAX_SIZE}（10 MB，可经 `DSH_IA_LOG_MAX_SIZE` 覆盖）：
  *      预扣长度，一旦「已写字节 + 本段字节 > 上限」即**停写**并 `warn` 一次（磁盘占用
  *      严格受上限约束）。**停写只影响日志文件**，绝不影响任务执行与结局判定。
  *
@@ -31,8 +31,8 @@
  *      失败即降级为 no-op，绝不把宿主或任务执行搞崩。
  *
  *   5. **权限与落盘位置**：目录 `0o700`、文件 `0o600`；日志根目录复用 `src/paths.ts`
- *      的 {@link resolveFinanceLogDir}（默认 `~/.dsh-finance/logs`，可经
- *      `DSH_FINANCE_LOG_DIR` 覆盖）；任务日志目录 = `<logDir>/tasks/<taskId>`。
+ *      的 {@link resolveFinanceLogDir}（默认 `~/.dsh-ia/logs`，可经
+ *      `DSH_IA_LOG_DIR` 覆盖）；任务日志目录 = `<logDir>/tasks/<taskId>`。
  *      即便任务只输出了结果 JSON（无任何日志行），也会**留档一个空文件**，便于确认
  *      「该任务本次确实运行过」。
  *
@@ -63,9 +63,9 @@ export type TaskLogFunction = (level: 'info' | 'warn' | 'error', message: string
 
 /** {@link createTaskLog} 选项。 */
 export interface TaskLogOptions {
-  /** 日志根目录覆盖；缺省取 `DSH_FINANCE_LOG_DIR` → `~/.dsh-finance/logs`。 */
+  /** 日志根目录覆盖；缺省取 `DSH_IA_LOG_DIR` → `~/.dsh-ia/logs`。 */
   readonly dir?: string
-  /** 单文件上限（字节）；缺省取 `DSH_FINANCE_LOG_MAX_SIZE` → {@link DEFAULT_TASK_LOG_MAX_SIZE}。 */
+  /** 单文件上限（字节）；缺省取 `DSH_IA_LOG_MAX_SIZE` → {@link DEFAULT_TASK_LOG_MAX_SIZE}。 */
   readonly maxSize?: number | string
   /** 时间源（文件名 `<ts>` 段）；缺省 `() => new Date()`。注入便于测试确定性命名。 */
   readonly now?: () => Date
@@ -143,7 +143,7 @@ function sanitizeSegment(segment: string): string {
 
 /** 默认 warn / error 出口：统一日志门面（M1），降级路径内部走 console（仅门面允许）。 */
 function defaultLog(): TaskLogFunction {
-  const logger = createLogger('dsh-finance:task-log')
+  const logger = createLogger('dsh-ia:task-log')
   return (level, message): void => {
     logger[level](message)
   }

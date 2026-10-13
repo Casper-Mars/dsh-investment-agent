@@ -1,11 +1,11 @@
 /**
  * 统一日志门面（里程碑 M1「统一门面」）。
  *
- * 目标：为 dsh-finance 插件提供**唯一日志出口**，封装 dsh 原生 `ctx.logger`
+ * 目标：为 dsh-ia 插件提供**唯一日志出口**，封装 dsh 原生 `ctx.logger`
  *   （cordis `LoggerService`），取代全仓散乱的 `console.*` 调用与
  *   `src/scheduler/index.ts` 里的手写 `level → console` switch。
  *
- * 设计要点（对齐技术方案《日志完善技术方案（dsh-finance 插件）v1.0》§5.1）：
+ * 设计要点（对齐技术方案《日志完善技术方案（dsh-ia 插件）v1.0》§5.1）：
  *   1. **复用原生**：禁止引入 pino / winston 等第三方日志库，也不新增运行时依赖；
  *      native 侧直接委托 cordis `ctx.logger(name?)` 派生的命名 logger。
  *   2. **四级 + 派生 + 结构化 meta**：暴露 `error/warn/info/debug` 四级与
@@ -19,7 +19,7 @@
  *      门面内极简实现（内部仍走 `console`），保证模块脱离宿主也能跑、能测。
  *      —— 方案 §10 验收第 1 条明确「统一门面内除外」，故仅本文件允许保留 `console.*`。
  *   4. **级别过滤（基础能力）**：降级路径按最低级别阈值过滤；阈值取
- *      `options.level` → 环境变量 `DSH_FINANCE_LOG_LEVEL` → 默认 `info`。
+ *      `options.level` → 环境变量 `DSH_IA_LOG_LEVEL` → 默认 `info`。
  *      native 可用时由其自身的 level 配置决定，本门面不二次过滤（纯粹「换出口」）。
  *   5. **只换出口、不改业务行为**：文件落地 / exporter / trace / 去敏属后续里程碑，
  *      本模块不实现文件写盘。
@@ -42,9 +42,9 @@ export type LogMeta = Record<string, unknown>
  *
  * @example
  * ```ts
- * const logger = createFinanceLogger({ native: ctx.logger, scope: 'dsh-finance' })
+ * const logger = createFinanceLogger({ native: ctx.logger, scope: 'dsh-ia' })
  * logger.info('会话已确保', { id })
- * const sessionLog = logger.child('session') // 命名 logger：dsh-finance:session
+ * const sessionLog = logger.child('session') // 命名 logger：dsh-ia:session
  * sessionLog.warn('agents 服务不可用')
  * ```
  */
@@ -99,7 +99,7 @@ export interface CreateFinanceLoggerOptions {
 }
 
 /** 环境变量：降级路径的最低日志级别。 */
-export const LOG_LEVEL_ENV = 'DSH_FINANCE_LOG_LEVEL'
+export const LOG_LEVEL_ENV = 'DSH_IA_LOG_LEVEL'
 
 /** 默认最低日志级别。 */
 export const DEFAULT_LOG_LEVEL: LogLevel = 'info'

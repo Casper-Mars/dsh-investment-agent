@@ -13,8 +13,8 @@ import { defineConfig } from 'vitest/config'
  * 故限制并发上限以稳定时序：不改变任何生产代码，仅降低测试并行度。
  *
  * `setupFiles`：`tests/setup.ts` 在测试侧隔离日志目录 —— 以真实 ctx 跑 `apply()`
- * 的用例默认写入本次运行的临时目录，避免污染开发者真实 `~/.dsh-finance/logs`
- * （显式设置 `DSH_FINANCE_LOG_DIR` 的用例不受影响）。
+ * 的用例默认写入本次运行的临时目录，避免污染开发者真实 `~/.dsh-ia/logs`
+ * （显式设置 `DSH_IA_LOG_DIR` 的用例不受影响）。
  */
 export default defineConfig({
   test: {

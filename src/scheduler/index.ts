@@ -3,7 +3,7 @@
  *
  * `applyScheduler(ctx)`（由 `src/plugin.ts` 的 `apply` 调用）：
  *   1. 解析 dataRoot（复用 tools 层 {@link DATA_ROOT_ENV} / {@link DEFAULT_DATA_DIR} 的
- *      注入优先级：构造注入 > 环境变量 `DSH_FINANCE_DATA_DIR` > 默认 `~/.dsh-finance/data`），
+ *      注入优先级：构造注入 > 环境变量 `DSH_IA_DATA_DIR` > 默认 `~/.dsh-ia/data`），
  *      并显式派生任务清单目录 `join(dataRoot, 'tasks')`——**不依赖 `process.cwd()`**；
  *   2. `createTaskStore(tasksDir)` 建任务清单 store；
  *   3. 组装「编排 runner」（本层真正难点）：满足 `TaskRunnerLike`（`run(taskId, taskPath)`），
@@ -106,7 +106,7 @@ function resolveDataRoot(explicit?: string): string {
   if (explicit && explicit.trim() !== '') return resolve(explicit)
   const env = process.env[DATA_ROOT_ENV]
   if (env && env.trim() !== '') return resolve(env)
-  // 固定默认值：`~/.dsh-finance/data`（经 os.homedir() 展开，目录幂等创建）。
+  // 固定默认值：`~/.dsh-ia/data`（经 os.homedir() 展开，目录幂等创建）。
   return ensureFinanceDataDir()
 }
 
@@ -119,7 +119,7 @@ function resolveDataRoot(explicit?: string): string {
 export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}): void {
   // 默认走统一日志门面；原生 logger 取自本 ctx（`ctx.logger`），缺失则门面内降级。
   const log: (level: 'info' | 'warn' | 'error', message: string) => void =
-    options.logger ?? createLeveledLogFunction('dsh-finance:scheduler', ctx.logger)
+    options.logger ?? createLeveledLogFunction('dsh-ia:scheduler', ctx.logger)
 
   // ---- 1) 解析 dataRoot，并显式派生任务清单目录（不依赖 process.cwd()） ----
   const dataRoot = resolveDataRoot(options.dataRoot)
@@ -154,10 +154,10 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
       //         task_path 时 store.find 只取第一个」导致按 taskId 串扰（冷却/投递错配）的隐患。
       //     旧契约因不携带 taskId 才需反查；现契约已携带，故删除反查及其「未找到 → skipped」
       //     分支。taskPath 即 TaskDef.task_path 原文（相对路径）。
-      // taskPath 为 TaskDef.task_path 原文，是相对于 FINANCE_HOME（`~/.dsh-finance`）的
+      // taskPath 为 TaskDef.task_path 原文，是相对于 FINANCE_HOME（`~/.dsh-ia`）的
       // 多级相对路径（如 `tasks/002156-intraday/task.ts`），因此解析基准是 finance home，
-      // 而非 dataRoot（`~/.dsh-finance/data`）——后者会多拼一层 `data`，导致程序文件
-      // 定位到错误的 `~/.dsh-finance/data/tasks/...`。
+      // 而非 dataRoot（`~/.dsh-ia/data`）——后者会多拼一层 `data`，导致程序文件
+      // 定位到错误的 `~/.dsh-ia/data/tasks/...`。
       const financeHome = resolveFinanceHomeDir()
       const absTaskPath = resolve(financeHome, taskPath)
       const taskDir = dirname(absTaskPath)
@@ -267,7 +267,7 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
   ctx.inject(['agents'], (agentCtx) => {
     const agents = agentCtx.get('agents') as AgentRegistryLike | undefined
     if (!agents || typeof agents.get !== 'function') {
-      log('warn', '[dsh-finance/scheduler] agents 服务不可用，唤醒将降级为跳过')
+      log('warn', '[dsh-ia/scheduler] agents 服务不可用，唤醒将降级为跳过')
       waker = undefined
       return
     }
@@ -277,7 +277,7 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
       wakeCooldownMs: options.wakeCooldownMs,
       log,
     })
-    log('info', '[dsh-finance/scheduler] 唤醒通道已就绪（定点投递）')
+    log('info', '[dsh-ia/scheduler] 唤醒通道已就绪（定点投递）')
   })
 
   // ---- 6) 惰性注册 7 个 task_* 工具（注销器绑定 ctx.effect） ----
@@ -288,7 +288,7 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
     // 安全降级：tools 服务不可用（最小上下文 / 装载测试）时跳过，不中断装载。
     const tools = typeof ctx.get === 'function' ? ctx.get('tools') : undefined
     if (!tools || typeof tools.register !== 'function') {
-      log('warn', '[dsh-finance/scheduler] tools 服务不可用，跳过 scheduler 工具注册')
+      log('warn', '[dsh-ia/scheduler] tools 服务不可用，跳过 scheduler 工具注册')
     } else {
       void import('./tools.js')
         .then(({ createSchedulerTools }) => {
@@ -300,7 +300,7 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
           }
         })
         .catch((err: unknown) => {
-          log('error', `[dsh-finance/scheduler] scheduler 工具注册失败: ${String(err)}`)
+          log('error', `[dsh-ia/scheduler] scheduler 工具注册失败: ${String(err)}`)
         })
     }
 
@@ -308,7 +308,7 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
       cancelled = true
       disposeTools?.()
     }
-  }, 'dsh-finance scheduler tools')
+  }, 'dsh-ia scheduler tools')
 
   // ---- 7) 自持启停：apply 即启动，随 effect 卸载 stop（幂等守卫） ----
   let started = false
@@ -323,5 +323,5 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
         started = false
       }
     }
-  }, 'dsh-finance scheduler')
+  }, 'dsh-ia scheduler')
 }

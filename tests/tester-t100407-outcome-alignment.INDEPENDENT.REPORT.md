@@ -1,7 +1,7 @@
 # t100407 测试报告：runner 结局语义对齐 v0.7 §9.1（运行时验证）
 
 - 任务卡：t100407（结局语义对齐验证·独立复跑）
-- 被测路径：`/Users/reachlucifer/project/opc/dsh-finance`，branch `main`（工作区未提交改动）
+- 被测路径：`/Users/reachlucifer/project/opc/dsh-ia`，branch `main`（工作区未提交改动）
 - 改动范围（与自述一致）：`src/scheduler/index.ts`、`src/scheduler/runner.ts` + 4 个测试文件，**6 文件 / +91 / -28**
 - 目标节点：Reach的MacBook Pro（宿主机 Mac）
 - 结论：**5/5 验收 PASS；两处结局与 §9.1 一致；既有行为零回归。** 另有 5 条非阻塞观察（3 条文档陈旧 + 1 条检查点顺序 + 1 条 §9.1 措辞覆盖缺口），详见第六节。

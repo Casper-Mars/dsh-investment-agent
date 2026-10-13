@@ -20,7 +20,7 @@ const HARNESS = process.env.DSH_HARNESS_DIR || '/Users/reachlucifer/project/opc/
 const CLIENT = join(HARNESS, 'packages/sdk/client/lib/index.js')
 const DSH = process.env.DSH_BIN || '/Users/reachlucifer/bin/dsh'
 const HOME = homedir()
-const FIN = join(HOME, '.dsh-finance')
+const FIN = join(HOME, '.dsh-ia')
 const SKILLS = join(FIN, 'data', 'skills')
 const TREND = join(SKILLS, 'trend-analysis', 'SKILL.md')
 // 5 个「可进化 SKILL」= <dataRoot>/skills 落盘集合（固有 SKILL task-authorship 不落盘）。
@@ -80,7 +80,7 @@ async function main() {
   const pre = skillDirs()
   log('A', `pre-state: skillDirs=${JSON.stringify(pre)}`)
   const boot = await bootCapture('cold')
-  const provLine = boot.split('\n').filter(l => /冷启动预置|插件加载|dsh-finance/.test(l)).join('\n')
+  const provLine = boot.split('\n').filter(l => /冷启动预置|插件加载|dsh-ia/.test(l)).join('\n')
   log('A', `boot-log plugin lines:\n${provLine || '(none captured)'}`)
   rec('A-bootlog', { text: boot })
 

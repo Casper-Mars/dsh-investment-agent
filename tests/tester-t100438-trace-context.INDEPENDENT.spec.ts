@@ -15,7 +15,7 @@
  *      降级不抛（含**模拟 `node:async_hooks` 构造失败**的隔离模块图）/ 契约逐字不变。
  *
  * 约束：仅新增本测试文件；不改动 src/**、不 commit、不 push、不触碰
- *      `~/.dsh-finance`（用临时 `DSH_FINANCE_HOME`；`DSH_FINANCE_LOG_DIR` 亦隔离）。
+ *      `~/.dsh-ia`（用临时 `DSH_IA_HOME`；`DSH_IA_LOG_DIR` 亦隔离）。
  * ==================================================================
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -126,7 +126,7 @@ const metaOf = (c: NativeCall | undefined): Record<string, unknown> | undefined 
   c?.args[1] as Record<string, unknown> | undefined
 
 // ---------------------------------------------------------------------------
-// 环境隔离（绝不触碰真实 ~/.dsh-finance）
+// 环境隔离（绝不触碰真实 ~/.dsh-ia）
 // ---------------------------------------------------------------------------
 
 const tmpDirs: string[] = []
@@ -141,9 +141,9 @@ function mkTmp(prefix: string): string {
 }
 
 beforeEach(() => {
-  savedHome = process.env.DSH_FINANCE_HOME
-  savedLogDir = process.env.DSH_FINANCE_LOG_DIR
-  savedSession = process.env.DSH_FINANCE_SESSION_ID
+  savedHome = process.env.DSH_IA_HOME
+  savedLogDir = process.env.DSH_IA_LOG_DIR
+  savedSession = process.env.DSH_IA_SESSION_ID
 })
 
 afterEach(() => {
@@ -151,9 +151,9 @@ afterEach(() => {
     if (v === undefined) delete process.env[k]
     else process.env[k] = v
   }
-  restore('DSH_FINANCE_HOME', savedHome)
-  restore('DSH_FINANCE_LOG_DIR', savedLogDir)
-  restore('DSH_FINANCE_SESSION_ID', savedSession)
+  restore('DSH_IA_HOME', savedHome)
+  restore('DSH_IA_LOG_DIR', savedLogDir)
+  restore('DSH_IA_SESSION_ID', savedSession)
   H.loaderImpl.value = null
   H.runnerImpl.value = null
   H.cap.options = null
@@ -410,11 +410,11 @@ describe('③ 日志门面合并 trace 上下文', () => {
     }
     app.logger.exporter(exporter)
 
-    const logger = createFinanceLogger({ native: app.logger, scope: 'dsh-finance:test' })
+    const logger = createFinanceLogger({ native: app.logger, scope: 'dsh-ia:test' })
     runWithTrace({ traceId: 'REAL', taskId: 'rt' }, () => logger.info('hello', { p: 1 }))
 
     expect(messages).toHaveLength(1)
-    expect(messages[0].name).toBe('dsh-finance:test')
+    expect(messages[0].name).toBe('dsh-ia:test')
     expect(messages[0].args[1]).toEqual({ p: 1, traceId: 'REAL', taskId: 'rt' })
   })
 })
@@ -480,7 +480,7 @@ describe('④ 唤醒消息显式携带 traceId（跨进程）', () => {
     waker.wake('t5', data, 'TR-K')
 
     const m = sink[0]
-    expect(m.source?.kind).toBe('dsh-finance')
+    expect(m.source?.kind).toBe('dsh-ia')
     expect(m.source?.form).toBe('notice')
     expect(m.content?.[0]?.text).toBe(`${data}\n\n> ${RISK_DISCLAIMER_LITERAL}`)
     expect(m.source?.summary).toBe('BUY 600519 第一行')
@@ -512,7 +512,7 @@ describe('④ 唤醒消息显式携带 traceId（跨进程）', () => {
   it('createNoticeMessage 第 3 参缺省行为兼容；传值可检出', () => {
     const a = createNoticeMessage('body', 'sum') as unknown as CapturedNotice
     expect('traceId' in (a.source ?? {})).toBe(false)
-    expect(a.source?.kind).toBe('dsh-finance')
+    expect(a.source?.kind).toBe('dsh-ia')
     expect(a.source?.form).toBe('notice')
     const b = createNoticeMessage('body', 'sum', 'TR-9') as unknown as CapturedNotice
     expect(b.source?.traceId).toBe('TR-9')
@@ -557,8 +557,8 @@ interface E2EEnv {
 
 function setupE2E(): E2EEnv {
   const home = mkTmp('t100438-home-')
-  process.env.DSH_FINANCE_HOME = home
-  process.env.DSH_FINANCE_LOG_DIR = mkTmp('t100438-logs-')
+  process.env.DSH_IA_HOME = home
+  process.env.DSH_IA_LOG_DIR = mkTmp('t100438-logs-')
   const dataRoot = join(home, 'data')
   mkdirSync(join(dataRoot, 'tasks'), { recursive: true })
 
@@ -632,7 +632,7 @@ describe('⑤ 端到端：真实 Context + applyScheduler（同链路一致 / �
     // 跨进程：waker 实际投递的消息携带该 fire 的 traceId（与日志一致）。
     expect(delivered).toHaveLength(1)
     expect(delivered[0].source?.traceId).toBe(fireTrace)
-    expect(delivered[0].source?.kind).toBe('dsh-finance')
+    expect(delivered[0].source?.kind).toBe('dsh-ia')
     expect(delivered[0].source?.form).toBe('notice')
     // data 里 encode 的 traceId 也等于 fireTrace（runner 看到的上下文与日志一致）。
     expect(delivered[0].content?.[0]?.text).toContain(`DATA-alpha-${fireTrace}`)

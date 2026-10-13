@@ -2,7 +2,7 @@
  * T11 跨模块集成 + 契约测试（二）：`applyScheduler` 全链路
  * `loader → runner → scheduler → wake`（真实编排 runner，注入 mock 外设）。
  *
- * 唯一权威设计文档：《感知层详细设计（dsh-finance 插件）》 v0.7。
+ * 唯一权威设计文档：《感知层详细设计（dsh-ia 插件）》 v0.7。
  *
  * 既有覆盖的边界：
  *   - `tester-task9-scheduler-index.INDEPENDENT.spec.ts` 的 T9-C 用 **mock runner**

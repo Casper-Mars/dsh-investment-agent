@@ -1,5 +1,5 @@
 /**
- * dsh-finance SKILL provider 装配层 —— 接入 dsh 原生 `skill-filesystem` provider。
+ * dsh-ia SKILL provider 装配层 —— 接入 dsh 原生 `skill-filesystem` provider。
  *
  * 背景（skill 重构任务-2）：
  *   历史上 skill（5 个可进化 + 1 个固有）由 `src/skills/index.ts` 以「读文件 + `ctx.skills.register`」
@@ -32,7 +32,7 @@ import { resolveSkillsRepoDir } from './repo.js'
 import { createLogger } from '../log/logger.js'
 
 /** provider 装配降级日志出口（统一门面；挂载失败无 `ctx` logger 注入位，走降级实现）。 */
-const providerLog = createLogger('dsh-finance:skills')
+const providerLog = createLogger('dsh-ia:skills')
 
 /**
  * 本插件在 `ctx.skills` 注册表中的唯一 provider 名。
@@ -40,11 +40,11 @@ const providerLog = createLogger('dsh-finance:skills')
  * preset 内 `skill-filesystem` 默认 providerName 为 `filesystem`；自定义 roots 覆盖由
  * 「同名 provider 冲突」决定，故取唯一名避免同层重名。
  */
-export const SKILL_PROVIDER_NAME = 'dsh-finance-skills'
+export const SKILL_PROVIDER_NAME = 'dsh-ia-skills'
 
 /** 挂载选项。 */
 export interface MountSkillProviderOptions {
-  /** 数据根目录（可选）；省略时依次取环境变量 `DSH_FINANCE_DATA_DIR` → 默认值。 */
+  /** 数据根目录（可选）；省略时依次取环境变量 `DSH_IA_DATA_DIR` → 默认值。 */
   dataRoot?: string
   /** provider 名（默认 {@link SKILL_PROVIDER_NAME}）。 */
   providerName?: string
@@ -132,12 +132,12 @@ export function mountSkillFilesystemProvider(
         mount = m
       })
       .catch((err: unknown) => {
-        providerLog.error('[dsh-finance] skill-filesystem provider 挂载失败（降级）', { error: err })
+        providerLog.error('[dsh-ia] skill-filesystem provider 挂载失败（降级）', { error: err })
       })
 
     return async () => {
       cancelled = true
       await mount?.dispose()
     }
-  }, 'dsh-finance skill-filesystem provider')
+  }, 'dsh-ia skill-filesystem provider')
 }

@@ -1,6 +1,6 @@
 # P100417 测试报告：固定会话 investment-advisor 工具补全修复
 
-- **被测交付物**：`/Users/reachlucifer/project/opc/dsh-finance`（未 commit，工作树）
+- **被测交付物**：`/Users/reachlucifer/project/opc/dsh-ia`（未 commit，工作树）
 - **改动文件**：`src/session-ensure.ts`、`src/plugin.ts`、`tests/session-ensure.test.ts`
 - **根因**：dsh 工具「按 scope 归属可见」，dsh-base 的 read/write/edit/bash 工具挂在 agent preset 的 standing mount 上，必须 `agentPresets.mount(agentCtx, preset.id)` 挂到 agent scope 才可见。
 - **测试结论：5/5 验收标准全部通过 ✅**
@@ -19,7 +19,7 @@
   5. `packages/core/tools/src/index.ts` — 工具按 `dsh-scope` 的 scoped layer 注册，只有 scope 被 parent 到 preset mount 的 agent 才能看到这些工具。
 - 修复点：`session-ensure.ts` 的 `create` 分支写 `meta: { agentPreset: defaultId }` 并挂 `setup`，`setup` 内 `agentPresets.mount(agentCtx, presetId)`，与 harness `createWebhookSession`（`packages/webhook/webhook/src/session.ts`）**逐字同构**。
 
-### AC2 ✅ 固定会话可调用 dsh-finance 自注册的全部 21 个工具
+### AC2 ✅ 固定会话可调用 dsh-ia 自注册的全部 21 个工具
 **通过**。
 - 自注册工具（14 模型工具 + 7 task_* 工具）经 `ctx.tools.register` 在 `plugins.ts` 的 `apply` 内注册，挂到 plugin ctx scope，不受 preset mount 影响；本改动不改动工具注册路径，`resolveAgentOptions`/`agentOptions` 投影也保持原样。
 - 证据：本次改动对 `src/plugin.ts` 仅新增两行 export（`mountDefaultPresetSetup`、`AgentPresetsLike`），未触碰工具/SKILL 注册逻辑；`pnpm test` 中 `tester-task10-task-authorship`（断言 ctx.skills 恰注册 6 个）与 `plugin-tools-registration.spec.ts` 全绿。

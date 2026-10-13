@@ -31,12 +31,12 @@ function makeReadHandle(events: Array<{ type: string }>) {
 }
 
 describe('① buildOpeningNoticeMessage 形态', () => {
-  it('产出 V4 producer-owned 形态的 UserMessage（kind=dsh-finance，非 plugin）', () => {
+  it('产出 V4 producer-owned 形态的 UserMessage（kind=dsh-ia，非 plugin）', () => {
     const msg = buildOpeningNoticeMessage()
     expect(msg.role).toBe('user')
     expect(msg.content).toEqual([{ type: 'text', text: OPENING_NOTICE_TEXT }])
     expect(msg.source).toEqual({
-      kind: 'dsh-finance',
+      kind: 'dsh-ia',
       form: 'notice',
       summary: OPENING_NOTICE_SUMMARY,
     })

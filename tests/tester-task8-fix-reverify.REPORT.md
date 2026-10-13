@@ -1,6 +1,6 @@
 # Task 8（t100357）修复复验报告 — cum_return 口径
 
-- **被测交付物**：dsh-finance 插件（cum_return 计算链路修复）
+- **被测交付物**：dsh-ia 插件（cum_return 计算链路修复）
 - **被测 commit**：`4c233b5d7bee6d146fa2da1fbc0056f06d5f6cdc`（fix(reviews): 打通 cum_return 计算链路并落地验收口径）
 - **复验角色**：Tester（只测试与报告，**未改动任何 src/**）
 - **日期**：2026-09-30

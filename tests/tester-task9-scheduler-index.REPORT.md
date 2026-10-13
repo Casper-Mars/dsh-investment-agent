@@ -1,7 +1,7 @@
 # 测试报告：`applyScheduler` 装配入口（飞书任务卡 t100385）
 
 - **被测交付物**：`src/scheduler/index.ts` 的 `applyScheduler(ctx)` 装配入口 + `src/plugin.ts` 的接入
-- **项目**：`/Users/reachlucifer/project/opc/dsh-finance`（Host = node「Reach的MacBook Pro」）
+- **项目**：`/Users/reachlucifer/project/opc/dsh-ia`（Host = node「Reach的MacBook Pro」）
 - **被测版本**：`main` 工作区（`src/plugin.ts` 已改、`src/scheduler/index.ts` 新增；`dist-server/` 已重建为含 scheduler 的产物）
 - **测试环境**：Node v25.9.0 / pnpm 11.7.0 / vitest 3.2.7
 - **测试人**：Tester（独立复验，未复用 Developer 用例、未做纯代码审查）

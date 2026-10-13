@@ -1,6 +1,6 @@
 # Task-14 复验报告：依赖版本对齐 0.1.6-alpha.1 → 0.2.0-rc.2
 
-- 被测交付物：`/Users/reachlucifer/project/opc/dsh-finance`（main @ `8ab4571` + 未提交 `package.json` / `pnpm-lock.yaml`）
+- 被测交付物：`/Users/reachlucifer/project/opc/dsh-ia`（main @ `8ab4571` + 未提交 `package.json` / `pnpm-lock.yaml`）
 - 复验方式：真实构建产物 `dist-server/**` + 真实 `@deepseek-ai/dsh-tools@0.2.0-rc.2` + 真实 cordis 4.0.4 + 真实 `dsh` CLI 0.2.0-rc.2
 - 独立测试文件：`tests/tester-task14-dsh-version-align.INDEPENDENT.spec.ts`（12 用例，全部通过）
 - 执行环境：宿主机 Mac（`exec host=node`），Docker/宿主机路径一致
@@ -83,7 +83,7 @@ $ pnpm build       # BUILD_EXIT=0（tsc + copy-assets，11 个资源文件搬运
 
 - `dsh --version` → **0.2.0-rc.2**（bin：`/Users/reachlucifer/bin/dsh` → `deepseek-harness/apps/cli/lib/bin.js`）
 - harness 源码包版本：`apps/cli`、`packages/skill/skill`、`packages/core/tools` 均为 **0.2.0-rc.2**
-- profile `opc-finance-verify` 已 link 到本仓库（`dsh-finance: link:/Users/reachlucifer/project/opc/dsh-finance`）
+- profile `opc-finance-verify` 已 link 到本仓库（`dsh-ia: link:/Users/reachlucifer/project/opc/dsh-ia`）
 
 ```bash
 $ dsh plugin --profile opc-finance-verify add .
@@ -95,9 +95,9 @@ Done in 227ms using pnpm v11.7.0
 
 ```bash
 $ dsh --profile opc-finance-verify --dump-config   # EXIT=0，识别插件：
-# == dsh-finance
-- id: dsh-finance
-  name: dsh-finance
+# == dsh-ia
+- id: dsh-ia
+  name: dsh-ia
   inject:
     - tools
     - skills
@@ -105,9 +105,9 @@ $ dsh --profile opc-finance-verify --dump-config   # EXIT=0，识别插件：
     - fs
 ```
 
-✅ 插件 `id=dsh-finance`、`inject=['tools','skills','ptcRuntime','fs']` 与契约一致。
+✅ 插件 `id=dsh-ia`、`inject=['tools','skills','ptcRuntime','fs']` 与契约一致。
 
-> 观察（非缺陷）：profile `package.json` 实际依赖为绝对路径 link `link:/Users/reachlucifer/project/opc/dsh-finance`（任务描述写作相对路径 `../../../project/opc/dsh-finance`），二者均指向本仓库，语义等价，不影响复验结论。
+> 观察（非缺陷）：profile `package.json` 实际依赖为绝对路径 link `link:/Users/reachlucifer/project/opc/dsh-ia`（任务描述写作相对路径 `../../../project/opc/dsh-ia`），二者均指向本仓库，语义等价，不影响复验结论。
 
 ---
 
@@ -123,13 +123,13 @@ $ dsh --profile opc-finance-verify --dump-config   # EXIT=0，识别插件：
   - sense_archives(4)：`sense_archive_commit, sense_archive_list, sense_archive_rollback, sense_archive_get`
 - **dispose 注销**：`pluginFiber.dispose()` 后 `schemas()=0`，16 工具全部 `get()` 返回 undefined ✅
 - **skills 4 个**：`trend-analysis, grid-strategy, stop-rule, sense-authorship`（顺序一致，description/content 非空）✅
-- **人设 section**：`dsh-finance:advisor`（order=100，正文 1148 字符，含「金融」）✅
+- **人设 section**：`dsh-ia:advisor`（order=100，正文 1148 字符，含「金融」）✅
 
 ```
 [EVIDENCE B2] ctx.tools.schemas() count=16 :: ledger_init, ledger_list, ledger_query, ledger_trade, predict_get, predict_make, predict_verify, review_check, review_get, review_metrics, review_report, review_retrospect, sense_archive_commit, sense_archive_get, sense_archive_list, sense_archive_rollback
 [EVIDENCE B3] after pluginFiber.dispose(): schemas()=0, 16 工具全部注销
 [EVIDENCE B4] skills registered=4 :: trend-analysis, grid-strategy, stop-rule, sense-authorship
-[EVIDENCE B5] persona section name=dsh-finance:advisor order=100 textLen=1148
+[EVIDENCE B5] persona section name=dsh-ia:advisor order=100 textLen=1148
 ```
 
 ---
@@ -159,6 +159,6 @@ $ dsh --profile opc-finance-verify --dump-config   # EXIT=0，识别插件：
 - 验收 1 → 测试 A1/A2/A3 + `git diff package.json` + `grep` lock
 - 验收 2 → `pnpm typecheck` / `pnpm build` 退出码 0
 - 验收 3 → `pnpm test` 27/473 → 28/485
-- 验收 4 → `dsh plugin add .` EXIT=0 + `dsh --dump-config` 输出 dsh-finance 段
+- 验收 4 → `dsh plugin add .` EXIT=0 + `dsh --dump-config` 输出 dsh-ia 段
 - 验收 5 → 测试 B1/B2/B3/B4/B5
 - 验收 6 → 测试 A4 + C1/C2/C3

@@ -1,6 +1,6 @@
 # 路径加固（path-guard）独立运行时验证报告
 
-- **被测交付物**：`/Users/reachlucifer/project/opc/dsh-finance`（基线 `84a0c46` + 未提交改动）
+- **被测交付物**：`/Users/reachlucifer/project/opc/dsh-ia`（基线 `84a0c46` + 未提交改动）
 - **测试者**：Tester（独立运行时验证）
 - **日期**：2026-10-02
 - **验证方式**：真实文件系统（`mkdtemp` 临时目录作 baseDir，诱饵文件 + 目录前后快照比对）
@@ -126,7 +126,7 @@
 - `pnpm build`：通过（`tsc --noEmit` + `tsconfig.server.json` 编译 + copy-assets 12 个资源）。
 - `pnpm test`：**基线 45 文件 / 747 用例全绿**（加入本独立 spec 后 46 文件 / 790 用例，全部通过）。
 - 顶层 `inject`：`src/plugin.ts` 仍为 `export const inject: string[] = ['tools', 'skills', 'ptcRuntime', 'fs']`（四项，不变）。
-- `cordis.patch.yml`：`inject: ['tools', 'skills', 'ptcRuntime', 'fs']` 与 `name: dsh-finance` 不变（git diff 确认未改动）。
+- `cordis.patch.yml`：`inject: ['tools', 'skills', 'ptcRuntime', 'fs']` 与 `name: dsh-ia` 不变（git diff 确认未改动）。
 
 ---
 

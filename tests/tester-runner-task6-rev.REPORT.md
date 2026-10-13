@@ -1,7 +1,7 @@
 # Task 6-rev 复验报告：scheduler 调度参数调整
 
 **Tester**：独立复验（未复用 Developer 用例）
-**被测**：`/Users/reachlucifer/project/opc/dsh-finance`（工作区，未 commit）
+**被测**：`/Users/reachlucifer/project/opc/dsh-ia`（工作区，未 commit）
 **新增独立测试**：`tests/tester-runner-task6-rev.INDEPENDENT.spec.ts`（31 个用例）
 **结论**：✅ **全部通过，无缺陷。放行。**
 

@@ -1,7 +1,7 @@
 /**
  * 定时任务层（感知层）最小结构契约类型。
  *
- * 唯一权威设计文档：《感知层详细设计（dsh-finance 插件）》 v0.7。
+ * 唯一权威设计文档：《感知层详细设计（dsh-ia 插件）》 v0.7。
  *
  * 本文件只导出「类型」（interface / type），无任何运行时副作用、无函数实现体。
  * 这些契约是 `store` / `tools` / `loader` / `runner` / `scheduler` / `wake` 等
@@ -227,7 +227,7 @@ export interface Waker {
 
 /** 唤醒消息（定点投递给固定会话的最小结构）。§8.2 */
 export interface NoticeUserMessage {
-  /** 消息 kind（V4 producer-owned，§8.3 使用 `'dsh-finance'`）。 */
+  /** 消息 kind（V4 producer-owned，§8.3 使用 `'dsh-ia'`）。 */
   readonly kind: string;
   /** 消息正文。 */
   readonly text: string;

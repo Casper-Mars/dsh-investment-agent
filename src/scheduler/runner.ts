@@ -1,7 +1,7 @@
 /**
  * scheduler/runner.ts —— 任务程序执行器（起独立 Node 进程 + stdout 解析 + 三结局映射）。
  *
- * 唯一权威设计文档：《感知层详细设计（dsh-finance 插件）》 v0.7。
+ * 唯一权威设计文档：《感知层详细设计（dsh-ia 插件）》 v0.7。
  *
  * 职责（§5「执行模型」/ AC-5「独立 Node 进程、无 bindings 白名单」/ AC-7「返回值契约」）：
  * 任务程序对定时层是**黑盒**——runner 对任务内容一无所知，只负责「起独立进程 →
@@ -86,7 +86,7 @@ export interface RunnerOptions {
   readonly timeBudget?: TimeBudget
   /**
    * 任务进程日志采集选项（M3）；仅在 {@link TaskRunner.run} 携带 taskId 时生效。
-   * 缺省走真实实现（`~/.dsh-finance/logs/tasks/<taskId>/`）。
+   * 缺省走真实实现（`~/.dsh-ia/logs/tasks/<taskId>/`）。
    */
   readonly taskLog?: TaskLogOptions
   /** 任务执行超时上限（毫秒），默认 60s。§9.3 */

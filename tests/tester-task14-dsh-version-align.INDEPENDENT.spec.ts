@@ -3,7 +3,7 @@
  * ==================================================================
  * Tester 独立复验（Task-14）：依赖版本对齐 0.1.6-alpha.1 → 0.2.0-rc.2
  *
- * 被测交付物：dsh-finance（main @ 8ab4571 + 未提交 package.json / pnpm-lock.yaml）
+ * 被测交付物：dsh-ia（main @ 8ab4571 + 未提交 package.json / pnpm-lock.yaml）
  * 变更内容：@deepseek-ai/dsh-skill / @deepseek-ai/dsh-tools 由 0.1.6-alpha.1
  *   → 0.2.0-rc.2（peerDependencies + devDependencies 共 4 处）。
  *
@@ -83,7 +83,7 @@ const EXPECTED_SKILLS = [
 /** 固有 SKILL（任务程序方法论）：由 plugin 静态注册（source=runtime），不经 provider。 */
 const INTRINSIC_SKILL = 'task-authorship' as const
 /** 人设 section 契约（src/prompts/index.ts）。 */
-const ADVISOR_SECTION_NAME = 'dsh-finance:advisor'
+const ADVISOR_SECTION_NAME = 'dsh-ia:advisor'
 const ADVISOR_SECTION_ORDER = 100
 
 /** systemPrompt 捕获式桩：记录注册的 section（人设 + ToolRuntime 自身的 tools 注册）。 */
@@ -140,7 +140,7 @@ function makeSkillsStub() {
 
 const tmpDirs: string[] = []
 function makeTmpDataRoot(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'dsh-finance-t14-'))
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-ia-t14-'))
   tmpDirs.push(dir)
   return dir
 }
@@ -160,7 +160,7 @@ afterEach(() => {
  * skills / systemPrompt 以捕获式桩满足注入并记录注册结果。
  */
 async function bootDistPlugin(dataRoot: string) {
-  process.env.DSH_FINANCE_DATA_DIR = dataRoot
+  process.env.DSH_IA_DATA_DIR = dataRoot
 
   const app = new Context()
   const sp = makeSystemPromptStub()
@@ -306,7 +306,7 @@ describe('Task-14 复验 B：真实构建产物（dist-server）装载与运行�
 
   it('B4·★ skills 5 个可进化正常发现（skill-filesystem provider 路径）+ 固有 SKILL 静态注册可见', async () => {
     const dataRoot = makeTmpDataRoot()
-    process.env.DSH_FINANCE_DATA_DIR = dataRoot
+    process.env.DSH_IA_DATA_DIR = dataRoot
     const app = new Context()
     app.provide('systemPrompt', makeSystemPromptStub().service)
     await (app.plugin(SkillRegistry as never) as Promise<unknown>)
@@ -343,11 +343,11 @@ describe('Task-14 复验 B：真实构建产物（dist-server）装载与运行�
       console.log(`[EVIDENCE B4] evolvable discovered=5 :: ${names.join(', ')}; intrinsic=${INTRINSIC_SKILL}`)
     } finally {
       await pluginFiber.dispose()
-      delete process.env.DSH_FINANCE_DATA_DIR
+      delete process.env.DSH_IA_DATA_DIR
     }
   }, 30000)
 
-  it('B5·★ 人设 section 正常注册：name=dsh-finance:advisor，order=100', async () => {
+  it('B5·★ 人设 section 正常注册：name=dsh-ia:advisor，order=100', async () => {
     const b = await bootDistPlugin(makeTmpDataRoot())
     try {
       // ctx.inject(['systemPrompt'], cb) 为异步回调（cordis 调度至下一 tick），

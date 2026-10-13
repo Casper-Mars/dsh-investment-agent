@@ -57,7 +57,7 @@ type TaskScriptResult =
 
 ```json
 {
-  "name": "dsh-finance-task-<id>",
+  "name": "dsh-ia-task-<id>",
   "type": "module",
   "dependencies": {
     "cheerio": "^1.0.0",

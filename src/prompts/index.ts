@@ -22,13 +22,13 @@ import type { Context } from '@deepseek-ai/cordis'
 import { createLogger } from '../log/logger.js'
 
 /** 人设注入日志出口（统一门面；无 `ctx` logger 注入位，走降级实现）。 */
-const promptLog = createLogger('dsh-finance:prompt')
+const promptLog = createLogger('dsh-ia:prompt')
 
 /** advisor 人设文件在运行时的绝对路径（源码态 / 编译态相对路径一致）。 */
 const ADVISOR_URL = new URL('./advisor.md', import.meta.url)
 
 /** 人设 section 的唯一名称。 */
-export const ADVISOR_SECTION_NAME = 'dsh-finance:advisor'
+export const ADVISOR_SECTION_NAME = 'dsh-ia:advisor'
 
 /** 人设 section 的排序位（persona 类靠前）。 */
 export const ADVISOR_SECTION_ORDER = 100
@@ -95,7 +95,7 @@ export function applyAdvisorPrompt(ctx: Context): void {
   ctx.inject(['systemPrompt'], (promptCtx) => {
     const systemPrompt = (promptCtx as unknown as { systemPrompt?: SystemPromptLike }).systemPrompt
     if (!systemPrompt || typeof systemPrompt.section !== 'function') {
-      promptLog.warn('[dsh-finance] systemPrompt 服务不可用，跳过 advisor 人设注入')
+      promptLog.warn('[dsh-ia] systemPrompt 服务不可用，跳过 advisor 人设注入')
       return
     }
     registerAdvisorSection(systemPrompt)

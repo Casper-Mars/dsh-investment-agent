@@ -8,7 +8,7 @@
 - **交付物（本次）**：
   - `tests/tester-t100438-trace-context.INDEPENDENT.spec.ts`（**36 用例**，自成体系）
   - 本报告
-- **环境隔离**：全程用临时 `DSH_FINANCE_HOME` + 临时 `DSH_FINANCE_LOG_DIR` 覆盖，**未触碰真实 `~/.dsh-finance`**；未改动任何 `src/**`（复验后 `git diff src/` 为空）；`scripts/jev-news-demo.*` 未触碰。
+- **环境隔离**：全程用临时 `DSH_IA_HOME` + 临时 `DSH_IA_LOG_DIR` 覆盖，**未触碰真实 `~/.dsh-ia`**；未改动任何 `src/**`（复验后 `git diff src/` 为空）；`scripts/jev-news-demo.*` 未触碰。
 
 ## 结论：✅ **通过**
 
@@ -22,7 +22,7 @@
 | # | 验收标准 | 结论 | 关键证据 |
 |---|----------|------|----------|
 | 1 | 同一次唤醒链路的日志行 `traceId` 一致，可串联 | ✅ 通过 | 真实 `Context`+`applyScheduler`，注入「链路内模块」替身跨 `await` 打 3 条门面日志 → 3 条全部带**同一** `traceId`（set.size===1），且与 waker 实际投递消息 `source.traceId` **相等**；两个 fire 各自 `traceId` **不同**（都符合 UUIDv4） |
-| 2 | 跨进程唤醒后 `traceId` 不丢失（经消息显式传递） | ✅ 通过 | 真实 `createWaker` + mock agents 捕获 `followup`：投递消息 `source.traceId` == 该 fire 的 `traceId`（断言相等，非仅「非空」）；`source.kind==='dsh-finance'`、`form==='notice'`；全真实 runner（mock spawner 产 `woke`）路径同样携带有效 `traceId`，且不同 fire 不同 |
+| 2 | 跨进程唤醒后 `traceId` 不丢失（经消息显式传递） | ✅ 通过 | 真实 `createWaker` + mock agents 捕获 `followup`：投递消息 `source.traceId` == 该 fire 的 `traceId`（断言相等，非仅「非空」）；`source.kind==='dsh-ia'`、`form==='notice'`；全真实 runner（mock spawner 产 `woke`）路径同样携带有效 `traceId`，且不同 fire 不同 |
 | 3 | **无第三方依赖**：AsyncLocalStorage 用 `node:async_hooks`；测试可驱动 | ✅ 通过 | 静态核验 `src/log/trace.ts` 的全部 `import` 均以 `node:` 开头，且含 `node:async_hooks`/`node:crypto`；`package.json` 无 `pino`/`winston`/`cls-hooked`；`logger.ts`/`wake.ts`/`message-source.ts` 无第三方日志库 import |
 | 4 | 既有测试不回归（基线 63 文件 / 1267 用例；typecheck/build/test 全 EXIT=0） | ✅ 通过 | 复现基线 **63 文件 / 1267 用例 EXIT=0**；`pnpm typecheck` **EXIT=0**；`pnpm build` **EXIT=0**；加入本用例后全量 **64 文件 / 1303 用例 EXIT=0**（+1 文件 / +36 用例，零失败） |
 
@@ -49,7 +49,7 @@
 
 ### ④ 唤醒显式携带（8）
 - 上下文内 `wake` → 消息 `source.traceId==当前`；**显式入参优先于上下文**；**显式 undefined 时回落 `getTrace()`**；无上下文且未显式 → 消息**不含** `traceId` 字段。
-- 契约不破：`kind==='dsh-finance'`、`form==='notice'`、`summary ≤ 120`；`buildWakeText`/`deriveSummary` 输出**逐字不变**；超长单行（5000 字符）`summary` 精确截断为 120。
+- 契约不破：`kind==='dsh-ia'`、`form==='notice'`、`summary ≤ 120`；`buildWakeText`/`deriveSummary` 输出**逐字不变**；超长单行（5000 字符）`summary` 精确截断为 120。
 - `createNoticeMessage(text,summary)` 第 3 参缺省行为兼容。
 
 ### ⑤ 端到端（6，重点；真实 cordis `Context` + 真实 `applyScheduler`/`tracedRunner`/`Scheduler`/`createWaker`）
@@ -76,7 +76,7 @@
 {"name":"fake-runner","type":"info","args":["step-1",{"traceId":"ff79e8cf-…-…","taskId":"alpha","sessionId":"investment-advisor-6773e454"}]}
 {"name":"fake-runner","type":"info","args":["step-2",{"traceId":"ff79e8cf-…-…","taskId":"alpha","sessionId":"investment-advisor-6773e454"}]}
 // waker 实际投递的 notice 消息 —— source.traceId 与上面相等（跨进程显式携带）
-// source = { kind:"dsh-finance", form:"notice", summary:"…", traceId:"ff79e8cf-…-…" }
+// source = { kind:"dsh-ia", form:"notice", summary:"…", traceId:"ff79e8cf-…-…" }
 ```
 
 > 说明：`ff79e8cf-…` 为随机生成（UUIDv4）；断言用「相等/不同」而非固定值，规避漂移。
@@ -104,7 +104,7 @@
 
 ```bash
 # 节点：Reach的MacBook Pro
-cd /Users/reachlucifer/project/opc/dsh-finance
+cd /Users/reachlucifer/project/opc/dsh-ia
 git rev-parse HEAD                      # 期望 8fab3b2…
 
 # 独立用例（36）
@@ -115,8 +115,8 @@ pnpm typecheck     # EXIT=0
 pnpm build         # EXIT=0
 pnpm test          # 64 文件 / 1303 用例，EXIT=0（基线 63/1267）
 
-# 隔离说明：用例内自设临时 DSH_FINANCE_HOME / DSH_FINANCE_LOG_DIR，结束自动清理；
-# 真实 ~/.dsh-finance 不被写入。
+# 隔离说明：用例内自设临时 DSH_IA_HOME / DSH_IA_LOG_DIR，结束自动清理；
+# 真实 ~/.dsh-ia 不被写入。
 ```
 
 ---

@@ -1,17 +1,17 @@
 /**
- * 独立测试（t100435 · 复验 A：修订版）—— dsh-finance 文件落地 exporter（里程碑 M2「文件落地」）。
+ * 独立测试（t100435 · 复验 A：修订版）—— dsh-ia 文件落地 exporter（里程碑 M2「文件落地」）。
  *
  * 本轮为 **Fix 1（name 白名单）+ Fix 2（测试隔离）** 合并后的复验版本：
- *   - 实现现仅落盘本插件命名空间 `dsh-finance` / `dsh-finance:<scope>`（`DEFAULT_EXPORT_NAMES`，
+ *   - 实现现仅落盘本插件命名空间 `dsh-ia` / `dsh-ia:<scope>`（`DEFAULT_EXPORT_NAMES`，
  *     可经 `options.names` 扩展），`export()` 内**先 `matchesName` 再 `shouldEmit(type)`**；
- *   - 本 spec 已按**新语义**修订：默认消息 `name` 由 `'test'` 改为 `'dsh-finance'`；凡断言
+ *   - 本 spec 已按**新语义**修订：默认消息 `name` 由 `'test'` 改为 `'dsh-ia'`；凡断言
  *     「非本插件 name 也落盘」的旧用例改为「白名单生效 + 反例不落盘」。
  *
  * 与开发者自测 `tests/file-exporter.test.ts` **独立**：本文件不复用其用例 / 辅助函数，
  * 自行构造**真实 cordis `Context`**（真相 `LoggerService`）与对抗性 / 边界输入，
  * 逐条对应任务卡验收标准 AC1–AC10 与观察项 A / B。全程以临时
- * `DSH_FINANCE_LOG_DIR`（+ 临时 `DSH_FINANCE_HOME` / `DSH_FINANCE_DATA_DIR`）隔离，
- * 不污染真实 `~/.dsh-finance/`。
+ * `DSH_IA_LOG_DIR`（+ 临时 `DSH_IA_HOME` / `DSH_IA_DATA_DIR`）隔离，
+ * 不污染真实 `~/.dsh-ia/`。
  *
  * 覆盖：
  *   AC1 JSONL 记录形状（含「真实 cordis logger 流经」端到端）
@@ -24,7 +24,7 @@
  *   AC8 全量回归（typecheck / build / test，见 REPORT.md，本文件不重复）
  *   AC9 隔离（真实 home 无本 spec 的任何标记；默认目录解析不建目录）
  *   AC10 name 白名单（Fix 1）：裸名 / 子 scope 落盘；host-core/svc/other-plugin/
- *        skill-filesystem/dsh-financex 不落盘；options.names 注入；空数组合并回落默认
+ *        skill-filesystem/dsh-iax 不落盘；options.names 注入；空数组合并回落默认
  *   AC11 白名单 × 级别叠加：级别仅对白名单命中的消息生效
  *   OBS-A 采集范围：已由 Fix 1 解决（现加白名单，非本插件命名空间不再落盘）
  *   OBS-B 日期口径：文件名取 `message.ts` 的 UTC 日期（本地凌晨会错位）
@@ -72,11 +72,11 @@ const utcDate = (ts: number): string => new Date(ts).toISOString().slice(0, 10)
 /**
  * 构造一条 cordis `Message`（仅覆盖本任务关心的字段，其余给默认）。
  *
- * **新语义（Fix 1）**：默认 `name` 取本插件命名空间 `'dsh-finance'`（白名单命中），
+ * **新语义（Fix 1）**：默认 `name` 取本插件命名空间 `'dsh-ia'`（白名单命中），
  * 使默认用例可直接落盘；需要断言白名单边界时显式传其它 `name`。
  */
 function msg(partial: Partial<Message> & Pick<Message, 'type'>): Message {
-  return { sn: 1, ts: T_DAY1, name: 'dsh-finance', level: 0, args: [], ...partial }
+  return { sn: 1, ts: T_DAY1, name: 'dsh-ia', level: 0, args: [], ...partial }
 }
 
 /** 读取某目录下某文件为 JSONL 记录数组（忽略空行）。 */
@@ -127,9 +127,9 @@ const ENV_KEYS = [
   LOG_DIR_ENV,
   LOG_LEVEL_ENV,
   LOG_MAX_SIZE_ENV,
-  'DSH_FINANCE_HOME',
-  'DSH_FINANCE_DATA_DIR',
-  'DSH_FINANCE_SESSION_ID',
+  'DSH_IA_HOME',
+  'DSH_IA_DATA_DIR',
+  'DSH_IA_SESSION_ID',
 ] as const
 let savedEnv: Record<string, string | undefined> = {}
 let savedUmask = 0o022
@@ -170,7 +170,7 @@ describe('AC1 JSONL 记录形状（§4.2）', () => {
     app.logger.exporter(createFileExporter({ dir, level: 'debug' }))
 
     // 经**真实** LoggerService 的命名 logger 投递（不是自造 Message）。
-    app.logger('dsh-finance:demo').info('会话已确保', { id: 'sess-1' })
+    app.logger('dsh-ia:demo').info('会话已确保', { id: 'sess-1' })
 
     const files = readdirSync(dir)
     expect(files).toHaveLength(1)
@@ -184,7 +184,7 @@ describe('AC1 JSONL 记录形状（§4.2）', () => {
     expect(String(r.ts)).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
     expect(Math.abs(new Date(String(r.ts)).getTime() - Date.now())).toBeLessThan(10_000)
     expect(r.level).toBe('info')
-    expect(r.name).toBe('dsh-finance:demo')
+    expect(r.name).toBe('dsh-ia:demo')
     expect(r.msg).toBe('会话已确保')
     // meta 作为结构化 args 落地。
     expect(r.args).toEqual({ id: 'sess-1' })
@@ -244,11 +244,11 @@ describe('AC1 JSONL 记录形状（§4.2）', () => {
 // AC2 · 真实 ctx 装配（关键）
 // ===========================================================================
 describe('AC2 真实 ctx 装配（真实 cordis Context + apply）', () => {
-  it('AC2-1 真实 Context 跑 apply：插件加载日志落入 DSH_FINANCE_LOG_DIR 当日文件', () => {
+  it('AC2-1 真实 Context 跑 apply：插件加载日志落入 DSH_IA_LOG_DIR 当日文件', () => {
     const home = mkTmp('dsh-fin-home-')
     const logDir = join(home, 'logs')
-    process.env.DSH_FINANCE_HOME = home
-    process.env.DSH_FINANCE_DATA_DIR = join(home, 'data')
+    process.env.DSH_IA_HOME = home
+    process.env.DSH_IA_DATA_DIR = join(home, 'data')
     process.env[LOG_DIR_ENV] = logDir
 
     const app = new Context()
@@ -272,8 +272,8 @@ describe('AC2 真实 ctx 装配（真实 cordis Context + apply）', () => {
   it('AC2-2 非 console 兜底：apply 期间「插件加载」只进文件，不进 console', () => {
     const home = mkTmp('dsh-fin-home-')
     const logDir = join(home, 'logs')
-    process.env.DSH_FINANCE_HOME = home
-    process.env.DSH_FINANCE_DATA_DIR = join(home, 'data')
+    process.env.DSH_IA_HOME = home
+    process.env.DSH_IA_DATA_DIR = join(home, 'data')
     process.env[LOG_DIR_ENV] = logDir
 
     const seen: string[] = []
@@ -292,8 +292,8 @@ describe('AC2 真实 ctx 装配（真实 cordis Context + apply）', () => {
 
   it('AC2-3 mock ctx（无 logger）：降级不抛、不写盘', () => {
     const logDir = join(mkTmp('dsh-fin-home-'), 'logs')
-    process.env.DSH_FINANCE_HOME = logDir.replace(/\/logs$/, '')
-    process.env.DSH_FINANCE_DATA_DIR = join(logDir.replace(/\/logs$/, ''), 'data')
+    process.env.DSH_IA_HOME = logDir.replace(/\/logs$/, '')
+    process.env.DSH_IA_DATA_DIR = join(logDir.replace(/\/logs$/, ''), 'data')
     process.env[LOG_DIR_ENV] = logDir
 
     const seen: string[] = []
@@ -334,7 +334,7 @@ describe('AC3 级别过滤（按 type 而非 cordis 数值 level）', () => {
     const dir = mkTmp()
     const app = new Context()
     app.logger.exporter(createFileExporter({ dir, level }))
-    const lg = app.logger('dsh-finance')
+    const lg = app.logger('dsh-ia')
     lg.error('E')
     lg.warn('W')
     lg.info('I')
@@ -496,7 +496,7 @@ describe('AC6 追加注册 / 注销（共享 LoggerService）', () => {
     app.logger.exporter(createFileExporter({ dir, level: 'debug' }))
 
     // 白名单内 name（Fix 1：宿主的**文件 exporter** 只接本插件命名空间）。
-    app.logger('dsh-finance:svc').info('both')
+    app.logger('dsh-ia:svc').info('both')
     expect(captured.map((m) => m.args[0])).toEqual(['both'])
     expect(readAll(dir)).toContain('both')
   })
@@ -509,11 +509,11 @@ describe('AC6 追加注册 / 注销（共享 LoggerService）', () => {
     app.logger.exporter(host)
     const disposeFile = app.logger.exporter(createFileExporter({ dir, level: 'debug' }))
 
-    app.logger('dsh-finance:svc').info('one')
+    app.logger('dsh-ia:svc').info('one')
     const before = readAll(dir)
 
     disposeFile()
-    app.logger('dsh-finance:svc').info('after')
+    app.logger('dsh-ia:svc').info('after')
     expect(readAll(dir)).toBe(before) // 文件未变
     expect(captured.map((m) => m.args[0])).toEqual(['one', 'after']) // 宿主照收
   })
@@ -527,7 +527,7 @@ describe('AC6 追加注册 / 注销（共享 LoggerService）', () => {
     app.logger.exporter(createFileExporter({ dir, level: 'debug' }))
 
     disposeHost()
-    app.logger('dsh-finance:svc').info('file-only')
+    app.logger('dsh-ia:svc').info('file-only')
     expect(captured).toHaveLength(0)
     expect(readAll(dir)).toContain('file-only')
   })
@@ -589,29 +589,29 @@ describe('AC7 降级（export 不抛）', () => {
 })
 
 // ===========================================================================
-// AC9 · 隔离（不污染真实 ~/.dsh-finance；默认目录解析不建目录）
+// AC9 · 隔离（不污染真实 ~/.dsh-ia；默认目录解析不建目录）
 // ===========================================================================
 describe('AC9 隔离', () => {
-  it('AC9-1 本 spec 的标记未写入真实 ~/.dsh-finance/logs', () => {
+  it('AC9-1 本 spec 的标记未写入真实 ~/.dsh-ia/logs', () => {
     const home = mkTmp('dsh-fin-home-')
     const logDir = join(home, 'logs')
-    process.env.DSH_FINANCE_HOME = home
-    process.env.DSH_FINANCE_DATA_DIR = join(home, 'data')
+    process.env.DSH_IA_HOME = home
+    process.env.DSH_IA_DATA_DIR = join(home, 'data')
     process.env[LOG_DIR_ENV] = logDir
 
     const app = new Context()
     app.logger.exporter(createFileExporter({ dir: logDir, level: 'debug' }))
-    app.logger('dsh-finance').info(`${ISOLATION_MARKER} hello`)
+    app.logger('dsh-ia').info(`${ISOLATION_MARKER} hello`)
 
     expect(readAll(logDir)).toContain(ISOLATION_MARKER)
 
-    const realLogs = join(homedir(), '.dsh-finance', 'logs')
+    const realLogs = join(homedir(), '.dsh-ia', 'logs')
     const real = existsSync(realLogs) ? readAll(realLogs) : ''
     expect(real).not.toContain(ISOLATION_MARKER)
   })
 
-  it('AC9-2 默认目录解析为 ~/.dsh-finance/logs 且为纯计算（不创建目录）', () => {
-    const realLogs = join(homedir(), '.dsh-finance', 'logs')
+  it('AC9-2 默认目录解析为 ~/.dsh-ia/logs 且为纯计算（不创建目录）', () => {
+    const realLogs = join(homedir(), '.dsh-ia', 'logs')
     const existedBefore = existsSync(realLogs)
     expect(resolveFinanceLogDir()).toBe(realLogs)
     expect(existsSync(realLogs)).toBe(existedBefore) // 解析不产生副作用
@@ -627,19 +627,19 @@ describe('AC9 隔离', () => {
 // ===========================================================================
 // AC10 · name 白名单（Fix 1）
 // ===========================================================================
-describe('AC10 name 白名单（仅 dsh-finance[:scope] 落盘）', () => {
-  it('AC10-1 裸名 `dsh-finance` 与子 scope `dsh-finance:<x>` 均落盘（含子级 child scope）', () => {
+describe('AC10 name 白名单（仅 dsh-ia[:scope] 落盘）', () => {
+  it('AC10-1 裸名 `dsh-ia` 与子 scope `dsh-ia:<x>` 均落盘（含子级 child scope）', () => {
     const dir = mkTmp()
     const exporter = createFileExporter({ dir, level: 'debug' })
-    exporter.export(msg({ type: 'info', name: 'dsh-finance', args: ['bare'] }))
-    exporter.export(msg({ type: 'info', name: 'dsh-finance:tools', args: ['c1'] }))
-    exporter.export(msg({ type: 'info', name: 'dsh-finance:scheduler:runner', args: ['c2'] }))
+    exporter.export(msg({ type: 'info', name: 'dsh-ia', args: ['bare'] }))
+    exporter.export(msg({ type: 'info', name: 'dsh-ia:tools', args: ['c1'] }))
+    exporter.export(msg({ type: 'info', name: 'dsh-ia:scheduler:runner', args: ['c2'] }))
     const recs = readJsonl(dir, '2026-10-12.jsonl')
     expect(recs.map((r) => r.msg)).toEqual(['bare', 'c1', 'c2'])
     expect(recs.map((r) => r.name)).toEqual([
-      'dsh-finance',
-      'dsh-finance:tools',
-      'dsh-finance:scheduler:runner',
+      'dsh-ia',
+      'dsh-ia:tools',
+      'dsh-ia:scheduler:runner',
     ])
   })
 
@@ -654,11 +654,11 @@ describe('AC10 name 白名单（仅 dsh-finance[:scope] 落盘）', () => {
     expect(existsSync(join(dir, '2026-10-12.jsonl'))).toBe(false)
   })
 
-  it('AC10-3 边界：`dsh-financex`（前缀但非 `:` 分隔）/ `dsh-finance-x` 不落盘', () => {
+  it('AC10-3 边界：`dsh-iax`（前缀但非 `:` 分隔）/ `dsh-ia-x` 不落盘', () => {
     const dir = mkTmp()
     const exporter = createFileExporter({ dir, level: 'debug' })
-    exporter.export(msg({ type: 'info', name: 'dsh-financex', args: ['no'] }))
-    exporter.export(msg({ type: 'info', name: 'dsh-finance-x', args: ['no2'] }))
+    exporter.export(msg({ type: 'info', name: 'dsh-iax', args: ['no'] }))
+    exporter.export(msg({ type: 'info', name: 'dsh-ia-x', args: ['no2'] }))
     exporter.export(msg({ type: 'info', name: 'dsh', args: ['no3'] }))
     expect(readdirSync(dir)).toEqual([])
     expect(existsSync(join(dir, '2026-10-12.jsonl'))).toBe(false)
@@ -668,15 +668,15 @@ describe('AC10 name 白名单（仅 dsh-finance[:scope] 落盘）', () => {
     const dir = mkTmp()
     const app = new Context()
     app.logger.exporter(createFileExporter({ dir, level: 'debug' }))
-    app.logger('dsh-finance').info('mine')
-    app.logger('dsh-finance:scheduler').warn('mine-sub')
+    app.logger('dsh-ia').info('mine')
+    app.logger('dsh-ia:scheduler').warn('mine-sub')
     app.logger('host-core').error('not-mine')
     app.logger('skill-filesystem').error('not-mine-2')
 
     const files = readdirSync(dir)
     expect(files).toEqual([`${utcDate(Date.now())}.jsonl`])
     const recs = readJsonl(dir, files[0])
-    expect(recs.map((r) => r.name)).toEqual(['dsh-finance', 'dsh-finance:scheduler'])
+    expect(recs.map((r) => r.name)).toEqual(['dsh-ia', 'dsh-ia:scheduler'])
     expect(recs.map((r) => r.msg)).toEqual(['mine', 'mine-sub'])
   })
 
@@ -684,14 +684,14 @@ describe('AC10 name 白名单（仅 dsh-finance[:scope] 落盘）', () => {
     const dir = mkTmp()
     const exporter = createFileExporter({ dir, level: 'debug', names: ['my-plugin'] })
     exporter.export(msg({ type: 'info', name: 'my-plugin:svc', args: ['yes'] }))
-    exporter.export(msg({ type: 'info', name: 'dsh-finance', args: ['no'] }))
+    exporter.export(msg({ type: 'info', name: 'dsh-ia', args: ['no'] }))
     expect(readJsonl(dir, '2026-10-12.jsonl').map((r) => r.msg)).toEqual(['yes'])
   })
 
   it('AC10-6 options.names 多前缀注入：可扩展多个命名空间', () => {
     const dir = mkTmp()
-    const exporter = createFileExporter({ dir, level: 'debug', names: ['dsh-finance', 'extra'] })
-    exporter.export(msg({ type: 'info', name: 'dsh-finance:a', args: ['a'] }))
+    const exporter = createFileExporter({ dir, level: 'debug', names: ['dsh-ia', 'extra'] })
+    exporter.export(msg({ type: 'info', name: 'dsh-ia:a', args: ['a'] }))
     exporter.export(msg({ type: 'info', name: 'extra', args: ['b'] }))
     exporter.export(msg({ type: 'info', name: 'other', args: ['c'] }))
     expect(readJsonl(dir, '2026-10-12.jsonl').map((r) => r.msg)).toEqual(['a', 'b'])
@@ -700,17 +700,17 @@ describe('AC10 name 白名单（仅 dsh-finance[:scope] 落盘）', () => {
   it('AC10-7 options.names 空数组 / 全空白 → 回落默认白名单（避免误配致全丢）', () => {
     const dir = mkTmp()
     const exporter = createFileExporter({ dir, level: 'debug', names: [] })
-    exporter.export(msg({ type: 'info', name: 'dsh-finance:scheduler', args: ['yes'] }))
+    exporter.export(msg({ type: 'info', name: 'dsh-ia:scheduler', args: ['yes'] }))
     expect(readJsonl(dir, '2026-10-12.jsonl').map((r) => r.msg)).toEqual(['yes'])
 
     const dir2 = mkTmp()
     const exporter2 = createFileExporter({ dir: dir2, level: 'debug', names: ['  ', ''] })
-    exporter2.export(msg({ type: 'info', name: 'dsh-finance', args: ['yes2'] }))
+    exporter2.export(msg({ type: 'info', name: 'dsh-ia', args: ['yes2'] }))
     expect(readJsonl(dir2, '2026-10-12.jsonl').map((r) => r.msg)).toEqual(['yes2'])
   })
 
-  it('AC10-8 DEFAULT_EXPORT_NAMES 常量即为 [dsh-finance]（默认单前缀）', () => {
-    expect([...DEFAULT_EXPORT_NAMES]).toEqual(['dsh-finance'])
+  it('AC10-8 DEFAULT_EXPORT_NAMES 常量即为 [dsh-ia]（默认单前缀）', () => {
+    expect([...DEFAULT_EXPORT_NAMES]).toEqual(['dsh-ia'])
   })
 })
 
@@ -724,15 +724,15 @@ describe('AC11 白名单 × 级别过滤叠加（先 matchesName 再 shouldEmit�
     const exporter = createFileExporter({ dir, level: 'debug' })
     exporter.export(msg({ type: 'debug', name: 'host-core', args: ['x'] }))
     exporter.export(msg({ type: 'error', name: 'svc', args: ['x'] }))
-    exporter.export(msg({ type: 'debug', name: 'dsh-finance', args: ['ok'] }))
+    exporter.export(msg({ type: 'debug', name: 'dsh-ia', args: ['ok'] }))
     expect(readJsonl(dir, '2026-10-12.jsonl').map((r) => r.msg)).toEqual(['ok'])
   })
 
   it('AC11-2 白名单命中但被级别抑制 → 仍不落盘（error 阈值下 info 丢弃）', () => {
     const dir = mkTmp()
     const exporter = createFileExporter({ dir, level: 'error' })
-    exporter.export(msg({ type: 'info', name: 'dsh-finance:session', args: ['suppressed'] }))
-    exporter.export(msg({ type: 'error', name: 'dsh-finance:session', args: ['kept'] }))
+    exporter.export(msg({ type: 'info', name: 'dsh-ia:session', args: ['suppressed'] }))
+    exporter.export(msg({ type: 'error', name: 'dsh-ia:session', args: ['kept'] }))
     expect(readJsonl(dir, '2026-10-12.jsonl').map((r) => r.msg)).toEqual(['kept'])
   })
 
@@ -740,9 +740,9 @@ describe('AC11 白名单 × 级别过滤叠加（先 matchesName 再 shouldEmit�
     const dir = mkTmp()
     const exporter = createFileExporter({ dir, level: 'warn' })
     const cases: Array<[string, 'error' | 'warn' | 'info' | 'debug', string, boolean]> = [
-      ['dsh-finance', 'warn', 'wl+lv', true],
-      ['dsh-finance:s', 'error', 'wl+lv2', true],
-      ['dsh-finance:s', 'info', 'wl-only', false],
+      ['dsh-ia', 'warn', 'wl+lv', true],
+      ['dsh-ia:s', 'error', 'wl+lv2', true],
+      ['dsh-ia:s', 'info', 'wl-only', false],
       ['host-core', 'error', 'lv-only', false],
       ['host-core', 'debug', 'neither', false],
     ]
@@ -771,9 +771,9 @@ describe('OBS-A 采集范围（Fix 1 已解决）', () => {
     const dir = mkTmp()
     const app = new Context()
     app.logger.exporter(createFileExporter({ dir, level: 'debug' }))
-    app.logger('dsh-finance').info('from me')
+    app.logger('dsh-ia').info('from me')
     const recs = readJsonl(dir, `${utcDate(Date.now())}.jsonl`)
-    expect(recs.map((r) => r.name)).toEqual(['dsh-finance'])
+    expect(recs.map((r) => r.name)).toEqual(['dsh-ia'])
   })
 })
 

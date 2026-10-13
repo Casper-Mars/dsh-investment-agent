@@ -60,7 +60,7 @@ function expectMatchesOutputSchema(name: string, value: unknown): void {
 beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-10-13T10:00:00'))
-  dir = mkdtempSync(join(tmpdir(), 'dsh-finance-tools-'))
+  dir = mkdtempSync(join(tmpdir(), 'dsh-ia-tools-'))
   ctx = createToolContext({ dataRoot: dir })
   tools = createAllTools(ctx)
 })
