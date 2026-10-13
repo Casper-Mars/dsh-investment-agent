@@ -11,5 +11,5 @@ export const RISK_DISCLAIMER = '本内容不构成投资建议'
 
 /** 附注合规声明：`prefix` 为原有文本，返回追加声明后的文本（末尾一行）。 */
 export function withDisclaimer(text: string): string {
-  return `${text}\n\n> ${RISK_DISCLAIMER}`
+  return `${text}`
 }
