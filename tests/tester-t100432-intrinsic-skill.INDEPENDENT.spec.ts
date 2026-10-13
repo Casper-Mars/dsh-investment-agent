@@ -42,8 +42,10 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import {
   SKILL_NAMES,
   TASK_AUTHORSHIP_SKILL_NAME,
+  SKILL_AUTHORSHIP_SKILL_NAME,
   createIntrinsicSkillRegistration,
   loadTaskAuthorshipMarkdown,
+  loadSkillAuthorshipMarkdown,
 } from '../src/skills/index.js'
 import { parseSkillFile } from '../src/skills/frontmatter.js'
 import { ensureSkillAssetsRepo } from '../src/skills/repo.js'
@@ -267,24 +269,33 @@ function disposeMockEffects(effects: MockEffect[]): void {
 }
 
 describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载', () => {
-  it('AC3a：skills 可用 → apply 不抛，注册 1 次，注册对象契约正确，含注册 disposer', () => {
+  it('AC3a：skills 可用 → apply 不抛，注册 2 次（2 个固有 SKILL），注册对象契约正确，含注册 disposer', () => {
     process.env.DSH_FINANCE_DATA_DIR = mkTmp('dsh-fin-ta-mock-ok-')
     const m = buildMockCtx('ok')
 
     expect(() => srcPlugin.apply(m.ctx as never)).not.toThrow()
 
-    // 恰注册 1 个固有 SKILL。
-    expect(m.registered).toHaveLength(1)
-    const reg = m.registered[0]
+    // 恰注册 2 个固有 SKILL。
+    expect(m.registered).toHaveLength(2)
+    const reg = m.registered.find((r) => r.name === TA)!
     expect(reg.name).toBe(TA)
     expect(reg.source).toBe('runtime')
     expect(reg.invocation).toEqual({ modelInvocable: true, userInvocable: true })
     expect(reg.content).toBe(parseSkillFile(loadTaskAuthorshipMarkdown()).content)
 
+    // 新增固有 SKILL skill-authorship 一并静态注册，来源 / 正文正确。
+    const reg2 = m.registered.find((r) => r.name === SKILL_AUTHORSHIP_SKILL_NAME)
+    expect(reg2, 'skill-authorship 应经静态注册').toBeDefined()
+    expect(reg2?.source).toBe('runtime')
+    expect(reg2?.content).toBe(parseSkillFile(loadSkillAuthorshipMarkdown()).content)
+
     // 存在标为固有 SKILL 的 effect，且其 disposer 为函数。
     const intrinsic = m.effects.find((e) => e.label === 'dsh-finance task-authorship skill')
     expect(intrinsic, '应存在固有 SKILL 的 effect').toBeDefined()
     expect(typeof intrinsic?.disposer).toBe('function')
+    const intrinsic2 = m.effects.find((e) => e.label === 'dsh-finance skill-authorship skill')
+    expect(intrinsic2, '应存在 skill-authorship 固有 SKILL 的 effect').toBeDefined()
+    expect(typeof intrinsic2?.disposer).toBe('function')
 
     disposeMockEffects(m.effects)
   }, 30_000)
@@ -311,15 +322,15 @@ describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载',
     const m = buildMockCtx('ok')
 
     srcPlugin.apply(m.ctx as never)
-    expect(m.registered).toHaveLength(1)
+    expect(m.registered).toHaveLength(2)
     expect(m.removed).toHaveLength(0)
 
     const intrinsic = m.effects.find((e) => e.label === 'dsh-finance task-authorship skill')
     intrinsic?.disposer()
 
-    // 卸载后：先前注册的那一个被注销（移除计数 = 1），且不误删他人。
+    // 卸载后：先前注册的 task-authorship 被注销（移除计数 = 1），且不误删他人。
     expect(m.removed).toHaveLength(1)
-    expect(m.removed[0]).toBe(m.registered[0])
+    expect(m.removed[0]).toBe(m.registered.find((r) => r.name === TA))
 
     disposeMockEffects(m.effects)
   }, 30_000)
@@ -371,7 +382,7 @@ describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载',
           { timeout: 12_000, interval: 50 },
         )
 
-        // (2) 固有 SKILL task-authorship 经 apply 静态注册可见（source=runtime）。
+        // (2) 固有 SKILL task-authorship / skill-authorship 经 apply 静态注册可见（source=runtime）。
         const list = await app.skills.list({})
         const intrinsic = list.find((s) => s.name === TA)
         expect(intrinsic, 'task-authorship 应经静态注册可见').toBeDefined()
@@ -379,16 +390,24 @@ describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载',
         const taDef = await app.skills.get(TA)
         expect(taDef?.content).toBe(parseSkillFile(loadTaskAuthorshipMarkdown()).content)
 
+        const sa = list.find((s) => s.name === SKILL_AUTHORSHIP_SKILL_NAME)
+        expect(sa, 'skill-authorship 应经静态注册可见').toBeDefined()
+        expect(sa?.source).toBe('runtime')
+        const saDef = await app.skills.get(SKILL_AUTHORSHIP_SKILL_NAME)
+        expect(saDef?.content).toBe(parseSkillFile(loadSkillAuthorshipMarkdown()).content)
+
         // (3) 共存不冲突：两类技能同时可见且无重名（唯一赢家）。
         const names = list.map((s) => s.name)
         expect(new Set(names).size).toBe(names.length)
         for (const n of EVOLVABLE) expect(names).toContain(n)
         expect(names).toContain(TA)
+        expect(names).toContain(SKILL_AUTHORSHIP_SKILL_NAME)
 
         // (4) 卸载插件 fiber：5 可进化 + 固有 SKILL 全部消失。
         await pluginFiber.dispose()
         const after = await app.skills.list({})
         expect(after.some((s) => s.name === TA)).toBe(false)
+        expect(after.some((s) => s.name === SKILL_AUTHORSHIP_SKILL_NAME)).toBe(false)
         expect(
           after.filter((s) => (EVOLVABLE as readonly string[]).includes(s.name)),
         ).toHaveLength(0)

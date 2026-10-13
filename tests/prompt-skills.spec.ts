@@ -21,9 +21,12 @@ import SkillRegistry from '@deepseek-ai/dsh-skill'
 import {
   SKILL_NAMES,
   TASK_AUTHORSHIP_SKILL_NAME,
+  SKILL_AUTHORSHIP_SKILL_NAME,
   loadSkillMarkdown,
   loadTaskAuthorshipMarkdown,
+  loadSkillAuthorshipMarkdown,
   createIntrinsicSkillRegistration,
+  createSkillAuthorshipRegistration,
   parseSkill,
 } from '../src/skills/index'
 import { ensureSkillAssetsRepo } from '../src/skills/repo'
@@ -116,6 +119,16 @@ describe('验收 2：5 个可进化 SKILL.md frontmatter（name/description/when
     expect(content.trim().length).toBeGreaterThan(100)
   })
 
+  it('固有 SKILL：skill-authorship 常量与原文可读（name 一致、frontmatter 合法）', () => {
+    expect(SKILL_AUTHORSHIP_SKILL_NAME).toBe('skill-authorship')
+    // 不在可进化清单中。
+    expect(SKILL_NAMES as readonly string[]).not.toContain(SKILL_AUTHORSHIP_SKILL_NAME)
+    const { frontmatter, content } = parseSkillFile(loadSkillAuthorshipMarkdown())
+    expect(frontmatter.name).toBe(SKILL_AUTHORSHIP_SKILL_NAME)
+    expect(frontmatter.description.length).toBeGreaterThan(0)
+    expect(content.trim().length).toBeGreaterThan(100)
+  })
+
   it('固有 SKILL：注册对象契约（source=runtime、invocation 双开、正文非空）', () => {
     const reg = createIntrinsicSkillRegistration()
     expect(reg.name).toBe(TASK_AUTHORSHIP_SKILL_NAME)
@@ -123,6 +136,13 @@ describe('验收 2：5 个可进化 SKILL.md frontmatter（name/description/when
     expect(reg.source).toBe('runtime')
     expect(reg.invocation).toEqual({ modelInvocable: true, userInvocable: true })
     expect(reg.content.trim().length).toBeGreaterThan(100)
+
+    const reg2 = createSkillAuthorshipRegistration()
+    expect(reg2.name).toBe(SKILL_AUTHORSHIP_SKILL_NAME)
+    expect(reg2.description.length).toBeGreaterThan(0)
+    expect(reg2.source).toBe('runtime')
+    expect(reg2.invocation).toEqual({ modelInvocable: true, userInvocable: true })
+    expect(reg2.content.trim().length).toBeGreaterThan(100)
   })
 
   it.each(SKILL_NAMES)('%s：frontmatter 三字段齐全、name=kebab-case、与目录名一致', (name) => {
@@ -151,6 +171,7 @@ describe('验收 3：prompt 与 skill 全文不出现写死的价格/阈值', ()
     const out: Array<[string, string]> = [['prompts/advisor.md', loadAdvisorMd()]]
     for (const n of SKILL_NAMES) out.push([`skills/${n}/SKILL.md`, loadSkillMarkdown(n)])
     out.push([`skills/${TASK_AUTHORSHIP_SKILL_NAME}/SKILL.md`, loadTaskAuthorshipMarkdown()])
+    out.push([`skills/${SKILL_AUTHORSHIP_SKILL_NAME}/SKILL.md`, loadSkillAuthorshipMarkdown()])
     return out
   }
 
@@ -343,7 +364,7 @@ describe('插件 apply 接入', () => {
     return { ctx, registeredSkills, injectedSections }
   }
 
-  it('apply 仅静态注册固有 SKILL（task-authorship），5 个可进化 SKILL 改由 provider 承担；注入 1 个 prompt section，且不抛异常', () => {
+  it('apply 仅静态注册 2 个固有 SKILL（task-authorship / skill-authorship），5 个可进化 SKILL 改由 provider 承担；注入 1 个 prompt section，且不抛异常', () => {
     // 防止 ensureSkillAssetsRepo 回落到默认 `~/.dsh-finance`（污染 home）。
     const dataRoot = makeSeededDataRoot()
     const prev = process.env.DSH_FINANCE_DATA_DIR
@@ -352,9 +373,11 @@ describe('插件 apply 接入', () => {
       const { ctx, registeredSkills, injectedSections } = makeMockCtx()
       expect(() => apply(ctx)).not.toThrow()
 
-      // 5 个可进化 SKILL 不再静态注册（改由 provider 发现）；仅固有 SKILL 静态注册。
-      expect(registeredSkills).toHaveLength(1)
-      expect(registeredSkills[0].name).toBe(TASK_AUTHORSHIP_SKILL_NAME)
+      // 5 个可进化 SKILL 不再静态注册（改由 provider 发现）；仅 2 个固有 SKILL 静态注册。
+      expect(registeredSkills).toHaveLength(2)
+      expect(registeredSkills.map((s) => s.name).sort()).toEqual(
+        [TASK_AUTHORSHIP_SKILL_NAME, SKILL_AUTHORSHIP_SKILL_NAME].sort(),
+      )
 
       // advisor section 注入保持不变。
       expect(injectedSections).toHaveLength(1)

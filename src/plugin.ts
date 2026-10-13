@@ -16,8 +16,9 @@
  *       2. 挂载 dsh 原生 `skill-filesystem` provider（`src/skills/provider.ts`），
  *          指向运行时数据目录 `<dataRoot>/skills` 并开启 watch 热更新，发现 5 个「可进化 SKILL」
  *          （trend-analysis / grid-strategy / stop-rule / strategy-authorship / analysis-decision）；
- *          另将「固有 SKILL」task-authorship 经 `ctx.skills.register` **静态注册**（不进化）。
- *          provider 注册在插件自身 ctx（global 层），对固定会话与 workspace 会话均可见；
+ *          另将 2 个「固有 SKILL」（task-authorship / skill-authorship）经 `ctx.skills.register`
+ *          **静态注册**（不进化）。provider 注册在插件自身 ctx（global 层），对固定会话与
+ *          workspace 会话均可见；
  *       3. 经 `ctx.inject(['systemPrompt'], cb)` **动态注入** advisor.md 人设
  *          （详见 `src/prompts/index.ts`）。
  *
@@ -31,7 +32,10 @@
  *   `['tools','skills','fs']` 与 `cordis.patch.yml` 保持一致。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { createIntrinsicSkillRegistration } from './skills/index.js'
+import {
+  createIntrinsicSkillRegistration,
+  createSkillAuthorshipRegistration,
+} from './skills/index.js'
 import { ensureSkillAssetsRepo } from './skills/repo.js'
 import { mountSkillFilesystemProvider } from './skills/provider.js'
 import { applyAdvisorPrompt } from './prompts/index.js'
@@ -102,8 +106,9 @@ export const inject: string[] = ['tools', 'skills', 'fs']
  *      （`mountSkillFilesystemProvider`）。provider 注册进插件自身 ctx（global 层），
  *      对固定会话与 workspace 会话均可见；注销器绑定 effect，插件 fiber 卸载时自动
  *      注销并关闭 watch。预置与挂载均 try/catch 降级，失败不中断插件装载。
- *   2b. 固有 SKILL `task-authorship`（任务程序方法论，不进化）经 `ctx.skills.register`
- *      静态注册到插件自身 ctx（global 层）。注册失败 try/catch 降级，不中断装载。
+ *   2b. 固有 SKILL `task-authorship`（任务程序方法论，不进化）与 `skill-authorship`（编写合规
+ *      skill 的规范，不进化）经 `ctx.skills.register` 静态注册到插件自身 ctx（global 层）。
+ *      注册失败 try/catch 降级，不中断装载。
  *   3. 经 `applyAdvisorPrompt(ctx)` 动态注入 advisor.md 人设到 system-prompt。
  *
  * @param ctx 插件上下文（已注入上述三项服务）。
@@ -212,6 +217,31 @@ export function apply(ctx: Context): void {
       }
     }
   }, 'dsh-finance task-authorship skill')
+
+  // ---- 固有 SKILL（skill-authorship）静态注册（固件：编写合规 skill 的规范，不进化） ----
+  // `skill-authorship` 与 `task-authorship` 同机制同生命周期：固件、不参加进化、不落
+  // <dataRoot>/skills，直接以 `ctx.skills.register` 静态挂到插件 ctx（global 层）。
+  // 注销器绑定 ctx.effect，fiber 卸载时自动注销；注册失败降级不抛、不中断装载。
+  ctx.effect(() => {
+    const skills = typeof ctx.get === 'function' ? ctx.get('skills') : undefined
+    if (!skills) {
+      logSkills.warn('[dsh-finance] skills 服务不可用，跳过 skill-authorship 静态注册')
+      return () => {}
+    }
+    let dispose: (() => void) | undefined
+    try {
+      dispose = skills.register(createSkillAuthorshipRegistration())
+    } catch (err: unknown) {
+      logSkills.error('[dsh-finance] skill-authorship 静态注册失败（降级）', { error: err })
+    }
+    return () => {
+      try {
+        dispose?.()
+      } catch {
+        /* ignore */
+      }
+    }
+  }, 'dsh-finance skill-authorship skill')
 
   // ---- 固定会话确保（Task-10：检查 → 恢复 → 新建，§9.5） ----
   try {

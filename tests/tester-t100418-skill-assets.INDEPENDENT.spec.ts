@@ -37,7 +37,7 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { SKILL_NAMES, TASK_AUTHORSHIP_SKILL_NAME } from '../src/skills/index.js'
+import { SKILL_NAMES, TASK_AUTHORSHIP_SKILL_NAME, SKILL_AUTHORSHIP_SKILL_NAME } from '../src/skills/index.js'
 import { parseSkillFile, SKILL_NAME_PATTERN } from '../src/skills/frontmatter.js'
 import {
   ensureSkillAssetsRepo,
@@ -384,8 +384,10 @@ describe('④ 三者一致 + SKILL_NAMES 对齐', () => {
     const dirs = readdirSync(srcSkillsDir).filter((n) =>
       existsSync(join(srcSkillsDir, n, SKILL_FILENAME)),
     )
-    // 随包源目录 = 5 个可进化（SKILL_NAMES）+ 1 个固有（task-authorship）。
-    expect([...dirs].sort()).toEqual([...SKILL_NAMES, TASK_AUTHORSHIP_SKILL_NAME].sort())
+    // 随包源目录 = 5 个可进化（SKILL_NAMES）+ 2 个固有（task-authorship / skill-authorship）。
+    expect([...dirs].sort()).toEqual(
+      [...SKILL_NAMES, TASK_AUTHORSHIP_SKILL_NAME, SKILL_AUTHORSHIP_SKILL_NAME].sort(),
+    )
   })
 
   it('落盘后：目录名 === 文件名 SKILL.md === frontmatter.name', () => {

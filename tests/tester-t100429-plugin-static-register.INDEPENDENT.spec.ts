@@ -41,6 +41,7 @@ import { ensureSkillAssetsRepo, resolveSkillsRepoDir } from '../src/skills/repo.
 import {
   SKILL_NAMES,
   TASK_AUTHORSHIP_SKILL_NAME,
+  SKILL_AUTHORSHIP_SKILL_NAME,
   loadTaskAuthorshipMarkdown,
 } from '../src/skills/index.js'
 import { parseSkillFile } from '../src/skills/frontmatter.js'
@@ -54,6 +55,8 @@ const TA = TASK_AUTHORSHIP_SKILL_NAME
 const PROVIDER_NAME = 'dsh-finance-skills'
 /** 固有 SKILL 的 effect label（`src/plugin.ts`）。 */
 const TA_EFFECT_LABEL = 'dsh-finance task-authorship skill'
+/** 新增固有 SKILL 的 effect label（`src/plugin.ts`）。 */
+const SA_EFFECT_LABEL = 'dsh-finance skill-authorship skill'
 /** provider 的 effect label。 */
 const PROVIDER_EFFECT_LABEL = 'dsh-finance skill-filesystem provider'
 
@@ -471,7 +474,7 @@ describe('[AC2] 5 可进化 SKILL 经 provider（providerName=dsh-finance-skills
         const runtimeNames = list.filter((s) => s.source === 'runtime').map((s) => s.name).sort()
         const customNames = list.filter((s) => s.source === 'custom').map((s) => s.name).sort()
 
-        expect(runtimeNames).toEqual([TA])
+        expect(runtimeNames).toEqual([TA, SKILL_AUTHORSHIP_SKILL_NAME].sort())
         expect(customNames).toEqual([...EVOLVABLE].sort())
         // 互斥（区分）。
         for (const n of runtimeNames) expect(customNames).not.toContain(n)
@@ -614,12 +617,14 @@ describe('[AC5] 注销器绑定 ctx.effect：卸载归零 + 幂等', () => {
         })
         const before = (await listSkills(app)).map((s) => s.name)
         expect(before).toContain(TA)
+        expect(before).toContain(SKILL_AUTHORSHIP_SKILL_NAME)
         for (const n of EVOLVABLE) expect(before).toContain(n)
 
         // 卸载插件 fiber：应有 skill 全部消失（归零）。
         await pluginFiber.dispose()
         const after = await listSkills(app)
         expect(after.map((s) => s.name)).not.toContain(TA)
+        expect(after.map((s) => s.name)).not.toContain(SKILL_AUTHORSHIP_SKILL_NAME)
         expect(after.filter((s) => EVOLVABLE.includes(s.name))).toHaveLength(0)
         expect(after.map((s) => s.name)).not.toContain('extra-provider-skill')
         console.log('[EVIDENCE AC5a] before=%d after=%d', before.length, after.length)
@@ -658,7 +663,7 @@ describe('[AC5] 注销器绑定 ctx.effect：卸载归零 + 幂等', () => {
     useDataRoot(seedDataRoot())
     const m = buildMockCtx({ skillsMode: 'ok' })
     srcPlugin.apply(m.ctx as never)
-    expect(m.registered).toHaveLength(1)
+    expect(m.registered).toHaveLength(2)
 
     const taEffect = m.effects.find((e) => e.label === TA_EFFECT_LABEL)
     expect(taEffect).toBeDefined()

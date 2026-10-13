@@ -39,6 +39,7 @@ import { fileURLToPath } from 'node:url'
 import {
   SKILL_NAMES,
   TASK_AUTHORSHIP_SKILL_NAME,
+  SKILL_AUTHORSHIP_SKILL_NAME,
   loadTaskAuthorshipMarkdown,
 } from '../src/skills/index.js'
 import {
@@ -217,14 +218,14 @@ describe('[AC1] 冷启动只预置 5 个可进化 SKILL，无 task-authorship', 
  * ================================================================== */
 
 describe('[AC2] dist-server 仍保留 task-authorship（产物级）', () => {
-  it('AC2a：dist-server/skills 含 6 个 SKILL.md，其中 task-authorship 与 src 逐字一致', () => {
+  it('AC2a：dist-server/skills 含 7 个 SKILL.md（5 可进化 + 2 固有），固有 SKILL 与 src 逐字一致', () => {
     const distSkillsDir = join(DIST_DIR, 'skills')
     expect(existsSync(distSkillsDir), '需先 pnpm build 产出 dist-server').toBe(true)
 
     const mdFiles = walkFiles(distSkillsDir).filter((p) => p.endsWith('/SKILL.md'))
-    // 5 可进化 + 1 固有 = 6 份随包资源。
+    // 5 可进化 + 2 固有 = 7 份随包资源。
     expect(mdFiles.map((p) => p.split('/')[0]).sort()).toEqual(
-      [...EVOLVABLE, TA].sort(),
+      [...EVOLVABLE, TA, SKILL_AUTHORSHIP_SKILL_NAME].sort(),
     )
 
     const distTA = join(distSkillsDir, TA, 'SKILL.md')
@@ -232,7 +233,12 @@ describe('[AC2] dist-server 仍保留 task-authorship（产物级）', () => {
     expect(readFileSync(distTA, 'utf8')).toBe(
       readFileSync(join(SRC_DIR, 'skills', TA, 'SKILL.md'), 'utf8'),
     )
-    console.log(`[EVIDENCE AC2a] distSkillMd=${mdFiles.length} hasDistTA=true`)
+    const distSA = join(distSkillsDir, SKILL_AUTHORSHIP_SKILL_NAME, 'SKILL.md')
+    expect(existsSync(distSA), 'dist-server 应保留 skill-authorship/SKILL.md').toBe(true)
+    expect(readFileSync(distSA, 'utf8')).toBe(
+      readFileSync(join(SRC_DIR, 'skills', SKILL_AUTHORSHIP_SKILL_NAME, 'SKILL.md'), 'utf8'),
+    )
+    console.log(`[EVIDENCE AC2a] distSkillMd=${mdFiles.length} hasDistTA=true hasDistSA=true`)
   })
 
   it('AC2b：编译态 dist-server/skills/index.js 能读到固有 SKILL 原文，且 SKILL_NAMES 收窄为 5', async () => {

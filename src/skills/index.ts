@@ -7,17 +7,20 @@
  *     随 `src/skills/repo.ts` 冷启动种子落盘到 `<dataRoot>/skills` 独立 git 仓库，
  *     并由 `src/skills/provider.ts` 挂载的 dsh 原生 `skill-filesystem` provider 发现
  *     且开启 watch 热更新（改 `SKILL.md` → 无需重启生效）。
- *   - **1 个「固有 SKILL」**（{@link TASK_AUTHORSHIP_SKILL_NAME}）：任务程序创作
- *     (`task-authorship`)。它定义任务程序的结构 / 返回值契约 / 自测纪律，属方法论层，
- *     **不进入 git 进化链与热更新时间线**；原文经 {@link loadTaskAuthorshipMarkdown}
- *     读取，由 `src/plugin.ts` 单独**静态注册**（`createIntrinsicSkillRegistration`）。
+ *   - **2 个「固有 SKILL」**（类型 {@link IntrinsicSkillName}）：
+ *       - `task-authorship`（{@link TASK_AUTHORSHIP_SKILL_NAME}）：任务程序创作，定义
+ *         任务程序的结构 / 返回值契约 / 自测纪律；
+ *       - `skill-authorship`（{@link SKILL_AUTHORSHIP_SKILL_NAME}）：编写合规 skill 的规范
+ *         （frontmatter 三字段 / whenToUse 写法 / 硬性红线 / 自检清单）。
+ *     两者皆**不进入 git 进化链与热更新时间线**；原文经各自 load 函数读取，由
+ *     `src/plugin.ts` 单独**静态注册**（各自的 create 注册对象装配函数）。
  *
  * 职责：
  *   1. 维护 5 个可进化 SKILL 的名清单（{@link SKILL_NAMES}）与联合类型（{@link SkillName}）；
  *   2. 从 `src/skills/<name>/SKILL.md` 读取 Markdown（随构建产物发布到
  *      `dist-server/skills/<name>/SKILL.md`）；
  *   3. 解析 frontmatter（轻量解析器见 `./frontmatter.js`），暴露 {`parseSkill`}；
- *   4. 提供固有 SKILL（task-authorship）的静态读取 / 注册对象装配入口。
+ *   4. 提供 2 个固有 SKILL（task-authorship / skill-authorship）的静态读取 / 注册对象装配入口。
  *
  * 运行时注册：5 个可进化 SKILL 由 `src/skills/provider.ts` 挂载 dsh 原生
  *   `skill-filesystem` provider 发现（指向 `<dataRoot>/skills`，watch 热更新，
@@ -60,8 +63,18 @@ export type SkillName = (typeof SKILL_NAMES)[number]
  */
 export const TASK_AUTHORSHIP_SKILL_NAME = 'task-authorship' as const
 
-/** 固有 SKILL 名类型。 */
-export type IntrinsicSkillName = typeof TASK_AUTHORSHIP_SKILL_NAME
+/**
+ * 固有 SKILL 名（编写合规 skill 的规范，kebab-case）。
+ *
+ * 同 {@link TASK_AUTHORSHIP_SKILL_NAME}：固件、不进化、不落数据目录，由 `src/plugin.ts` 静态注册。
+ * 与可进化的 `strategy-authorship` 仅命名相近、性质不同，勿混淆。
+ */
+export const SKILL_AUTHORSHIP_SKILL_NAME = 'skill-authorship' as const
+
+/** 固有 SKILL 名联合类型（2 个固有 SKILL）。 */
+export type IntrinsicSkillName =
+  | typeof TASK_AUTHORSHIP_SKILL_NAME
+  | typeof SKILL_AUTHORSHIP_SKILL_NAME
 
 /** 读取某**可进化** SKILL 的 Markdown 原文（含 frontmatter）。 */
 export function loadSkillMarkdown(name: SkillName): string {
@@ -77,6 +90,18 @@ export function loadSkillMarkdown(name: SkillName): string {
 export function loadTaskAuthorshipMarkdown(): string {
   return readFileSync(
     new URL(`./${TASK_AUTHORSHIP_SKILL_NAME}/SKILL.md`, import.meta.url),
+    'utf8',
+  )
+}
+
+/**
+ * 读取**固有 SKILL**（{@link SKILL_AUTHORSHIP_SKILL_NAME}）的 Markdown 原文（含 frontmatter）。
+ *
+ * 路径解析风格与 {@link loadSkillMarkdown} 一致，源码态与编译态皆可解析。
+ */
+export function loadSkillAuthorshipMarkdown(): string {
+  return readFileSync(
+    new URL(`./${SKILL_AUTHORSHIP_SKILL_NAME}/SKILL.md`, import.meta.url),
     'utf8',
   )
 }
@@ -102,7 +127,21 @@ export function parseSkill(name: SkillName): ParsedSkillFile {
  * @throws {Error} 文件缺失 / frontmatter 非法时抛出（由调用方捕获降级）。
  */
 export function createIntrinsicSkillRegistration(): SkillRegistration {
-  const { frontmatter, content } = parseSkillFile(loadTaskAuthorshipMarkdown())
+  return buildIntrinsicSkillRegistration(loadTaskAuthorshipMarkdown())
+}
+
+/**
+ * 组装**固有 SKILL**（{@link SKILL_AUTHORSHIP_SKILL_NAME}）的运行时注册对象（无副作用）。
+ *
+ * 与 {@link createIntrinsicSkillRegistration} 同机制：`source=runtime`、`invocation` 双开。
+ */
+export function createSkillAuthorshipRegistration(): SkillRegistration {
+  return buildIntrinsicSkillRegistration(loadSkillAuthorshipMarkdown())
+}
+
+/** 通用固有 SKILL 注册对象装配：解析 frontmatter → 组装 runtime 注册对象。 */
+function buildIntrinsicSkillRegistration(markdown: string): SkillRegistration {
+  const { frontmatter, content } = parseSkillFile(markdown)
   return {
     name: frontmatter.name,
     description: frontmatter.description,
