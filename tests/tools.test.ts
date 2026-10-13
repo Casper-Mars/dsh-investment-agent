@@ -12,7 +12,7 @@
  * output.schema 的严格校验语义（借助 @deepseek-ai/dsh-tools 导出的
  * validateJsonSchemaValue）验证 execute 返回与 schema 逐字段对齐。
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -58,12 +58,15 @@ function expectMatchesOutputSchema(name: string, value: unknown): void {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2026-10-13T10:00:00'))
   dir = mkdtempSync(join(tmpdir(), 'dsh-finance-tools-'))
   ctx = createToolContext({ dataRoot: dir })
   tools = createAllTools(ctx)
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   rmSync(dir, { recursive: true, force: true })
 })
 
