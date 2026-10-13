@@ -19,6 +19,7 @@
  */
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { AssetType, PositionSnapshot, Side, SymbolSnapshot } from '../domain/ledger.js'
+import { isTradingTime } from '../domain/trading-calendar.js'
 import type { ToolContext } from './context.js'
 import type { LedgerPosition, LedgerSymbol } from './types.js'
 import { assertNotAborted, throwIfFailed, throwToolError } from './error.js'
@@ -166,7 +167,8 @@ export function createLedgerTradeTool(ctx: ToolContext): ToolDefinition {
     name: 'ledger_trade',
     description:
       '对指定标的模拟成交（买入/卖出），写交易流水并重算加权平均成本。' +
-      'qty 必须为 100 整数倍；卖出数量超过当前持仓将报错。写操作，按 symbol 隔离。',
+      'qty 必须为 100 整数倍；卖出数量超过当前持仓将报错。写操作，按 symbol 隔离。' +
+      '仅限连续竞价时段（9:30–11:30 / 13:00–15:00）可下单，其余时段拒绝。',
     parameters: {
       symbol: { type: 'string', required: true, description: '标的代码' },
       side: {
@@ -193,6 +195,9 @@ export function createLedgerTradeTool(ctx: ToolContext): ToolDefinition {
     },
     async execute(args, exec) {
       assertNotAborted(exec.signal)
+      if (!isTradingTime(new Date())) {
+        throw new Error('非连续竞价时段（9:30–11:30 / 13:00–15:00），拒绝下单')
+      }
       const res = ctx.ledger.trade(args.symbol, {
         side: args.side as Side,
         qty: args.qty,
