@@ -3,6 +3,26 @@
   "version": "0.1.0",
   "type": "module",
   "description": "金融投资专家 Agent 插件（dsh）：投资建议、持仓记账、行情/交易日历与市场感知",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis-plugin",
+    "finance",
+    "stock",
+    "investment",
+    "agent"
+  ],
+  "author": "Casper <solitaryreach@163.com>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Casper-Mars/dsh-investment-agent.git"
+  },
+  "homepage": "https://github.com/Casper-Mars/dsh-investment-agent#readme",
+  "bugs": {
+    "url": "https://github.com/Casper-Mars/dsh-investment-agent/issues"
+  },
   "packageManager": "pnpm@11.7.0",
   "engines": {
     "node": ">=22.19.0",
@@ -21,15 +41,20 @@
     "dist-server/**/*.js",
     "dist-server/types/**/*.d.ts",
     "dist-server/**/*.md",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "CHANGELOG.md"
   ],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "pnpm clean && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json && node scripts/copy-assets.mjs",
+    "prepublishOnly": "pnpm build",
     "build:server": "pnpm clean && tsc -p tsconfig.server.json && node scripts/copy-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
