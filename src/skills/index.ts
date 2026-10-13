@@ -34,6 +34,7 @@
  *   搬运到 `dist-server`。
  */
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import type { SkillRegistration } from '@deepseek-ai/dsh-skill'
 import { parseSkillFile, type ParsedSkillFile } from './frontmatter.js'
 
@@ -139,6 +140,18 @@ export function createSkillAuthorshipRegistration(): SkillRegistration {
   return buildIntrinsicSkillRegistration(loadSkillAuthorshipMarkdown())
 }
 
+/**
+ * 固有 SKILL 目录的运行时绝对路径（渐进披露 resourceBase）。
+ *
+ * 目录名从 `frontmatter.name` 派生，路径用 `new URL('./<name>/', import.meta.url)` 动态解析：
+ * `import.meta.url` 是 file:// URL，`.` 相对当前模块文件所在目录，`./<name>/`（带尾斜杠）指向
+ * 该 skill **目录**而非文件；再经 `fileURLToPath` 解码为绝对路径（含 URL 百分号解码）。
+ * 源码态（`src/skills/<name>/`）与编译态（`dist-server/skills/<name>/`）下皆正确解析。
+ */
+function resolveIntrinsicSkillDir(name: string): string {
+  return fileURLToPath(new URL(`./${name}/`, import.meta.url))
+}
+
 /** 通用固有 SKILL 注册对象装配：解析 frontmatter → 组装 runtime 注册对象。 */
 function buildIntrinsicSkillRegistration(markdown: string): SkillRegistration {
   const { frontmatter, content } = parseSkillFile(markdown)
@@ -147,6 +160,7 @@ function buildIntrinsicSkillRegistration(markdown: string): SkillRegistration {
     description: frontmatter.description,
     ...(frontmatter.whenToUse === undefined ? {} : { whenToUse: frontmatter.whenToUse }),
     source: 'runtime',
+    resourceBase: { kind: 'directory', path: resolveIntrinsicSkillDir(frontmatter.name) },
     content,
     invocation: { modelInvocable: true, userInvocable: true },
   }
