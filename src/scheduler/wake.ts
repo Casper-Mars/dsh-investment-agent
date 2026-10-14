@@ -110,7 +110,7 @@ export interface WakeDeliveryResult {
  * @returns 末尾附合规声明的完整正文。
  */
 export function buildWakeText(data: string): string {
-  return `${data}\n\n> ${RISK_DISCLAIMER}`
+  return `${data}`
 }
 
 /**
