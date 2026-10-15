@@ -38,6 +38,18 @@ export default async function task(): Promise<TaskScriptResult> {
 
 技术栈与 dsh 一致：TypeScript + Node，支持顶层 `await`、`import` 任意 npm 包、`fetch`。
 
+## 目录规范（代码根目录）
+
+任务程序的**全部代码**必须落在**程序根目录** `assets/programs/` 之内：
+
+- 程序入口：`assets/programs/<id>/task.ts`（及同目录 `package.json`）。
+- 程序引用的**共享代码**（无论叫 `lib`、`_shared` 还是别的）也必须在该根目录之内，例如 `assets/programs/lib/`。
+- **禁止**把程序代码放在该根目录之外——尤其禁止放在**工作区根目录**（如根下的 `lib/`、`scripts/`）。
+
+**只约束"代码根目录"这一个点**：子目录怎么划分（`lib` / `_shared` / …）由 agent 自行决定，不加限制。
+
+理由：程序与它依赖的共享代码必须**一起走**——导出 / 分享"程序"资产时，依赖件须在同一根目录内，否则导出即坏。
+
 ## 返回值契约（`TaskScriptResult`）
 
 `return` 值必须是以下两种之一：
@@ -88,13 +100,14 @@ type TaskScriptResult =
 - ❌ 不做交易判断（买 / 卖 / 减仓 / 仓位调整）。
 - ❌ 不写死 cron 触发时间。
 - ❌ 不写宿主的全局数据目录。
+- ❌ 把程序代码放到程序根目录之外（工作区根目录下的 `lib/`、`scripts/` 等）。
 - ❌ 超时久跑（应在 `taskTimeoutMs` 默认 60s 内完成）。
 
 ## 与定时规则的配合
 
 一个任务程序要生效，遵循「编码 → 测试 → 注册」三步闭环（均由 agent 完成）：
 
-1. **写程序**：按本 SKILL 写好 `tasks/<id>/task.ts` + `package.json`。
+1. **写程序**：按本 SKILL 写好 `assets/programs/<id>/task.ts` + `package.json`。
 2. **测试**：真实执行一次，校验两件事：
    - **跑得起来**：正常退出、无异常抛出、不超时（`taskTimeoutMs` 默认 60s 内）、返回结构符合 `TaskScriptResult` 契约、`shouldWake` 是合法 boolean。
    - **干的活对**：抓对数据、判读逻辑产生预期 `shouldWake`。由 agent 读程序输出的富信息（原始数据 + 中间指标 + 触发对比值）自行判断。
