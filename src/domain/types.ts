@@ -138,9 +138,9 @@ export interface PredictionRecord {
   date: string
   /** 方向：up（看涨）/ down（看跌）/ flat（震荡）。 */
   dir: PredictDir
-  /** 区间下沿（预测最低价，隐含阈值）。 */
+  /** 预期收盘区间下沿（收盘口径，隐含阈值）。 */
   rangeLow: number
-  /** 区间上沿（预测最高价，隐含阈值）。 */
+  /** 预期收盘区间上沿（收盘口径，隐含阈值）。 */
   rangeHigh: number
   /** 置信度（0-1）。 */
   confidence: number
@@ -161,12 +161,18 @@ export interface PredictRange {
  * 这是 predicts/reviews 与行情解耦的关键注入点。
  */
 export interface ActualitySnapshot {
-  /** 实际收盘价。 */
+  /** 实际收盘价（参与方向与区间判定；区间判定为收盘口径）。 */
   close: number
-  /** 实际最高价。 */
-  high: number
-  /** 实际最低价。 */
-  low: number
+  /**
+   * 实际最高价。当前不参与判定（区间判定为收盘口径：只比较 close），可选，
+   * 预留给日后高低价口径；缺省不影响判定结果。
+   */
+  high?: number
+  /**
+   * 实际最低价。当前不参与判定（区间判定为收盘口径：只比较 close），可选，
+   * 预留给日后高低价口径；缺省不影响判定结果。
+   */
+  low?: number
   /** 前一交易日收盘价（用于方向判定基线）。 */
   prevClose: number
 }
@@ -175,9 +181,9 @@ export interface ActualitySnapshot {
 export interface HitResult {
   /** 方向是否命中。 */
   hitDir: boolean
-  /** 区间是否命中。 */
+  /** 区间是否命中（收盘口径：实际收盘价落入 [rangeLow, rangeHigh] 闭区间）。 */
   hitRange: boolean
-  /** 偏差：close 相对预测区间中点的偏离（区间命中时为 0；否则为越界距离）。 */
+  /** 偏差：close 越出预测区间的距离（区间命中时为 0；否则为越界距离）。 */
   deviation: number
 }
 

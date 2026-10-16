@@ -271,6 +271,42 @@ describe('验收点 2+3：predicts 域', () => {
     expectMatchesOutputSchema('predict_verify', v)
   })
 
+  it('predict_verify 不传 actual_high/actual_low 可正常调用，判定与传入时一致（收盘口径）', async () => {
+    await run('predict_make', {
+      symbol: '588000', date: '2026-09-29', dir: 'up',
+      range_low: 1.8, range_high: 2.2, confidence: 0.8, watch_points: [],
+    })
+    const withHL = await run('predict_verify', {
+      symbol: '588000', date: '2026-09-29',
+      actual_close: 2.0, actual_high: 2.5, actual_low: 1.5, prev_close: 1.8,
+    })
+    // 缺省 actual_high / actual_low：不得报错，且三字段与传入时逐字一致。
+    const withoutHL = await run('predict_verify', {
+      symbol: '588000', date: '2026-09-29',
+      actual_close: 2.0, prev_close: 1.8,
+    })
+    expect(withoutHL).toEqual(withHL)
+    expect(withoutHL).toEqual({ hit_dir: true, hit_range: true, deviation: 0 })
+    expectMatchesOutputSchema('predict_verify', withoutHL)
+  })
+
+  it('口径锁定（工具层）：actual_high 越界但 close 命中 → hit_range=true（收盘口径的有意取舍）', async () => {
+    // 002156 复现：high 51.16 > 上沿 49.20，但 close 48.67 ∈ [48.00, 49.20]。
+    // 区间判定为收盘口径，仅比较 close，故判命中——有意取舍，非缺陷。
+    await run('predict_make', {
+      symbol: '002156', date: '2026-10-15', dir: 'up',
+      range_low: 48.0, range_high: 49.2, confidence: 0.6, watch_points: [],
+    })
+    const v = await run('predict_verify', {
+      symbol: '002156', date: '2026-10-15',
+      actual_close: 48.67, actual_high: 51.16, actual_low: 47.8, prev_close: 48.1,
+    })
+    expect(v.hit_range).toBe(true)
+    expect(v.hit_dir).toBe(true)
+    expect(v.deviation).toBe(0)
+    expectMatchesOutputSchema('predict_verify', v)
+  })
+
   it('predict_get 返回 {prediction}，无记录返回 null', async () => {
     await run('predict_make', {
       symbol: '588000', date: '2026-09-29', dir: 'flat',

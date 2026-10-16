@@ -145,7 +145,12 @@ export const predictVerifyResultSchema = {
   additionalProperties: false,
   properties: {
     hit_dir: { type: 'boolean', required: true, description: '方向是否命中' },
-    hit_range: { type: 'boolean', required: true, description: '区间是否命中' },
+    hit_range: {
+      type: 'boolean',
+      required: true,
+      description:
+        '区间是否命中（收盘口径：实际收盘价落入预测区间 [range_low, range_high] 闭区间即命中；与盘中最高/最低价无关）',
+    },
     deviation: { type: 'number', required: true, description: '偏差（区间命中为 0，否则为越界距离，恒非负）' },
   },
 } as const
@@ -161,8 +166,16 @@ export const predictionSchema = {
       required: true,
       description: '预测方向（up / down / flat）',
     },
-    range_low: { type: 'number', required: true, description: '区间下沿（预测最低价）' },
-    range_high: { type: 'number', required: true, description: '区间上沿（预测最高价）' },
+    range_low: {
+      type: 'number',
+      required: true,
+      description: '预期收盘区间下沿（收盘口径：判定时以实际收盘价是否 ≥ 本下沿为准）',
+    },
+    range_high: {
+      type: 'number',
+      required: true,
+      description: '预期收盘区间上沿（收盘口径：判定时以实际收盘价是否 ≤ 本上沿为准）',
+    },
     confidence: { type: 'number', required: true, description: '置信度（0-1）' },
     watch_points: { type: 'array', items: { type: 'string' }, required: true, description: '观察点列表' },
   },
@@ -234,7 +247,11 @@ export const metricSnapshotSchema = {
     symbol: { type: 'string', required: true, description: '标的代码' },
     date: { type: 'string', required: true, description: '统计截止交易日' },
     dir_hit_rate: { type: 'number', required: true, description: '方向命中率（0-1）' },
-    range_hit_rate: { type: 'number', required: true, description: '区间命中率（0-1）' },
+    range_hit_rate: {
+      type: 'number',
+      required: true,
+      description: '区间命中率（0-1，收盘口径：按实际收盘价落入预测收盘区间计）',
+    },
     cum_return: {
       type: 'number',
       required: true,
@@ -250,7 +267,11 @@ export const reviewMetricsResultSchema = {
   additionalProperties: false,
   properties: {
     dir_hit_rate: { type: 'number', required: true, description: '方向命中率（0-1）' },
-    range_hit_rate: { type: 'number', required: true, description: '区间命中率（0-1）' },
+    range_hit_rate: {
+      type: 'number',
+      required: true,
+      description: '区间命中率（0-1，收盘口径：按实际收盘价落入预测收盘区间计）',
+    },
     cum_return: {
       type: 'number',
       required: true,

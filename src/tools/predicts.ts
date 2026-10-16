@@ -41,8 +41,16 @@ export function createPredictMakeTool(ctx: ToolContext): ToolDefinition {
         required: true,
         description: '方向：up（看涨）/ down（看跌）/ flat（震荡）',
       },
-      range_low: { type: 'number', required: true, description: '区间下沿（预测最低价）' },
-      range_high: { type: 'number', required: true, description: '区间上沿（预测最高价）' },
+      range_low: {
+        type: 'number',
+        required: true,
+        description: '预期收盘区间下沿（收盘口径：判定时以实际收盘价是否 ≥ 本下沿为准）',
+      },
+      range_high: {
+        type: 'number',
+        required: true,
+        description: '预期收盘区间上沿（收盘口径：判定时以实际收盘价是否 ≤ 本上沿为准）',
+      },
       confidence: { type: 'number', required: true, description: '置信度（0-1）' },
       watch_points: {
         type: 'array',
@@ -78,13 +86,24 @@ export function createPredictVerifyTool(ctx: ToolContext): ToolDefinition {
     name: 'predict_verify',
     description:
       '校验某标的某交易日的预判是否命中（方向 / 区间 / 偏差）。需注入当日实际行情快照' +
-      '（close / high / low / prevClose）。只读操作。',
+      '（close / prevClose；high / low 当前不参与判定、可选，区间判定为收盘口径）。只读操作。',
     parameters: {
       symbol: { type: 'string', required: true, description: '标的代码' },
       date: { type: 'string', required: true, description: '预判对应交易日 YYYY-MM-DD' },
-      actual_close: { type: 'number', required: true, description: '实际收盘价' },
-      actual_high: { type: 'number', required: true, description: '实际最高价' },
-      actual_low: { type: 'number', required: true, description: '实际最低价' },
+      actual_close: {
+        type: 'number',
+        required: true,
+        description: '实际收盘价（参与区间判定，收盘口径：收盘价落入 [range_low, range_high] 闭区间即命中）',
+      },
+      // 可选入参：不写 required（工具 schema 约定「必填=required:true，可选=缺省」）。
+      actual_high: {
+        type: 'number',
+        description: '实际最高价（当前不参与判定：区间判定为收盘口径，本字段预留给日后高低价口径）',
+      },
+      actual_low: {
+        type: 'number',
+        description: '实际最低价（当前不参与判定：区间判定为收盘口径，本字段预留给日后高低价口径）',
+      },
       prev_close: { type: 'number', required: true, description: '前一交易日收盘价（方向基线）' },
     },
     output: {
@@ -100,6 +119,8 @@ export function createPredictVerifyTool(ctx: ToolContext): ToolDefinition {
     },
     async execute(args) {
       try {
+        // 区间判定为收盘口径（computeHit 只读 close / prevClose）。actual_high /
+        // actual_low 当前不参与判定，缺省时透传 undefined 即可，判定结果与传入时一致。
         const hit = ctx.predicts.predict_verify(args.symbol, args.date, {
           close: args.actual_close,
           high: args.actual_high,

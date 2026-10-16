@@ -69,7 +69,10 @@ export function createReviewCheckTool(ctx: ToolContext): ToolDefinition {
       decision_triggered: { type: 'boolean', required: true, description: '前一日决策是否触发' },
       decision_executed: { type: 'boolean', required: true, description: '决策是否执行' },
       hit_dir: { type: 'boolean', description: '命中结果注入：方向是否命中（可选）' },
-      hit_range: { type: 'boolean', description: '命中结果注入：区间是否命中（可选）' },
+      hit_range: {
+        type: 'boolean',
+        description: '命中结果注入：区间是否命中（可选；收盘口径，见 predict_verify）',
+      },
     },
     output: {
       schema: reviewCheckResultSchema,
@@ -103,7 +106,7 @@ export function createReviewReportTool(ctx: ToolContext): ToolDefinition {
       decision_triggered: { type: 'boolean', required: true, description: '决策是否触发' },
       decision_executed: { type: 'boolean', required: true, description: '决策是否执行' },
       hit_dir: { type: 'boolean', description: '方向是否命中（可选）' },
-      hit_range: { type: 'boolean', description: '区间是否命中（可选）' },
+      hit_range: { type: 'boolean', description: '区间是否命中（可选；收盘口径，见 predict_verify）' },
       summary: { type: 'string', description: '复盘摘要（可选，缺省自动生成）' },
       report: { type: 'string', description: '复盘正文（可选，缺省自动生成）' },
     },

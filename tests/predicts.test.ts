@@ -160,6 +160,35 @@ describe('computeHit（命中口径核心）', () => {
     expect(r.hitRange).toBe(true)
     expect(r.deviation).toBe(0)
   })
+
+  it('口径锁定：high 越界但 close 命中 → hit_range = true（收盘口径的有意取舍）', () => {
+    // 002156 复现：实际最高 51.16 越出上沿 49.20，但收盘 48.67 落在 [48.00, 49.20] 内。
+    // 区间判定为收盘口径（只比较 close，不看盘中 high/low），故此处判命中——
+    // 这是有意取舍（口径已锁定为收盘价），并非缺陷；high 越界不影响 hit_range。
+    const r = computeHit('up', 48.0, 49.2, {
+      close: 48.67,
+      high: 51.16,
+      low: 47.8,
+      prevClose: 48.1,
+    })
+    expect(r.hitRange).toBe(true)
+    expect(r.hitDir).toBe(true)
+    expect(r.deviation).toBe(0)
+  })
+
+  it('区间判定不读取 high/low：high/low 缺省时结果一致（收盘口径）', () => {
+    const withHL = computeHit('up', 48.0, 49.2, {
+      close: 48.67,
+      high: 51.16,
+      low: 47.8,
+      prevClose: 48.1,
+    })
+    const withoutHL = computeHit('up', 48.0, 49.2, {
+      close: 48.67,
+      prevClose: 48.1,
+    })
+    expect(withoutHL).toEqual(withHL)
+  })
 })
 
 describe('predicts.predict_verify', () => {
