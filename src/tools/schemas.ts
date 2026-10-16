@@ -254,7 +254,8 @@ export const reviewMetricsResultSchema = {
     cum_return: {
       type: 'number',
       required: true,
-      description: '累计收益率（真实值，验收口径 cumReturnOnCapital；无台账/无流水时回落 0）',
+      description:
+        '累计收益率（真实值，验收口径 cumReturnOnCapital = (期末现金 + 期末市值 − 期初资金) / 期初资金，即期末总资产相对期初总资产的变化；无台账/无流水时回落 0）',
     },
     history: { type: 'array', items: metricSnapshotSchema, required: true, description: '逐日统计历史' },
   },

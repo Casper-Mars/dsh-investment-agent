@@ -175,7 +175,7 @@ export class Ledger {
    * 计算累计收益率所需的状态快照（验收口径 t100357 AC2）。
    *
    * - finalQty：当前持仓数量（positions.qty）；
-   * - realizedPnl：已实现盈亏（accounts.realized_pnl）；
+   * - finalCash：期末现金（accounts.cash，已含期间买卖回笼/支出与已实现盈亏）；
    * - initialCapital：期初资金 = 初始 cash + 初始持仓成本。
    *   初始 cash 未单独落库，故由「当前 cash + Σ买入 − Σ卖出」反推；
    *   初始持仓成本取 init 流水（reason='init'）的 qty×price。
@@ -191,7 +191,6 @@ export class Ledger {
     const trades = this.store.getTrades(symbol)
 
     const finalQty = pos?.qty ?? 0
-    const realizedPnl = acc?.realizedPnl ?? 0
     const cash = acc?.cash ?? 0
 
     // 初始持仓成本：init 建仓流水（reason='init'）的 qty×price；无 init 流水则为 0。
@@ -213,7 +212,7 @@ export class Ledger {
     // 期初资金 = 初始 cash + 初始持仓成本。
     const initialCapital = initialCash + initCost
 
-    return { finalQty, finalPrice, realizedPnl, initialCapital }
+    return { finalQty, finalPrice, finalCash: cash, initialCapital }
   }
 
   /** 模拟成交：写流水，重算持仓成本 / 结算盈亏。 */

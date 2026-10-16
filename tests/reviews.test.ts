@@ -240,10 +240,10 @@ describe('reviews.review_metrics cum_return 接线（验收口径 t100357 AC2）
     ledger.init('588000', { type: 'etf', name: 'T', qty: 1000, cost: 2.0, cash: 50000 })
     const wired = new Reviews(dir, ledger)
 
-    // 现价 3.0：期末市值 = 1000×3.0 = 3000；期初资金 = 50000 + 1000×2.0 = 52000；
-    // realized = 0 → cum_return = (3000 + 0 - 52000) / 52000 = -49000/52000
+    // 现价 3.0：期末现金 50000（期间无成交），期末市值 = 1000×3.0 = 3000；
+    // 期初资金 = 50000 + 1000×2.0 = 52000 → cum_return = (50000 + 3000 - 52000) / 52000 = 1000/52000
     const m = wired.review_metrics('588000', 3.0)
-    expect(m.cumReturn).toBeCloseTo(-49000 / 52000, 4)
+    expect(m.cumReturn).toBeCloseTo(1000 / 52000, 4)
   })
 
   it('买入后被评估：缺省现价用最近一笔成交价', () => {
@@ -252,11 +252,11 @@ describe('reviews.review_metrics cum_return 接线（验收口径 t100357 AC2）
     ledger.trade('588000', { side: 'buy', qty: 500, price: 2.5 })
     const wired = new Reviews(dir, ledger)
 
-    // 最近一笔成交价 = 2.5，期末持仓 1500；
+    // 最近一笔成交价 = 2.5，期末持仓 1500；期末现金 = 50000 - 500×2.5 = 48750；
     // 期初资金 = 50000 + 1000×2.0 = 52000；期末市值 = 1500×2.5 = 3750；
-    // realized = 0 → (3750 - 52000) / 52000 = -48250/52000
+    // → (48750 + 3750 - 52000) / 52000 = 500/52000
     const m = wired.review_metrics('588000')
-    expect(m.cumReturn).toBeCloseTo(-48250 / 52000, 4)
+    expect(m.cumReturn).toBeCloseTo(500 / 52000, 4)
   })
 
   it('已实现盈亏计入：卖出后 realized 参与分子', () => {
@@ -266,11 +266,11 @@ describe('reviews.review_metrics cum_return 接线（验收口径 t100357 AC2）
     ledger.trade('588000', { side: 'sell', qty: 500, price: 3.0 })
     const wired = new Reviews(dir, ledger)
 
-    // 现价 3.0，期末持仓 500，期末市值 = 1500；
-    // 期初资金 = 52000；realized = 500
-    // cum_return = (1500 + 500 - 52000) / 52000 = -50000/52000
+    // 现价 3.0，期末持仓 500，期末现金 = 50000 + 500×3.0 = 51500；期末市值 = 1500；
+    // 期初资金 = 52000（realized 经现金回笼已计入期末现金）
+    // → cum_return = (51500 + 1500 - 52000) / 52000 = 1000/52000
     const m = wired.review_metrics('588000', 3.0)
-    expect(m.cumReturn).toBeCloseTo(-50000 / 52000, 4)
+    expect(m.cumReturn).toBeCloseTo(1000 / 52000, 4)
   })
 
   it('标的未初始化时不会抛错，cum_return 回落 0', () => {
@@ -278,5 +278,21 @@ describe('reviews.review_metrics cum_return 接线（验收口径 t100357 AC2）
     const wired = new Reviews(dir, ledger)
     const m = wired.review_metrics('999999')
     expect(m.cumReturn).toBe(0)
+  })
+
+  it('Issue #3 真实台账复现：已清仓账户真实 −1.91%，而非 −101.91%', () => {
+    // 台账：init 200@55.57（现金 50000）；sell 100@53.05；buy 100@53.08；sell 200@49.76。
+    // 期末 qty=0、期末现金 59949、期初资金 = 50000 + 200×55.57 = 61114。
+    // 旧口径（分子缺期未现金）会算成 (0 - 61114)/61114 = -1.0191（~−101.91%）；
+    // 新口径：(59949 + 0 - 61114)/61114 = -1165/61114 ≈ -0.0191（−1.91%）。
+    const ledger = new Ledger(dir)
+    ledger.init('002156', { type: 'stock', name: 'T', qty: 200, cost: 55.57, cash: 50000 })
+    ledger.trade('002156', { side: 'sell', qty: 100, price: 53.05 })
+    ledger.trade('002156', { side: 'buy', qty: 100, price: 53.08 })
+    ledger.trade('002156', { side: 'sell', qty: 200, price: 49.76 })
+    const wired = new Reviews(dir, ledger)
+    const m = wired.review_metrics('002156')
+    expect(m.cumReturn).toBe(-0.0191)
+    expect(m.cumReturn).not.toBeCloseTo(-1.0191, 2)
   })
 })

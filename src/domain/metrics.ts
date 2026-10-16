@@ -14,7 +14,7 @@
  * 关键口径（验收点 5）：
  * - `hitRate`：dir_hit_rate = 方向命中数 / 已校验数（range 同理）。
  * - `cumReturnOnCapital`：唯一累计收益口径（验收口径 t100357 AC2），
- *   `(期末市值 + 累计 realized - 期初资金) / 期初资金`。
+ *   `(期末现金 + 期末市值 − 期初资金) / 期初资金`（即期末总资产 vs 期初总资产）。
  *
  * 纯函数逻辑，不接触 dsh/cordis API、不落库（落库由 ledger 层负责）。
  */
@@ -23,15 +23,18 @@ import type { Side, Thresholds, Trade } from './types.js'
 /**
  * 累计收益率计算所需的状态快照（验收口径 t100357 AC2）。
  *
- * 口径：`cum_return = (期末市值 + 累计 realized - 期初资金) / 期初资金`。
+ * 口径：`cum_return = (期末现金 + 期末市值 − 期初资金) / 期初资金`。
+ * 即「期末总资产 vs 期初总资产」——期末总资产 = 期末现金 + 期末持仓市值。
+ * 注：已实现盈亏（realizedPnl）经卖出回笼现金后已内含于期末现金中，
+ *     不再是公式的独立输入项，故不在此快照中携带，以免被误当分子项重复计入。
  */
 export interface CumReturnState {
   /** 期末持仓数量（当前持仓 qty）。 */
   finalQty: number
   /** 期末现价（当前价格）。 */
   finalPrice: number
-  /** 已实现盈亏（累计 realized）。 */
-  realizedPnl: number
+  /** 期末现金（已含期间买卖回笼/支出与已实现盈亏）。 */
+  finalCash: number
   /** 期初资金 = 初始 cash + 初始持仓成本。 */
   initialCapital: number
 }
@@ -39,17 +42,19 @@ export interface CumReturnState {
 /**
  * 累计收益率（唯一累计收益口径，验收口径 t100357 AC2）。
  *
- * 公式：`(期末市值 + 累计 realized - 期初资金) / 期初资金`。
+ * 公式：`(期末现金 + 期末市值 − 期初资金) / 期初资金`。
+ *   期末现金 = finalCash；
  *   期末市值 = finalQty × finalPrice；
- *   累计 realized = realizedPnl；
  *   期初资金 = initialCapital。
+ * 等价于「期末总资产 / 期初总资产 − 1」——已清仓（finalQty=0）时分子仅剩
+ * 期末现金，不再把已回笼的现金漏算成亏损。
  * 期初资金为 0 或非法即返回 0（防除零）。
  */
 export function cumReturnOnCapital(state: CumReturnState): number {
   const ic = state.initialCapital
   if (!Number.isFinite(ic) || ic === 0) return 0
   const marketValue = state.finalQty * state.finalPrice
-  return round4((marketValue + state.realizedPnl - ic) / ic)
+  return round4((state.finalCash + marketValue - ic) / ic)
 }
 
 /**

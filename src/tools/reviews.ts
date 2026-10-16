@@ -179,7 +179,7 @@ export function createReviewMetricsTool(ctx: ToolContext): ToolDefinition {
       price: {
         type: 'number',
         description:
-          '现价，用于计算累计收益率 cum_return 的期末市值；缺省则用最近成交价代理',
+          '现价，用于计算累计收益率 cum_return 的期末市值（期末总资产 = 期末现金 + 期末持仓市值）；缺省则用最近成交价代理',
       },
     },
     output: {
@@ -219,7 +219,7 @@ export function createReviewRetrospectTool(ctx: ToolContext): ToolDefinition {
       price: {
         type: 'number',
         description:
-          '现价，用于计算累计收益率 cum_return 的期末市值；缺省则用最近成交价代理',
+          '现价，用于计算累计收益率 cum_return 的期末市值（期末总资产 = 期末现金 + 期末持仓市值）；缺省则用最近成交价代理',
       },
     },
     output: {

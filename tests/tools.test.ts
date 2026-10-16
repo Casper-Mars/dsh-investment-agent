@@ -342,16 +342,16 @@ describe('验收点 2+3：reviews 域', () => {
     // 卖出 500@3.0 → 剩余持仓 500；最近成交价 = 3.0；realized = (3.0-2.0)×500 = 500
     await run('ledger_trade', { symbol: '588000', side: 'sell', qty: 500, price: 3.0 })
 
-    // 传 price=4.0：期末市值 = 500×4.0 = 2000；期初资金 52000；realized 500
-    // cum_return = (2000 + 500 - 52000) / 52000 = -49500/52000
+    // 传 price=4.0：期末现金 = 50000 + 500×3.0 = 51500；期末市值 = 500×4.0 = 2000；期初资金 52000
+    // cum_return = (51500 + 2000 - 52000) / 52000 = 1500/52000
     const withPrice = await run('review_metrics', { symbol: '588000', price: 4.0 })
-    expect(withPrice.cum_return).toBeCloseTo(-49500 / 52000, 4)
+    expect(withPrice.cum_return).toBeCloseTo(1500 / 52000, 4)
     expectMatchesOutputSchema('review_metrics', withPrice)
 
     // 缺省 price：回落最近成交价 3.0 → 期末市值 500×3.0 = 1500
-    // cum_return = (1500 + 500 - 52000) / 52000 = -50000/52000
+    // cum_return = (51500 + 1500 - 52000) / 52000 = 1000/52000
     const noPrice = await run('review_metrics', { symbol: '588000' })
-    expect(noPrice.cum_return).toBeCloseTo(-50000 / 52000, 4)
+    expect(noPrice.cum_return).toBeCloseTo(1000 / 52000, 4)
     expectMatchesOutputSchema('review_metrics', noPrice)
   })
 

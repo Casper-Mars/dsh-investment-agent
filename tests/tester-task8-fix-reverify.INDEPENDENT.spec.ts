@@ -7,9 +7,9 @@
  *   **不复用** Developer 的 tests/metrics.test.ts / tests/reviews.test.ts。
  *
  * 复验目标：
- *   1) AC2：cum_return 不再为 0，且精确 = (期末市值 + 累计 realized - 期初资金)/期初资金。
- *      - 场景 S1（任务书给定）：init(50000,1000,2.00) → sell 500@3.0 → -0.9615
- *      - 场景 S2（盈利方向）：init(1000,1000,2.00)  → sell 1000@6.0 → +0.3333
+ *   1) AC2：cum_return 精确 = (期末现金 + 期末市值 − 期初资金)/期初资金（期末总资产 vs 期初总资产）。
+ *      - 场景 S1（任务书给定）：init(50000,1000,2.00) → sell 500@3.0 → +0.0192
+ *      - 场景 S2（盈利方向）：init(1000,1000,2.00)  → sell 1000@6.0 → +1.3333
  *      - 除零 / 未初始化标的 → 回落 0 且不抛错
  *   2) 工具层端到端（真实 ToolRuntime registry）AC2 落地。
  *   3) 未接 ledger 时回落 0（防 tester-independent-verify 回归）。
@@ -48,7 +48,7 @@ const r4 = (v: number): number => Math.round((v + Number.EPSILON) * 10000) / 100
  * ================================================================== */
 
 describe('S1 · AC2 口径复验：init(50000,1000,2.00) → sell 500@3.0', () => {
-  it('review_metrics 的 cum_return 精确 = (1500+500-52000)/52000 = -0.9615（且不为 0）', () => {
+  it('review_metrics 的 cum_return 精确 = (51500+1500-52000)/52000 = +0.0192', () => {
     const ledger = new Ledger(dir)
     ledger.init('588000', { type: 'etf', name: 'T', qty: 1000, cost: 2.0, cash: 50000 })
     ledger.trade('588000', { side: 'sell', qty: 500, price: 3.0 })
@@ -56,16 +56,16 @@ describe('S1 · AC2 口径复验：init(50000,1000,2.00) → sell 500@3.0', () =
 
     // 独立手算（不复用被测反推逻辑）：
     //   期初资金 = 初始 cash 50000 + 初始持仓成本 1000×2.00 = 52000
-    //   期末持仓 = 500；现价（缺省=最近成交价 3.0）→ 期末市值 = 500×3.0 = 1500
-    //   累计 realized = (3.0-2.00)×500 = 500
-    const expected = r4((1500 + 500 - 52000) / 52000) // = -0.9615
+    //   期末持仓 = 500；期末现金 = 50000 + 500×3.0 = 51500；现价（缺省=最近成交价 3.0）
+    //   → 期末市值 = 500×3.0 = 1500
+    const expected = r4((51500 + 1500 - 52000) / 52000) // = +0.0192
     const m = reviews.review_metrics('588000')
     console.log(
-      `[EVIDENCE AC2-S1] cum_return=${m.cumReturn}  expected=${expected}  (期望 -0.9615)`,
+      `[EVIDENCE AC2-S1] cum_return=${m.cumReturn}  expected=${expected}  (期望 +0.0192)`,
     )
     expect(m.cumReturn).not.toBe(0)
     expect(m.cumReturn).toBeCloseTo(expected, 6)
-    expect(m.cumReturn).toBeCloseTo(-0.9615, 4)
+    expect(m.cumReturn).toBeCloseTo(0.0192, 4)
   })
 
   it('显式传现价 3.0 与缺省（回落最近成交价）结果一致', () => {
@@ -84,24 +84,24 @@ describe('S1 · AC2 口径复验：init(50000,1000,2.00) → sell 500@3.0', () =
 })
 
 describe('S2 · AC2 盈利方向复验：init(1000,1000,2.00) → sell 1000@6.0', () => {
-  it('正收益方向正确：cum_return = (0+4000-3000)/3000 = +0.3333', () => {
+  it('正收益方向正确：cum_return = (7000+0-3000)/3000 = +1.3333', () => {
     const ledger = new Ledger(dir)
     ledger.init('000001', { type: 'stock', name: 'B', qty: 1000, cost: 2.0, cash: 1000 })
-    // 卖出全部 1000 @ 6.0：realized = (6.0-2.0)×1000 = 4000
+    // 卖出全部 1000 @ 6.0：realized = (6.0-2.0)×1000 = 4000；回笼现金 6000
     ledger.trade('000001', { side: 'sell', qty: 1000, price: 6.0 })
     const reviews = new Reviews(dir, ledger)
 
     // 独立手算：
     //   期初资金 = 初始 cash 1000 + 初始持仓成本 1000×2.00 = 3000
-    //   期末持仓 = 0；现价（缺省=最近成交价 6.0）→ 期末市值 = 0
-    //   累计 realized = 4000 → (0 + 4000 - 3000)/3000 = +0.3333
-    const expected = r4((0 + 4000 - 3000) / 3000)
+    //   期末持仓 = 0；期末现金 = 1000 + 1000×6.0 = 7000；现价（缺省=最近成交价 6.0）
+    //   → 期末市值 = 0 → (7000 + 0 - 3000)/3000 = +1.3333
+    const expected = r4((7000 + 0 - 3000) / 3000)
     const m = reviews.review_metrics('000001')
     console.log(
-      `[EVIDENCE AC2-S2] cum_return=${m.cumReturn}  expected=${expected}  (期望 +0.3333)`,
+      `[EVIDENCE AC2-S2] cum_return=${m.cumReturn}  expected=${expected}  (期望 +1.3333)`,
     )
     expect(m.cumReturn).toBeGreaterThan(0)
-    expect(m.cumReturn).toBeCloseTo(0.3333, 4)
+    expect(m.cumReturn).toBeCloseTo(1.3333, 4)
     expect(m.cumReturn).toBeCloseTo(expected, 6)
   })
 })
@@ -128,9 +128,9 @@ describe('S3 · 除零 / 未初始化回落 0 且不抛错', () => {
   })
 
   it('cumReturnOnCapital 直接单测：initialCapital 非法（0/NaN/Infinity）→ 0', () => {
-    expect(cumReturnOnCapital({ finalQty: 1, finalPrice: 1, realizedPnl: 9, initialCapital: 0 })).toBe(0)
-    expect(cumReturnOnCapital({ finalQty: 1, finalPrice: 1, realizedPnl: 9, initialCapital: NaN })).toBe(0)
-    expect(cumReturnOnCapital({ finalQty: 1, finalPrice: 1, realizedPnl: 9, initialCapital: Infinity })).toBe(0)
+    expect(cumReturnOnCapital({ finalQty: 1, finalPrice: 1, finalCash: 9, initialCapital: 0 })).toBe(0)
+    expect(cumReturnOnCapital({ finalQty: 1, finalPrice: 1, finalCash: 9, initialCapital: NaN })).toBe(0)
+    expect(cumReturnOnCapital({ finalQty: 1, finalPrice: 1, finalCash: 9, initialCapital: Infinity })).toBe(0)
   })
 })
 
@@ -207,7 +207,7 @@ type MetricsValue = {
 }
 
 describe('T1 · 工具层端到端：review_metrics 透出非零 cum_return（price 入参给价 3.0）', () => {
-  it('ledger_init → ledger_trade(卖出) → review_metrics(price=3.0) → cum_return=-0.9615', async () => {
+  it('ledger_init → ledger_trade(卖出) → review_metrics(price=3.0) → cum_return=+0.0192', async () => {
     const { tools, dispose } = await bootRegistry(dir)
     try {
       const init = await call(tools, 'ledger_init', {
@@ -230,10 +230,10 @@ describe('T1 · 工具层端到端：review_metrics 透出非零 cum_return（pr
       expect(res.isError).toBe(false)
       const m = res.value as MetricsValue
       console.log(
-        `[EVIDENCE AC2-TOOL] cum_return=${m.cum_return}（price 入参供给现价 3.0，期望 -0.9615）`,
+        `[EVIDENCE AC2-TOOL] cum_return=${m.cum_return}（price 入参供给现价 3.0，期望 +0.0192）`,
       )
       expect(m.cum_return).not.toBe(0)
-      expect(m.cum_return).toBeCloseTo(-0.9615, 4)
+      expect(m.cum_return).toBeCloseTo(0.0192, 4)
     } finally {
       await dispose()
     }
@@ -241,7 +241,7 @@ describe('T1 · 工具层端到端：review_metrics 透出非零 cum_return（pr
 })
 
 describe('T2 · 工具层端到端：price 缺省 → 回落最近成交价仍非零', () => {
-  it('不传 price → 回落最近成交价 → cum_return=-0.9615', async () => {
+  it('不传 price → 回落最近成交价 → cum_return=+0.0192', async () => {
     // 工具层不持有行情源：不传 price 时，domain 回落用最近一笔成交价作为现价代理。
     const { tools, dispose } = await bootRegistry(dir)
     try {
@@ -251,9 +251,9 @@ describe('T2 · 工具层端到端：price 缺省 → 回落最近成交价仍�
       const res = await call(tools, 'review_metrics', { symbol: '588000' })
       expect(res.isError).toBe(false)
       const m = res.value as MetricsValue
-      console.log(`[EVIDENCE AC2-TOOL] price 缺省回落 cum_return=${m.cum_return}（期望 -0.9615）`)
+      console.log(`[EVIDENCE AC2-TOOL] price 缺省回落 cum_return=${m.cum_return}（期望 +0.0192）`)
       expect(m.cum_return).not.toBe(0)
-      expect(m.cum_return).toBeCloseTo(-0.9615, 4)
+      expect(m.cum_return).toBeCloseTo(0.0192, 4)
     } finally {
       await dispose()
     }
