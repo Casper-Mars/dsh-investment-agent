@@ -57,6 +57,7 @@
     "prepublishOnly": "pnpm build",
     "build:server": "pnpm clean && tsc -p tsconfig.server.json && node scripts/copy-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "recompute:cum-return": "node scripts/recompute-cum-return.mjs",
     "test": "vitest run --passWithNoTests",
     "clean": "rm -rf dist dist-server"
   },

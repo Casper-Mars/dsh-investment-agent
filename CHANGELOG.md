@@ -5,6 +5,37 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Changed
+
+- **`cum_return` 收益口径修正（BREAKING：历史值不可比）**：累计收益率口径由
+  「期末市值 + 累计 realized」修正为「**期末现金 + 期末市值** − 期初资金」/ 期初资金
+  （即期末总资产 vs 期初总资产）。旧口径分子漏掉**期末现金**，对已清仓账户会严重
+  低估（可低至近 −100%）。
+  ⚠️ **兼容性**：历史 `metrics.json` 中的 `cumReturn` 为**旧口径**落库值，与修复后
+  **不可比**。消费方若直接做新旧对比，会得出错误的「策略变好 / 变坏」结论；
+  请以下述**重算值**为准。
+
+### Notes
+
+- **历史 metrics 一次性重算（cum_return 回填）**：提供幂等、可回滚的重算脚本
+  `scripts/recompute-cum-return.mjs`，按新口径重放台账流水并回填 `cum_return`。
+  默认 **dry-run**（仅打印 before/after/changed，不落盘）；`--write` 落盘，并在
+  落盘前把原 `metrics.json` 备份为 `metrics.json.bak`；`--rollback` 可还原。
+
+  ```bash
+  # 预览（dry-run，默认）
+  node scripts/recompute-cum-return.mjs --data-root ~/.dsh-ia/data
+  # 回填（落盘，自动备份 metrics.json -> metrics.json.bak）
+  node scripts/recompute-cum-return.mjs --data-root ~/.dsh-ia/data --write
+  # 回滚（从 .bak 还原）
+  node scripts/recompute-cum-return.mjs --data-root ~/.dsh-ia/data --rollback
+  ```
+
+  亦可经环境变量提供 dataRoot：`DSH_IA_DATA_DIR=<dir> node scripts/recompute-cum-return.mjs`
+  （缺省 `~/.dsh-ia/data`）。重算口径由单测与 `cumReturnOnCapital` 对齐，防口径漂移。
+
 ## [0.1.0] - 2026-10-13
 
 首个发布版本。`dsh-ia` 是一个基于 [DeepSeek Harness（dsh）](https://deepseek-harness.github.io/deepseek-harness/)
