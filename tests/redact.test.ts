@@ -26,6 +26,9 @@ import {
   MAX_DEPTH_MARKER,
   REDACTED,
   SENSITIVE_KEY_TOKENS,
+  SYMBOL_KEY_TOKENS,
+  isSymbolKey,
+  maskSymbol,
   TRUNCATED_SUFFIX,
   isAmountKey,
   isLongTextKey,
@@ -115,7 +118,7 @@ describe('① 敏感键去敏（保留键名）', () => {
       list: [{ token: 't', qty: 100 }, { safe: 'ok' }],
     }) as Record<string, unknown>
     expect((out.outer as Record<string, unknown>).secret).toBe(REDACTED)
-    expect((out.outer as Record<string, unknown>).symbol).toBe('588000')
+    expect((out.outer as Record<string, unknown>).symbol).toBe('58**00')
     expect(((out.list as unknown[])[0] as Record<string, unknown>).token).toBe(REDACTED)
     expect(((out.list as unknown[])[0] as Record<string, unknown>).qty).toBe(100)
     expect(((out.list as unknown[])[1] as Record<string, unknown>).safe).toBe('ok')
@@ -162,7 +165,7 @@ describe('② 金额 / 成本键去敏', () => {
     expect(AMOUNT_KEY_TOKENS).toContain('pnl')
   })
 
-  it('保留 symbol/qty/op/type/side/sessionId/taskId/traceId 等上下文', () => {
+  it('保留 qty/op/type/side/sessionId/taskId/traceId 等上下文；symbol 单独可读脱敏', () => {
     const input = {
       symbol: '588000',
       qty: 500,
@@ -175,7 +178,7 @@ describe('② 金额 / 成本键去敏', () => {
       name: '科创50ETF',
     }
     const out = redact(input) as Record<string, unknown>
-    expect(out).toEqual(input)
+    expect(out).toEqual({ ...input, symbol: '58**00' })
   })
 })
 
@@ -299,7 +302,7 @@ describe('⑥ 文本级 / 记录级去敏', () => {
 
   it('非敏感赋值 / 普通文本不变', () => {
     expect(redactText('n=7 s=x f=2.5')).toBe('n=7 s=x f=2.5')
-    expect(redactText('symbol=588000')).toBe('symbol=588000')
+    expect(redactText('symbol=588000')).toBe('symbol=58**00')
   })
 
   it('疑似 stack → 裁剪前 N 行；长文本 → 截断', () => {
@@ -315,7 +318,7 @@ describe('⑥ 文本级 / 记录级去敏', () => {
       args: { password: 'hunter2', symbol: '588000', cost: 1.95 },
     })
     expect(rec.msg).toBe('token=[REDACTED]')
-    expect(rec.args).toEqual({ password: REDACTED, symbol: '588000', cost: REDACTED })
+    expect(rec.args).toEqual({ password: REDACTED, symbol: '58**00', cost: REDACTED })
     expect(rec.ts).toBe('T')
   })
 })
@@ -372,7 +375,7 @@ describe('⑦ 集成：exporter 落盘去敏（无明文密钥 / 金额 / 策略
       apiKey: REDACTED,
       password: REDACTED,
       authorization: REDACTED,
-      nested: { secret: REDACTED, symbol: '588000' },
+      nested: { secret: REDACTED, symbol: '58**00' },
       cost: REDACTED,
       pnl: REDACTED,
       positionValue: REDACTED,
@@ -466,7 +469,7 @@ describe('⑨ 裸令牌 / 文本级金额 / 扩展词表（缺陷修复回归）
       'amount=[REDACTED] price=[REDACTED] profit=[REDACTED] value=[REDACTED]',
     )
     // 非金额 / 非敏感键不受影响。
-    expect(redactText('symbol=588000 qty=100')).toBe('symbol=588000 qty=100')
+    expect(redactText('symbol=588000 qty=100')).toBe('symbol=58**00 qty=100')
   })
 
   it('扩展词表（balance/total/equity/nav/cash/shares/pwd）：结构化 + 文本级均遮蔽，上下文保留', () => {
@@ -483,7 +486,7 @@ describe('⑨ 裸令牌 / 文本级金额 / 扩展词表（缺陷修复回归）
     )
     // 既有上下文键仍保留。
     expect(redact({ symbol: '588000', qty: 100, side: 'buy', taskId: 't' })).toEqual({
-      symbol: '588000',
+      symbol: '58**00',
       qty: 100,
       side: 'buy',
       taskId: 't',
@@ -529,6 +532,169 @@ describe('⑨ 裸令牌 / 文本级金额 / 扩展词表（缺陷修复回归）
       expect(rx.test(content), `泄密模式命中: ${rx}`).toBe(false)
     }
     expect(content).toContain(REDACTED)
+  })
+})
+
+// ===========================================================================
+// ⑩ 标的代码可读脱敏 + 金额词表扩展（任务-06）
+// ===========================================================================
+describe('⑩ 标的代码可读脱敏 + 金额词表扩展', () => {
+  it('maskSymbol：保留前 2 / 后 2，中间按原长度 *；长度 ≤ 4 全 *', () => {
+    expect(maskSymbol('002156')).toBe('00**56')
+    expect(maskSymbol('588000')).toBe('58**00')
+    expect(maskSymbol('600519')).toBe('60**19')
+    expect(maskSymbol('AAPL')).toBe('****')
+    expect(maskSymbol('6005')).toBe('****')
+    expect(maskSymbol('600')).toBe('***')
+    expect(maskSymbol('')).toBe('')
+  })
+
+  it('symbol/stockCode/securityCode/instrumentCode/symbolCode/ticker 字符串值 → 可读遮蔽', () => {
+    const input = {
+      symbol: '002156',
+      stockCode: '588000',
+      securityCode: '600519',
+      instrumentCode: '000001',
+      symbolCode: '300750',
+      ticker: 'AAPL',
+    }
+    expect(redact(input)).toEqual({
+      symbol: '00**56',
+      stockCode: '58**00',
+      securityCode: '60**19',
+      instrumentCode: '00**01',
+      symbolCode: '30**50',
+      ticker: '****',
+    })
+    for (const k of Object.keys(input)) expect(isSymbolKey(k), k).toBe(true)
+    for (const need of ['symbol', 'symbolcode', 'stockcode', 'securitycode', 'instrumentcode', 'ticker']) {
+      expect(SYMBOL_KEY_TOKENS).toContain(need)
+    }
+  })
+
+  it('嵌套对象 / 数组内的 symbol 同样脱敏；非字符串值 → [REDACTED]', () => {
+    const out = redact({
+      nested: { symbol: '002156' },
+      list: [{ ticker: 'AAPL' }, { symbol: 600519 }],
+    }) as Record<string, any>
+    expect(out.nested.symbol).toBe('00**56')
+    expect(out.list[0].ticker).toBe('****')
+    expect(out.list[1].symbol).toBe(REDACTED)
+  })
+
+  it('裸 code / errorCode / statusCode / httpCode 不被误伤（排障关键字段）', () => {
+    const input = { code: '002156', errorCode: 'E1001', statusCode: '500', httpCode: '404' }
+    expect(redact(input)).toEqual(input)
+    for (const k of Object.keys(input)) expect(isSymbolKey(k), k).toBe(false)
+  })
+
+  it('文本级 symbol=… / stockCode: … / {"ticker":"…"} → 可读遮蔽', () => {
+    expect(redactText('symbol=002156')).toBe('symbol=00**56')
+    expect(redactText('symbol: 002156')).toBe('symbol: 00**56')
+    expect(redactText('stockCode=588000 qty=100')).toBe('stockCode=58**00 qty=100')
+    expect(redactText('{"ticker":"AAPL"}')).toBe('{"ticker":"****"}')
+    expect(redactText("symbol='600519'")).toBe("symbol='60**19'")
+    expect(redactText('errorCode=E1001 statusCode=500 code=002156')).toBe(
+      'errorCode=E1001 statusCode=500 code=002156',
+    )
+  })
+
+  it('symbolKeyTokens 可覆盖默认词表', () => {
+    const out = redact(
+      { instrumentId: '002156', symbol: '002156' },
+      { symbolKeyTokens: ['instrumentid'] },
+    ) as Record<string, unknown>
+    expect(out.instrumentId).toBe('00**56')
+    expect(out.symbol).toBe('002156')
+    expect(redactText('instrumentId=002156', { symbolKeyTokens: ['instrumentid'] })).toBe(
+      'instrumentId=00**56',
+    )
+  })
+
+  it('新增金额 / 费用键 → [REDACTED]（结构化 + 文本级）', () => {
+    const keys = [
+      'fee',
+      'commission',
+      'tax',
+      'stampDuty',
+      'transferFee',
+      'unrealized',
+      'realized',
+      'drawdown',
+      'turnover',
+      'principal',
+      'capital',
+      'invested',
+      'marketCap',
+      'initialCapital',
+    ]
+    const input: Record<string, unknown> = {}
+    for (const k of keys) input[k] = 123.45
+    const out = redact(input) as Record<string, unknown>
+    for (const k of keys) {
+      expect(out[k], k).toBe(REDACTED)
+      expect(isAmountKey(k), k).toBe(true)
+    }
+    expect(redactText('fee=1 commission=2 tax=3 realized=4 unrealized=5 capital=6')).toBe(
+      'fee=[REDACTED] commission=[REDACTED] tax=[REDACTED] realized=[REDACTED] unrealized=[REDACTED] capital=[REDACTED]',
+    )
+    // 非金额上下文仍保留；`feedback` / `syntax` 不因 `fee` / `tax` 子串被文本级误伤。
+    expect(redactText('qty=100 feedback=good syntax=ok')).toBe('qty=100 feedback=good syntax=ok')
+  })
+})
+
+// ===========================================================================
+describe('⑪ Map 键级去敏（D1 回归：Map 分支不得绕过键口径）', () => {
+  it('symbol / token / cost 三类直接键值对均按键级口径处理', () => {
+    const out = redact(
+      new Map<string, unknown>([
+        ['symbol', '002156'],
+        ['token', 'sk-secret-value'],
+        ['cost', 123],
+      ]),
+    ) as Record<string, unknown>
+    expect(out).toEqual({ symbol: '00**56', token: REDACTED, cost: REDACTED })
+  })
+
+  it('Map 内长文本键照常截断；非字符串 symbol → [REDACTED]', () => {
+    const long = 'x'.repeat(DEFAULT_MAX_TEXT_LENGTH + 50)
+    const out = redact(
+      new Map<string, unknown>([
+        ['strategy', long],
+        ['stockCode', 600519],
+      ]),
+    ) as Record<string, unknown>
+    expect(out.strategy).toBe(long.slice(0, DEFAULT_MAX_TEXT_LENGTH) + TRUNCATED_SUFFIX)
+    expect(out.stockCode).toBe(REDACTED)
+  })
+
+  it('嵌套 Map 逐层生效（Map 值内的 Map 键同样脱敏）', () => {
+    const out = redact(
+      new Map<string, unknown>([
+        ['outer', new Map<string, unknown>([['symbol', '600519'], ['password', 'hunter2']])],
+      ]),
+    ) as Record<string, unknown>
+    expect(out).toEqual({ outer: { symbol: '60**19', password: REDACTED } })
+  })
+
+  it('Map 键数仍受 maxEntries 限制', () => {
+    const map = new Map<string, unknown>([
+      ['a', 1],
+      ['b', 2],
+      ['c', 3],
+    ])
+    expect(redact(map, { maxEntries: 2 })).toEqual({ a: 1, b: 2 })
+  })
+
+  it('非字符串键 → 输出键名 String(k)，且按字符串化键名判定', () => {
+    const out = redact(
+      new Map<unknown, unknown>([
+        [1, 'one'],
+        ['token', 'sk-secret-value'],
+      ]),
+    ) as Record<string, unknown>
+    expect(out['1']).toBe('one')
+    expect(out.token).toBe(REDACTED)
   })
 })
 

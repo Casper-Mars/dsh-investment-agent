@@ -4,7 +4,7 @@
  * 覆盖（对齐任务卡 §验收标准）：
  *   1. JSONL 记录形状（ts/level/name/msg/args/pid/origin + printf 展开）；
  *   2. 按天轮转（跨天 → 不同文件名）；
- *   3. 同日超阈值 → `-1`/`-2` 后缀轮转（小阈值，勿真写 50MB）；
+ *   3. 同日超阈值 → `-1`/`-2` 后缀轮转（小阈值，勿真写 500MB）；
  *   4. 级别过滤（方案严重度序：info / error / warn / debug，含 env 覆盖）；
  *   5. 目录 0o700、文件 0o600；
  *   6. 经 `ctx.logger.exporter(...)` 注册 / 注销；追加注册不影响宿主既有 exporter；

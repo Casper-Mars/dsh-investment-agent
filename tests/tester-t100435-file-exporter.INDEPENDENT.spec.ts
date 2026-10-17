@@ -620,7 +620,7 @@ describe('AC9 隔离', () => {
   it('AC9-3 生产代码未被本 spec 修改（REPORT 约定：仅新增测试）', () => {
     // 断言被测源码文件存在且导出工厂（轻量存在性检查，非内容快照）。
     expect(typeof createFileExporter).toBe('function')
-    expect(DEFAULT_LOG_MAX_SIZE).toBe(50 * 1024 * 1024)
+    expect(DEFAULT_LOG_MAX_SIZE).toBe(500 * 1024 * 1024)
   })
 })
 

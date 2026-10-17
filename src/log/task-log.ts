@@ -49,7 +49,7 @@ import { resolveFinanceLogDir } from '../paths.js'
 /** 环境变量：任务日志单文件上限（字节）；复用宿主日志同名变量。 */
 export const TASK_LOG_MAX_SIZE_ENV = LOG_MAX_SIZE_ENV
 
-/** 任务日志默认单文件上限：10 MB（任务侧，低于宿主日志的 50 MB）。 */
+/** 任务日志默认单文件上限：10 MB（任务侧，低于宿主日志的 500 MB）。 */
 export const DEFAULT_TASK_LOG_MAX_SIZE = 10 * 1024 * 1024
 
 /** 任务日志在日志根目录下的子目录名（`<logDir>/tasks/<taskId>`）。 */

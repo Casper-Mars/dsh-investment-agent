@@ -16,7 +16,7 @@
  *      写盘前经 M5 {@link ./redact.js} 的 {@link redactRecord} 做**字段级去敏**（`msg` 文本级 /
  *      `args` 深遍历）；`sessionId/taskId/traceId` 由 M4 trace 上下文自动并入 `meta`。
  *   3. **按天轮转**：文件名带日期（`message.ts` 的 UTC 日期）→ 跨天自然新开当日文件；
- *      同日若当前文件已达阈值 `DSH_IA_LOG_MAX_SIZE`（默认 50 MB），则递增后缀
+ *      同日若当前文件已达阈值 `DSH_IA_LOG_MAX_SIZE`（默认 500 MB），则递增后缀
  *      `-1`、`-2`… 选下一个未达阈值的文件。
  *   4. **写策略**：`fs.appendFileSync` 逐行追加（单条 JSON + `\n`）——同步写保证
  *      「`export()` 返回后内容已在盘上」，崩溃不丢已写行，且天然保证同进程内写入有序。
@@ -40,7 +40,11 @@
  *      （默认 `['dsh-ia']`）。与上面的级别过滤**叠加**（两者都满足才落盘）。
  *
  * 8. **去敏（M5）**：写盘前对 `msg` 与 `args` 统一去敏——敏感 / 金额键值 → `[REDACTED]`、
- *    长文本截断、`Error` 仅记 message + 前 N 行 stack。去敏口径见 `src/log/redact.ts`。
+ *    标的代码 → 可读遮蔽（如 `002156` → `00**56`）、长文本截断、`Error` 仅记 message +
+ *    前 N 行 stack。去敏口径见 `src/log/redact.ts`。
+ * 9. **保留策略**：创建 exporter 时清理一次过期日志；之后**每天最多一次**（UTC 跨天时
+ *    在写盘前触发）。默认保留 30 天，可经 `DSH_IA_LOG_RETENTION_DAYS` / `retentionDays`
+ *    覆盖；清理失败只降级、不影响写盘。口径见 `src/log/retention.ts`。
  *
  * 不引第三方依赖；不改顶层 `inject`（仍 `['tools','skills','fs']`）。
  */
@@ -53,13 +57,14 @@ import {
   type LogLevel,
 } from './logger.js'
 import { redactRecord, type RedactOptions } from './redact.js'
+import { cleanupExpiredLogs, resolveRetentionDays } from './retention.js'
 import { ensureFinanceLogDir, resolveFinanceLogDir } from '../paths.js'
 
 /** 环境变量：轮转 / 封顶阈值（字节）。默认 {@link DEFAULT_LOG_MAX_SIZE}。 */
 export const LOG_MAX_SIZE_ENV = 'DSH_IA_LOG_MAX_SIZE'
 
-/** 默认单文件大小阈值：50 MB（宿主日志）。 */
-export const DEFAULT_LOG_MAX_SIZE = 50 * 1024 * 1024
+/** 默认单文件大小阈值：500 MB（宿主日志）。 */
+export const DEFAULT_LOG_MAX_SIZE = 500 * 1024 * 1024
 
 /** 同日轮转后缀的防御性上限：极端配置下避免死循环（正常远不会触达）。 */
 const MAX_ROTATION_INDEX = 9999
@@ -77,7 +82,7 @@ export const DEFAULT_EXPORT_NAMES: readonly string[] = ['dsh-ia']
 export interface FileExporterOptions {
   /** 日志目录；缺省时取 `DSH_IA_LOG_DIR` → `~/.dsh-ia/logs`。 */
   dir?: string
-  /** 单文件大小阈值（字节，> 0）；缺省取 `DSH_IA_LOG_MAX_SIZE` → 50 MB。 */
+  /** 单文件大小阈值（字节，> 0）；缺省取 `DSH_IA_LOG_MAX_SIZE` → 500 MB。 */
   maxSize?: number
   /** 最低级别；缺省取 `DSH_IA_LOG_LEVEL` → `info`。 */
   level?: LogLevel | string
@@ -91,6 +96,18 @@ export interface FileExporterOptions {
    * 写盘前经 {@link redactRecord} 对 `msg`（文本级）与 `args`（深遍历）统一去敏。
    */
   redact?: RedactOptions
+  /**
+   * 日志保留天数（> 0）；缺省取 `DSH_IA_LOG_RETENTION_DAYS` → 30 天。
+   * 创建时清理一次；之后每天（UTC）首次写盘前再清理。
+   */
+  retentionDays?: number
+  /**
+   * 时钟注入（测试用）；默认 `Date.now`。
+   *
+   * **统一时间源**：既用于「跨天」门控，也作为过期清理的截止线（透传
+   * `cleanupExpiredLogs({ now })`），因此注入后过期边界完全受控。
+   */
+  now?: () => number
 }
 
 /** 解析 name 白名单：显式非空数组 > 默认；剔除空 / 全空白项（防误配导致全丢弃）。 */
@@ -256,6 +273,12 @@ class FileExporter implements Exporter {
   private readonly names: readonly string[]
   /** 字段级去敏选项（M5）。 */
   private readonly redactOptions: RedactOptions | undefined
+  /** 日志保留天数。 */
+  private readonly retentionDays: number
+  /** 时钟（默认 `Date.now`）。 */
+  private readonly now: () => number
+  /** 上次执行保留清理的 UTC 日期（`YYYY-MM-DD`）；保证每天最多一次。 */
+  private lastCleanupDate: string | undefined
   /** 目录是否已确保存在（仅成功创建后置位，失败则下次重试）。 */
   private dirEnsured = false
   /** 已显式 chmod 为 `0o600` 的文件路径集合（避免逐行重复 chmod）。 */
@@ -267,6 +290,10 @@ class FileExporter implements Exporter {
     this.threshold = resolveLogLevel(options.level)
     this.names = resolveExportNames(options.names)
     this.redactOptions = options.redact
+    this.retentionDays = resolveRetentionDays(options.retentionDays)
+    this.now = typeof options.now === 'function' ? options.now : Date.now
+    // 创建时执行一次清理；失败只降级，不影响后续写盘。
+    this.maybeCleanupExpiredLogs()
   }
 
   /** 单条结构化日志落地（cordis `Exporter` 契约入口）。任何异常吞掉降级。 */
@@ -274,6 +301,7 @@ class FileExporter implements Exporter {
     try {
       if (!this.matchesName(message.name)) return
       if (!this.shouldEmit(message.type)) return
+      this.maybeCleanupExpiredLogs()
       const path = this.resolveTargetPath(tsToDate(message.ts))
       this.ensureDir()
       appendFileSync(path, `${JSON.stringify(this.buildRecord(message))}\n`, { mode: 0o600 })
@@ -312,6 +340,25 @@ class FileExporter implements Exporter {
     }
     if (args !== undefined) record.args = args
     return redactRecord(record, this.redactOptions)
+  }
+
+  /**
+   * 每天（UTC）最多执行一次过期日志清理。
+   *
+   * 创建时调用一次（`lastCleanupDate` 为空 → 立即执行）；`export()` 写盘前再次调用，
+   * 仅当 UTC 日期变化时才真正扫描。**任何异常一律吞掉**：清理不得影响日志落地。
+   */
+  private maybeCleanupExpiredLogs(): void {
+    try {
+      const now = this.now()
+      const today = tsToDate(now)
+      if (this.lastCleanupDate === today) return
+      this.lastCleanupDate = today
+      // 截止线与跨天判定共用同一时间源（`now()`），保证注入时钟语义一致。
+      cleanupExpiredLogs({ dir: this.dir, retentionDays: this.retentionDays, now })
+    } catch {
+      /* 保留清理失败不致命。 */
+    }
   }
 
   /** 幂等确保目录存在（`0o700`）；失败保持未置位以便下次重试。 */
@@ -365,7 +412,7 @@ class FileExporter implements Exporter {
  *
  * @example
  * ```ts
- * const exporter = createFileExporter({ dir, maxSize: 50 * 1024 * 1024, level: 'info' })
+ * const exporter = createFileExporter({ dir, maxSize: 500 * 1024 * 1024, level: 'info' })
  * ctx.logger.exporter(exporter) // 追加注册，注销随 ctx.effect
  * ```
  *

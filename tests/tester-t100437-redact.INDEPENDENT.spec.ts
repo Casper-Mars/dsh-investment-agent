@@ -183,7 +183,7 @@ describe('① 敏感键全量与变体', () => {
       list: [{ token: 't' }, { apiKey: 'k' }, { safe: 1 }],
     }) as Record<string, unknown>
     expect(((out.cfg as any).headers as any).authorization).toBe(REDACTED)
-    expect((out.cfg as any).symbol).toBe('588000')
+    expect((out.cfg as any).symbol).toBe('58**00')
     expect((out.list as any)[0].token).toBe(REDACTED)
     expect((out.list as any)[1].apiKey).toBe(REDACTED)
     expect((out.list as any)[2].safe).toBe(1)
@@ -229,7 +229,7 @@ describe('② 金额 / 成本键去敏 + 上下文保留', () => {
       traceId: 'trace-1',
       name: '科创50ETF',
     }
-    expect(redact(ctx)).toEqual(ctx)
+    expect(redact(ctx)).toEqual({ ...ctx, symbol: '58**00' })
   })
 
   it('B3 isAmountKey 判定 + 词表覆盖', () => {
@@ -248,7 +248,7 @@ describe('② 金额 / 成本键去敏 + 上下文保留', () => {
       nest: { price: 3.14, op: 'buy' },
       arr: [{ pnl: 5 }, { side: 'sell' }],
     }) as Record<string, unknown>
-    expect(out.symbol).toBe('588000')
+    expect(out.symbol).toBe('58**00')
     expect(out.qty).toBe(100)
     expect(out.cost).toBe(REDACTED)
     expect((out.nest as any).price).toBe(REDACTED)
@@ -316,7 +316,7 @@ describe('④ 文本级去敏 redactText', () => {
   })
 
   it('D2 非敏感赋值 / 普通文本逐字不变', () => {
-    expect(redactText('n=7 s=x f=2.5 symbol=588000')).toBe('n=7 s=x f=2.5 symbol=588000')
+    expect(redactText('n=7 s=x f=2.5 symbol=588000')).toBe('n=7 s=x f=2.5 symbol=58**00')
     expect(redactText('hello world')).toBe('hello world')
   })
 
@@ -547,7 +547,7 @@ describe('⑧ 端到端落盘与全局泄密扫描', () => {
       accessKey: REDACTED,
       authorization: REDACTED,
       password: REDACTED,
-      nested: { secret: REDACTED, symbol: '588000' },
+      nested: { secret: REDACTED, symbol: '58**00' },
       cost: REDACTED,
       pnl: REDACTED,
       positionValue: REDACTED,
@@ -600,7 +600,7 @@ describe('⑨ redactRecord', () => {
       args: { password: 'hunter2', symbol: '588000', cost: 1.95, nested: { apiKey: 'k' } },
     })
     expect(rec.msg).toBe('token=[REDACTED]')
-    expect(rec.args).toEqual({ password: REDACTED, symbol: '588000', cost: REDACTED, nested: { apiKey: REDACTED } })
+    expect(rec.args).toEqual({ password: REDACTED, symbol: '58**00', cost: REDACTED, nested: { apiKey: REDACTED } })
     expect(rec.ts).toBe('T')
     expect(rec.name).toBe('dsh-ia')
   })
@@ -699,7 +699,7 @@ describe('⑪ 修复后对抗补充（前缀家族/变体/JSON/多键/反例）'
       'amount=[REDACTED] price=[REDACTED] marketValue=[REDACTED] positionValue=[REDACTED]',
     )
     expect(redactText('cost=1.5 pnl=-2 symbol=588000 qty=100')).toBe(
-      'cost=[REDACTED] pnl=[REDACTED] symbol=588000 qty=100',
+      'cost=[REDACTED] pnl=[REDACTED] symbol=58**00 qty=100',
     )
   })
 

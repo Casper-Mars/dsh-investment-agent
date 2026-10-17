@@ -6,8 +6,11 @@
  *   1. **无明文密钥 / 凭证**：字段名命中敏感词（`token/secret/key/password/...`）→
  *      其值替换为 {@link REDACTED}（`[REDACTED]`），**保留键名**便于排障结构；
  *   2. **无完整台账金额 / 成本**：金额 / 成本类键（`cost/amount/price/pnl/profit/value`…）
- *      → 值替换 `[REDACTED]`；**保留** `symbol / qty / op / type / side /
- *      sessionId / taskId / traceId` 等非敏感上下文键；
+ *      → 值替换 `[REDACTED]`；**保留** `qty / op / type / side / sessionId / taskId /
+ *      traceId` 等非敏感上下文键（`symbol` 单独做可读脱敏，见下条）；
+ *   2.1 **标的代码做可读脱敏**：`symbol/stockCode/securityCode/ticker` 等键的**字符串**
+ *      值 → {@link maskSymbol}（保留前 2 / 后 2 位，中间按原长度 `*` 填充），既避免完整
+ *      标的代码落盘，又保留可排障的可读性（非字符串仍按金额 / 敏感口径 `[REDACTED]`）；
  *   3. **无策略全文**：长文本字段（`text/body/content/strategy/prompt/message`）超阈值
  *      （{@link DEFAULT_MAX_TEXT_LENGTH}，默认 200 字符）→ 截断 + 省略标记
  *      {@link TRUNCATED_SUFFIX}；
@@ -16,7 +19,8 @@
  *   5. **文本级裸令牌 / 金额**：`msg` / `Error.message` / `Error.stack` 等**文本**再做
  *      文本级去敏——「裸令牌」（`Bearer <token>` 与已知前缀 `sk-` / `ghp_` / `xoxb-` /
  *      `AKIA` …）按**前缀 / 形态**判据整体遮蔽（不做通用高熵猜测）；敏感 / 金额键的
- *      `key=value` / `key:value` 赋值（支持一行内多键，空格 / 逗号分隔）值遮蔽。
+ *      `key=value` / `key:value` 赋值（支持一行内多键，空格 / 逗号分隔）值遮蔽；
+ *      标的代码键的赋值做可读遮蔽（`symbol=002156` → `symbol=00**56`）。
  *
  * 设计要点（对齐技术方案《日志完善技术方案（dsh-ia 插件）v1.0》§7 / §10）：
  *   - **纯函数、零第三方依赖**：不引任何包，也不做 IO；
@@ -91,6 +95,42 @@ export const AMOUNT_KEY_TOKENS: readonly string[] = Object.freeze([
   'pnl',
   'profit',
   'value',
+  'fee',
+  'commission',
+  'tax',
+  'stampduty',
+  'transferfee',
+  'unrealized',
+  'realized',
+  'drawdown',
+  'turnover',
+  'principal',
+  'capital',
+  'invested',
+  'marketcap',
+])
+
+// 已知副作用（R1）：结构化键按归一化后**子串**命中，故 `taxonomy`（含 `tax`）、
+// `feedback`（含 `fee`）等会被误判为金额键 → 值替换为 `[REDACTED]`。这是**过度遮蔽**
+// 而非泄露，符合「fail-closed，宁多遮」的方向；文本级 `tax|fee` 带词边界不会误伤，
+// 两级口径存在差异但**保持现状**（不收敛为整词匹配，避免削弱金额遮蔽覆盖面）。
+
+/**
+ * 标的 / 证券代码键子串词表（归一化后按子串命中）。
+ *
+ * 覆盖 `symbol / symbolCode / stockCode / securityCode / instrumentCode / ticker`
+ * （`symbol` 已涵盖 `symbolCode`；其余为自证口径）。
+ *
+ * **刻意不纳入裸 `code`**：`errorCode` / `statusCode` / `httpCode` 等是排障关键字段，
+ * 纳入会把「错误码」误判为标的代码而破坏可观测性。故仅接受语义明确的代码键。
+ */
+export const SYMBOL_KEY_TOKENS: readonly string[] = Object.freeze([
+  'symbol',
+  'symbolcode',
+  'stockcode',
+  'securitycode',
+  'instrumentcode',
+  'ticker',
 ])
 
 /**
@@ -143,6 +183,8 @@ export interface RedactOptions {
   sensitiveKeyTokens?: readonly string[]
   /** 金额键子串词表覆盖。默认 {@link AMOUNT_KEY_TOKENS}。 */
   amountKeyTokens?: readonly string[]
+  /** 标的代码键子串词表覆盖。默认 {@link SYMBOL_KEY_TOKENS}。 */
+  symbolKeyTokens?: readonly string[]
   /** 长文本键覆盖。默认 {@link LONG_TEXT_KEYS}。 */
   longTextKeys?: readonly string[]
 }
@@ -166,6 +208,7 @@ interface ResolvedOptions {
   readonly onCircular: OnCircular
   readonly sensitiveKeyTokens: readonly string[]
   readonly amountKeyTokens: readonly string[]
+  readonly symbolKeyTokens: readonly string[]
   readonly longTextKeys: readonly string[]
 }
 
@@ -191,6 +234,7 @@ function resolveOptions(options: RedactOptions | undefined): ResolvedOptions {
     onCircular: options?.onCircular === 'marker' ? 'marker' : 'throw',
     sensitiveKeyTokens: options?.sensitiveKeyTokens ?? SENSITIVE_KEY_TOKENS,
     amountKeyTokens: options?.amountKeyTokens ?? AMOUNT_KEY_TOKENS,
+    symbolKeyTokens: options?.symbolKeyTokens ?? SYMBOL_KEY_TOKENS,
     longTextKeys: options?.longTextKeys ?? LONG_TEXT_KEYS,
   }
 }
@@ -210,6 +254,27 @@ export function isSensitiveKey(key: string, tokens: readonly string[] = SENSITIV
 export function isAmountKey(key: string, tokens: readonly string[] = AMOUNT_KEY_TOKENS): boolean {
   const n = normalizeKey(key)
   return tokens.some((t) => n.includes(t))
+}
+
+/** 键名是否命中标的 / 证券代码词（子串）。 */
+export function isSymbolKey(key: string, tokens: readonly string[] = SYMBOL_KEY_TOKENS): boolean {
+  const n = normalizeKey(key)
+  return tokens.some((t) => n.includes(t))
+}
+
+/**
+ * 标的代码可读脱敏（纯函数）：保留前 2 位与后 2 位，中间按**原长度**用 `*` 填充。
+ *
+ * 长度 ≤ 4 时全部替换为 `*`（无法同时保留前后各 2 位而不泄露全部内容）。
+ * 例：`002156` → `00**56`；`588000` → `58**00`；`600519` → `60**19`；`AAPL` → `****`。
+ *
+ * @param value 原始标的代码字符串。
+ * @returns 脱敏后的可读代码（长度与原串一致）。
+ */
+export function maskSymbol(value: string): string {
+  const len = value.length
+  if (len <= 4) return '*'.repeat(len)
+  return `${value.slice(0, 2)}${'*'.repeat(len - 4)}${value.slice(len - 2)}`
 }
 
 /** 键名是否为长文本键（归一化后精确命中）。 */
@@ -245,10 +310,27 @@ const SENSITIVE_WORD =
 /**
  * 金额 / 成本键词的正则分支（长词前置）。
  *
- * `costPrice` 由 `cost` 回溯命中、`marketValue` / `positionValue` 由 `value` 或
- * `market[_-]?value` / `position[_-]?value` 命中；文本级词表并入这些金额键。
+ * `costPrice` 由 `cost` 命中、`marketValue` / `positionValue` 由 `value` 或
+ * `market[_-]?value` / `position[_-]?value` 命中；文本级词表同步并入结构化词表新增的
+ * 金融域金额键（手续费 / 税费 / 已实现与未实现盈亏 / 回撤 / 本金等）。
+ * `tax` / `fee` 额外加词边界（前后非字母数字），避免误伤 `syntax` / `feedback`。
  */
-const AMOUNT_WORD = '(?:market[_-]?value|position[_-]?value|costprice|cost|amount|price|pnl|profit|value)'
+const AMOUNT_WORD =
+  '(?:market[_-]?value|position[_-]?value|transfer[_-]?fee|stamp[_-]?duty|market[_-]?cap|costprice|unrealized|commission|drawdown|turnover|principal|realized|invested|capital|marketcap|amount|price|profit|value|cost|pnl|(?<![A-Za-z0-9])(?:tax|fee)(?![A-Za-z0-9]))'
+
+/**
+ * 标的代码赋值形态的正则：`symbol=…` / `stockCode: …` / `{"ticker":"AAPL"}` 等。
+ *
+ * 采用「通用键 + 回调 `isSymbolKey`」而非把词表写死进正则，从而支持
+ * {@link RedactOptions.symbolKeyTokens} 覆盖；回调只处理命中键，其余赋值原样返回。
+ *
+ * 值分支与 {@link ASSIGN_RX} 一致（引号串 / 裸值）；额外把 `&` 纳入收束符，
+ * 避免把 `?symbol=002156&x=1` 查询串整段吞掉。
+ */
+const SYMBOL_ASSIGN_RX = new RegExp(
+  `(["']?)([A-Za-z][A-Za-z0-9_.-]{0,63})(["']?)(\\s*[:=]\\s*)("(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*'|[^\\s,;)\\]}"'&]+)`,
+  'g',
+)
 
 /**
  * 敏感 / 金额赋值形态的正则：**仅匹配敏感或金额键** `key[:=]value`（可选引号包裹键 / 值）。
@@ -312,9 +394,29 @@ function redactBareTokens(text: string, opts: ResolvedOptions): string {
     .replace(KNOWN_TOKEN_RX, () => opts.replacement)
 }
 
-/** 文本级去敏核心（不含 stack / 长文本裁剪）：赋值去敏 → 裸令牌扫描。 */
+/**
+ * 文本级去敏：标的代码赋值 → 可读脱敏（`symbol=002156` → `symbol=00**56`）。
+ *
+ * 仅当键名命中 {@link RedactOptions.symbolKeyTokens} 时处理；引号包裹的值保持同款引号。
+ */
+function redactSymbolAssignments(text: string, opts: ResolvedOptions): string {
+  return text.replace(
+    SYMBOL_ASSIGN_RX,
+    (match: string, q1: string, key: string, q2: string, sep: string, val: string) => {
+      if (!isSymbolKey(key, opts.symbolKeyTokens)) return match
+      if (val === opts.replacement) return match
+      const quote = val.startsWith('"') ? '"' : val.startsWith("'") ? "'" : ''
+      if (quote !== '' && val.length >= 2 && val.endsWith(quote)) {
+        return `${q1}${key}${q2}${sep}${quote}${maskSymbol(val.slice(1, -1))}${quote}`
+      }
+      return `${q1}${key}${q2}${sep}${maskSymbol(val)}`
+    },
+  )
+}
+
+/** 文本级去敏核心（不含 stack / 长文本裁剪）：赋值去敏 → 标的脱敏 → 裸令牌扫描。 */
 function redactTextCore(text: string, opts: ResolvedOptions): string {
-  return redactBareTokens(redactAssignments(text, opts), opts)
+  return redactBareTokens(redactSymbolAssignments(redactAssignments(text, opts), opts), opts)
 }
 
 /** 文本级去敏实现（已解析选项）：赋值 / 裸令牌去敏 → stack 裁剪 → 长文本截断。 */
@@ -351,6 +453,38 @@ function walkArray(arr: readonly unknown[], depth: number, opts: ResolvedOptions
   return out
 }
 
+/**
+ * 单个键值对的去敏口径（**唯一实现**）。
+ *
+ * `walkObject`（普通对象）与 `walk` 的 `Map` 分支共用本函数，避免两处键级判定漂移：
+ *   1. 敏感键 / 金额键 → {@link ResolvedOptions.replacement}（保留键名）；
+ *   2. 标的代码键：字符串 → {@link maskSymbol}，非字符串 → replacement；
+ *   3. 长文本键且值为字符串 → 截断；
+ *   4. 其余 → 递归 {@link walk}。
+ *
+ * @param key   原始键名（Map 分支传入 `String(k)`）。
+ * @param value 原始值。
+ * @param depth 该值所处的深度（普通对象 / Map 均为 `父 depth + 1`）。
+ */
+function redactEntry(
+  key: string,
+  value: unknown,
+  depth: number,
+  opts: ResolvedOptions,
+  seen: Set<object>,
+): unknown {
+  if (isSensitiveKey(key, opts.sensitiveKeyTokens) || isAmountKey(key, opts.amountKeyTokens)) {
+    return opts.replacement
+  }
+  if (isSymbolKey(key, opts.symbolKeyTokens)) {
+    return typeof value === 'string' ? maskSymbol(value) : opts.replacement
+  }
+  if (isLongTextKey(key, opts.longTextKeys) && typeof value === 'string') {
+    return truncateText(value, opts.maxTextLength)
+  }
+  return walk(value, depth, opts, seen)
+}
+
 /** 普通对象深遍历（护栏：键数上限；键名命中词表按口径替换）。 */
 function walkObject(
   obj: Record<string, unknown>,
@@ -363,16 +497,7 @@ function walkObject(
   const n = Math.min(keys.length, opts.maxEntries)
   for (let i = 0; i < n; i += 1) {
     const key = keys[i]
-    if (isSensitiveKey(key, opts.sensitiveKeyTokens) || isAmountKey(key, opts.amountKeyTokens)) {
-      out[key] = opts.replacement
-      continue
-    }
-    const value = obj[key]
-    if (isLongTextKey(key, opts.longTextKeys) && typeof value === 'string') {
-      out[key] = truncateText(value, opts.maxTextLength)
-      continue
-    }
-    out[key] = walk(value, depth, opts, seen)
+    out[key] = redactEntry(key, obj[key], depth, opts, seen)
   }
   if (keys.length > n) out['__truncated__'] = `[+${keys.length - n} more keys]`
   return out
@@ -404,7 +529,10 @@ function walk(value: unknown, depth: number, opts: ResolvedOptions, seen: Set<ob
       let count = 0
       for (const [k, v] of obj) {
         if (count >= opts.maxEntries) break
-        mapped[String(k)] = walk(v, depth + 1, opts, seen)
+        // 关键：键同样要过键级口径（敏感 / 金额 / symbol / 长文本），否则
+        // `Map([['token', …]])` 会明文落盘（fail-open）。与 walkObject 共用 redactEntry。
+        const key = String(k)
+        mapped[key] = redactEntry(key, v, depth + 1, opts, seen)
         count += 1
       }
       return mapped
