@@ -6,8 +6,10 @@
  * 现统一固定到用户主目录下的 `.dsh-ia`：
  *
  *   ~/.dsh-ia                     # workspace 归属目录（会话 cwd）
- *   ~/.dsh-ia/data                # dataRoot（台账 / 策略 / 复盘数据）
+ *   ~/.dsh-ia/assets              # 资产层（可共享、进 git）
+ *   ~/.dsh-ia/data                # dataRoot（用户私有运行时数据，如台账）
  *   ~/.dsh-ia/data/tasks          # 定时任务清单目录
+ *   ~/.dsh-ia/logs                # 日志层（不进 git）
  *
  * `~` 必须经 `os.homedir()` 展开为 fully-qualified 绝对路径（`workspaceRegistry.create`
  * 要求 path 必须是已存在的目录，且拒绝非全限定路径）。
@@ -149,5 +151,30 @@ export function ensureFinanceLogDir(explicit?: string): string {
   } catch {
     /* umask / 平台差异兜底：chmod 失败不致命（mkdir mode 已尽量收紧）。 */
   }
+  return dir
+}
+
+/**
+ * 资产层根目录绝对路径：`~/.dsh-ia/assets`（与 `data/`、`logs/` 平级）。
+ *
+ * 资产层存放**可共享、可进 git** 的资产（skills / strategies / programs / tasks），
+ * 与用户私有的 `data/`（台账等运行时数据）、`logs/` 物理分离，便于整体导出。
+ * 路径必须经 {@link resolveFinanceHomeDir} 派生，从而继承 `DSH_IA_HOME` 覆盖语义。
+ *
+ * 纯计算，无副作用（不创建目录）；目录创建由 {@link ensureAssetsDir} 负责。
+ */
+export function resolveAssetsDir(): string {
+  return join(resolveFinanceHomeDir(), 'assets')
+}
+
+/**
+ * 确保资产层根目录存在并返回其绝对路径：`~/.dsh-ia/assets`。
+ *
+ * `mkdirSync(dir, { recursive: true })` 幂等创建（已存在则 no-op）；
+ * `recursive: true` 会连带创建父目录 `~/.dsh-ia`。
+ */
+export function ensureAssetsDir(): string {
+  const dir = resolveAssetsDir()
+  mkdirSync(dir, { recursive: true })
   return dir
 }
