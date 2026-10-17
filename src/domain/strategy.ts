@@ -38,7 +38,13 @@
  * 纯 TS + node:fs / node:child_process，不接触 dsh/cordis API，亦不 import 任何
  * `@deepseek-ai/*`。
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import type {
   StrategyFull,
@@ -155,6 +161,57 @@ export class StrategyRegistry {
     }
   }
 
+  /** 写入前的文件快照（字节级；用于提交失败时回滚）。 */
+  private snapshotDoc(docPath: string): { existed: boolean; content?: Buffer } {
+    try {
+      return { existed: true, content: readFileSync(docPath) }
+    } catch {
+      // 读取失败但文件存在时只记录存在，回滚时不做破坏性处理。
+      return { existed: existsSync(docPath) }
+    }
+  }
+
+  /**
+   * 写入 / 提交失败时回滚，避免「工作区新正文 + HEAD 旧提交」的半写状态。
+   *
+   * - 文件原先存在 → 恢复原字节内容；
+   * - 文件原先不存在 → 删除；
+   * - 尽力清理 `git add` 留下的暂存状态（`git reset -- <path>`；无 HEAD 等情况失败忽略）。
+   *
+   * 恢复动作本身失败也不得掩盖原始错误：本方法**绝不抛出**，由调用方重新抛出原错误。
+   */
+  private rollbackDoc(
+    docPath: string,
+    rel: string,
+    snapshot: { existed: boolean; content?: Buffer },
+    stagedGitignore: boolean,
+  ): void {
+    try {
+      if (snapshot.existed) {
+        // 未能读到原内容（如权限异常）时不覆盖，避免二次破坏。
+        if (snapshot.content !== undefined) writeFileSync(docPath, snapshot.content)
+      } else {
+        rmSync(docPath, { force: true })
+      }
+    } catch {
+      // 忽略：原始错误优先。
+    }
+
+    try {
+      this.git(['reset', '--', rel], this.assetsDir)
+    } catch {
+      // 首次提交前仓库无 HEAD 等场景，忽略。
+    }
+
+    if (stagedGitignore) {
+      try {
+        this.git(['reset', '--', '.gitignore'], this.assetsDir)
+      } catch {
+        // 同上：清理失败不掩盖原始错误。
+      }
+    }
+  }
+
   /** 解析某 commit 的元数据（不含 parent）。 */
   private commitMeta(rev: string): StrategyVersionMeta | undefined {
     let out: string
@@ -203,7 +260,8 @@ export class StrategyRegistry {
    *   抛冲突错误；文件尚不存在时提供亦抛错；
    * - 正文原样写入，不追加任何 frontmatter / 元数据；
    * - 产生一次 commit（message = rationale 原文）；正文与当前完全一致时 no-op；
-   * - 提交失败（git 不可用 / 无改动 / 无权限）→ 抛错（不静默成功）。
+   * - 提交失败（git 不可用 / hook 失败 / 锁冲突 / 无权限）→ 抛错（不静默成功），
+   *   且**不留下半写状态**：工作区恢复写入前内容（原先不存在则删除），暂存状态尽力清理。
    */
   set(symbol: string, input: StrategyVersionInput): string {
     const rel = this.relPath(symbol)
@@ -227,40 +285,62 @@ export class StrategyRegistry {
     // 内容与 HEAD 完全一致 → no-op（避免空提交报错），但仍确保工作区与提交一致。
     if (current && this.textAt('HEAD', rel) === input.text) {
       const docPath = this.docPath(symbol)
-      mkdirSync(this.docsDir, { recursive: true })
-      writeFileSync(docPath, input.text, 'utf8')
+      const snapshot = this.snapshotDoc(docPath)
+      try {
+        mkdirSync(this.docsDir, { recursive: true })
+        writeFileSync(docPath, input.text, 'utf8')
+      } catch (err) {
+        this.rollbackDoc(docPath, rel, snapshot, false)
+        throw err
+      }
       return current
     }
 
     const docPath = this.docPath(symbol)
-    mkdirSync(this.docsDir, { recursive: true })
-    writeFileSync(docPath, input.text, 'utf8')
+    const snapshot = this.snapshotDoc(docPath)
+    let stagedGitignore = false
+    let committed = false
 
-    this.runGit(['add', '--', rel], 'add')
-    // 首次提交顺带把外层仓库 .gitignore 纳入版本管理（避免永久 untracked）；
-    // 它记录「skills/ 是嵌套独立仓库」这一关键边界，见 src/assets/repo.ts。
-    const hasGitignore = existsSync(join(this.assetsDir, '.gitignore'))
-    if (hasGitignore) this.runGit(['add', '--', '.gitignore'], 'add')
-    const staged = this.runGit(
-      ['diff', '--cached', '--name-only', '--', rel],
-      'diff',
-    ).trim()
-    if (staged === '') {
-      if (current) return current
-      throw new Error(
-        `[strategy-registry] ${symbol} 策略正文无变更，无法生成 git 版本`,
+    try {
+      mkdirSync(this.docsDir, { recursive: true })
+      writeFileSync(docPath, input.text, 'utf8')
+
+      this.runGit(['add', '--', rel], 'add')
+      // 首次提交顺带把外层仓库 .gitignore 纳入版本管理（避免永久 untracked）；
+      // 它记录「skills/ 是嵌套独立仓库」这一关键边界，见 src/assets/repo.ts。
+      const hasGitignore = existsSync(join(this.assetsDir, '.gitignore'))
+      if (hasGitignore) {
+        this.runGit(['add', '--', '.gitignore'], 'add')
+        stagedGitignore = true
+      }
+      const staged = this.runGit(
+        ['diff', '--cached', '--name-only', '--', rel],
+        'diff',
+      ).trim()
+      if (staged === '') {
+        if (current) return current
+        throw new Error(
+          `[strategy-registry] ${symbol} 策略正文无变更，无法生成 git 版本`,
+        )
+      }
+
+      this.runGit(
+        ['commit', '-m', input.rationale, '--', rel, ...(hasGitignore ? ['.gitignore'] : [])],
+        'commit',
       )
+      committed = true
+      const sha = this.runGit(['rev-parse', 'HEAD'], 'rev-parse').trim()
+      if (!sha) {
+        throw new Error(`[strategy-registry] ${symbol} 提交后无法解析 HEAD`)
+      }
+      return sha.slice(0, SHORT_SHA_LENGTH)
+    } catch (err) {
+      // commit 已成功（如后续 rev-parse 异常）时不得回滚，否则工作区会落后于 HEAD。
+      if (!committed) {
+        this.rollbackDoc(docPath, rel, snapshot, stagedGitignore)
+      }
+      throw err
     }
-
-    this.runGit(
-      ['commit', '-m', input.rationale, '--', rel, ...(hasGitignore ? ['.gitignore'] : [])],
-      'commit',
-    )
-    const sha = this.runGit(['rev-parse', 'HEAD'], 'rev-parse').trim()
-    if (!sha) {
-      throw new Error(`[strategy-registry] ${symbol} 提交后无法解析 HEAD`)
-    }
-    return sha.slice(0, SHORT_SHA_LENGTH)
   }
 
   /**

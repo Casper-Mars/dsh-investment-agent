@@ -93,7 +93,9 @@ export interface StrategyVersionInput {
   rationale: string
   /** 期望的当前版本（git 短 SHA，可选；用于乐观并发校验）。 */
   parentVersion?: string
-  /** 生成者。 */
+  /** 生成者。
+   * @deprecated 不再生效：commit 作者恒为 `dsh-ia`（见 src/assets/git.ts），
+   *   该字段仅为兼容旧调用方保留，写入时被忽略。 */
   by?: string
 }
 

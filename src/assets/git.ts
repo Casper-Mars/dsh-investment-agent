@@ -13,6 +13,9 @@
  *   - 不新增第三方依赖，仅 `node:child_process`；
  *   - 不依赖宿主机全局 git config：以 `-c user.name/user.email` 显式提供身份，
  *     并同时设置 `GIT_AUTHOR_*` / `GIT_COMMITTER_*` 环境变量双保险；
+ *   - 固定 `-c core.autocrlf=false`：资产正文必须**逐字节保真**（验收 AC2）。
+ *     若宿主机配置 `core.autocrlf=input/true`，git add 会把 CRLF 规范化为 LF，
+ *     导致 `git show` 回读的正文与写入原文不再逐字节一致。
  *   - 本模块只提供「执行器 + 身份 + init 基元」，不含任何业务语义。
  */
 import { execFileSync } from 'node:child_process'
@@ -36,6 +39,9 @@ export function defaultGitRunner(args: string[], cwd: string): string {
       `user.name=${GIT_IDENTITY_NAME}`,
       '-c',
       `user.email=${GIT_IDENTITY_EMAIL}`,
+      // 字节保真：禁止 CRLF→LF 的入库规范化，也不在 checkout 时改写行尾。
+      '-c',
+      'core.autocrlf=false',
       ...args,
     ],
     {

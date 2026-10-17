@@ -23,6 +23,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { StrategyRegistry } from '../src/domain/strategy.js'
 import { ensureAssetsRepo } from '../src/assets/repo.js'
+import { defaultGitRunner } from '../src/assets/git.js'
 
 // git 子进程在并行测试下较慢：放宽单测超时，避免时序抖动。
 vi.setConfig({ testTimeout: 30000 })
@@ -76,6 +77,46 @@ describe('strategy-registry.set（git 版本）', () => {
     expect(onDisk).toBe(text)
     expect(onDisk.split('\n')[0].startsWith('---')).toBe(false)
     expect(reg.get('588000')?.text).toBe(text)
+  })
+
+  it('仓库 core.autocrlf=true 时，git show 回读仍与原文逐字节相等（固定 false）', () => {
+    reg.set('588000', { text: 'seed', rationale: 'init' })
+    // 模拟宿主机 / 仓库级 core.autocrlf=input|true：命令行 -c 必须压过它。
+    git(['config', 'core.autocrlf', 'true'])
+
+    const text = '# 策略\r\n\r\n阈值 0.6 —— 中文 & emoji 🚀\r\n末行无换行'
+    reg.set('588000', { text, rationale: 'crlf' })
+
+    const blob = git(['show', 'HEAD:strategies/588000.md'])
+    expect(Buffer.from(blob, 'utf8').equals(Buffer.from(text, 'utf8'))).toBe(true)
+    expect(blob).toBe(text)
+  })
+
+  it('commit 失败 → 回滚工作区与暂存区，get 仍返回旧正文（无半写状态）', () => {
+    const v1 = reg.set('588000', { text: '旧正文', rationale: 'r1' })
+    const failing = (args: string[], cwd: string): string => {
+      if (args[0] === 'commit') throw new Error('commit rejected by hook')
+      return defaultGitRunner(args, cwd)
+    }
+    const broken = new StrategyRegistry(dir, failing)
+
+    expect(() => broken.set('588000', { text: '新正文', rationale: 'r2' })).toThrow(
+      /commit/,
+    )
+
+    // 文件原先存在：恢复原内容，HEAD / get 仍是旧版本。
+    expect(readFileSync(join(dir, 'strategies', '588000.md'), 'utf8')).toBe('旧正文')
+    expect(broken.get('588000')?.text).toBe('旧正文')
+    expect(broken.get('588000')?.version).toBe(v1)
+    expect(broken.current('588000')).toBe(v1)
+    // 暂存区已清理：工作区与 HEAD 一致，无待提交改动。
+    expect(git(['status', '--porcelain', '--', 'strategies/588000.md']).trim()).toBe('')
+
+    // 文件原先不存在：失败后不得残留（也不留下暂存条目）。
+    expect(() => broken.set('000001', { text: '首版', rationale: 'r3' })).toThrow(/commit/)
+    expect(existsSync(join(dir, 'strategies', '000001.md'))).toBe(false)
+    expect(broken.get('000001')).toBeUndefined()
+    expect(git(['status', '--porcelain', '--', 'strategies/000001.md']).trim()).toBe('')
   })
 
   it('每次变更产生一次 commit，version 为新短 SHA', () => {
