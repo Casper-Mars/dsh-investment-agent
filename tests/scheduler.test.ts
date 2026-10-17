@@ -101,7 +101,7 @@ function makeTask(id: string, overrides: Partial<TaskDef> = {}): TaskDef {
     id,
     name: `任务-${id}`,
     cron: '0 9 * * *',
-    task_path: `/tasks/${id}/task.ts`,
+    task_path: `/assets/programs/${id}/task.ts`,
     enabled: true,
     ...overrides,
   }
@@ -313,7 +313,7 @@ describe('异常隔离', () => {
       makeTask('b', { cron: '* * * * *' }),
     ]
     // a 会 reject。
-    runner.outcomes.set('/tasks/a/task.ts', () => Promise.reject(new Error('boom')))
+    runner.outcomes.set('/assets/programs/a/task.ts', () => Promise.reject(new Error('boom')))
     const s = createScheduler({ store, runner, timer, clock })
     s.start()
 
@@ -330,7 +330,7 @@ describe('异常隔离', () => {
 
     // 让微任务（reject 的 catch + finally）跑完。
     await vi.waitFor(() => {
-      expect(runner.calls).toContain('/tasks/a/task.ts')
+      expect(runner.calls).toContain('/assets/programs/a/task.ts')
     })
 
     // 两个任务都应重设 timer（a 的 reject 被隔离，仍重设）。
@@ -342,7 +342,7 @@ describe('异常隔离', () => {
       makeTask('a', { cron: '* * * * *' }),
       makeTask('b', { cron: '* * * * *' }),
     ]
-    runner.outcomes.set('/tasks/a/task.ts', () => {
+    runner.outcomes.set('/assets/programs/a/task.ts', () => {
       throw new Error('sync boom')
     })
     const s = createScheduler({ store, runner, timer, clock })
@@ -357,7 +357,7 @@ describe('异常隔离', () => {
 
     // 同步抛错被隔离：两个任务都应触发（b 也触发）、且都重设 timer。
     await vi.waitFor(() => {
-      expect(runner.calls).toContain('/tasks/b/task.ts')
+      expect(runner.calls).toContain('/assets/programs/b/task.ts')
     })
     await vi.waitFor(() => expect(timer.pending).toBe(2))
   })
@@ -566,7 +566,7 @@ describe('依赖注入（全可注入）', () => {
     const timer = new FakeTimer(clock)
     const log = vi.fn()
 
-    const reason = '[runner] 任务输出不可解析（无有效结果 JSON）: /tasks/t/task.ts'
+    const reason = '[runner] 任务输出不可解析（无有效结果 JSON）: /assets/programs/t/task.ts'
     const detail =
       'stdout 最后非空行无有效 `{shouldWake,data?}` 单行 JSON（或 shouldWake 非 boolean / data 非 string）'
     runner.defaultOutcome = () => ({
@@ -589,7 +589,7 @@ describe('依赖注入（全可注入）', () => {
 
     // runner.run 为 Promise 化的 fire → 等待异步日志落地。
     await vi.waitFor(() => {
-      expect(runner.calls).toContain('/tasks/t/task.ts')
+      expect(runner.calls).toContain('/assets/programs/t/task.ts')
     })
 
     // 断言：调度层以 error 级记录失败，内容含任务 id 与 reason/detail 关键片段。
@@ -604,7 +604,7 @@ describe('依赖注入（全可注入）', () => {
     expect(parseMsg).toContain('任务 t')
     expect(parseMsg).toContain('执行失败')
     // reason 关键片段（含入口路径）。
-    expect(parseMsg).toContain('/tasks/t/task.ts')
+    expect(parseMsg).toContain('/assets/programs/t/task.ts')
     expect(parseMsg).toContain('无有效结果 JSON')
     // detail 关键片段（区分三种具体违约）。
     expect(parseMsg).toContain('shouldWake 非 boolean')

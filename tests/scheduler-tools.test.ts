@@ -32,7 +32,7 @@ let tools: ToolDefinition[]
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'dsh-ia-schedtools-'))
-  tasksDir = join(dir, 'data', 'tasks')
+  tasksDir = join(dir, 'assets', 'tasks')
   store = new TaskStore(tasksDir)
   reloadCalls = 0
   tools = createSchedulerTools({
@@ -70,7 +70,7 @@ function validCreate(overrides: Record<string, unknown> = {}): Record<string, un
     id: 'market-pulse',
     name: '市场脉搏',
     cron: '0 9 * * *',
-    task_path: 'marketPulseTask',
+    task_path: 'assets/programs/market-pulse/task.ts',
     ...overrides,
   }
 }
@@ -232,49 +232,40 @@ describe('AC-5 路径段守卫（[path-guard]）', () => {
 })
 
 // ---------------------------------------------------------------------------
-// AC-10：task_path 多级相对路径校验语义（复验修复重点）
+// AC-10：task_path 必须位于 assets/programs/ 下（任务程序资产目录）
 //
-// 修复前：task_path 被当作「单段」用 assertSafeSegment 校验，合法的多级相对路径
-// （如 tasks/market-pulse/task.ts，含 `/`）被误拒绝。
-// 修复后：safeTaskPath 按 `/` 切分逐段校验再 join('/') 重组；显式拒绝反斜杠。
+// 新契约：task_path 是相对 FINANCE_HOME 的多级相对路径，且必须以
+// `assets/programs/` 开头；旧 `tasks/<id>/task.ts` / `data/tasks/...` 一律拒绝。
+// 逐段 assertSafeSegment 仍负责防目录穿越与非法字符。
 // ---------------------------------------------------------------------------
-describe('AC-10 task_path 多级相对路径语义', () => {
+describe('AC-10 task_path 必须位于 assets/programs/ 下', () => {
   const validMultiLevel = [
-    'tasks/market-pulse/task.ts',
-    'tasks/foo/task.ts',
-    'a/b/c/d.ts',
-    'a/b.ts',
+    'assets/programs/market-pulse/task.ts',
+    'assets/programs/foo/task.ts',
+    'assets/programs/foo/lib/shared.ts',
   ]
 
-  it.each(validMultiLevel)('合法多级路径 task_path=%j 应通过', async (task_path) => {
+  it.each(validMultiLevel)('合法路径 task_path=%j 应通过', async (task_path) => {
     const v = (await run('task_create', validCreate({ task_path }))) as { task: TaskDef }
     expect(v.task.task_path).toBe(task_path)
     expect(store.get('market-pulse')?.task_path).toBe(task_path)
   })
 
-  const validSingleDegenerate = ['task.ts', 'market-pulse.ts', 'marketPulseTask']
-
-  it.each(validSingleDegenerate)('退化单段路径 task_path=%j 应通过', async (task_path) => {
-    const v = (await run('task_create', validCreate({ task_path }))) as { task: TaskDef }
-    expect(v.task.task_path).toBe(task_path)
-  })
-
-  const badMultiLevel = [
-    'tasks/../etc/task.ts', // 含 `..` 段（目录穿越）
-    'tasks//task.ts', // 空段
-    'ta b/task.ts', // 含空格非法字符段
-    '/abs/task.ts', // 绝对路径（首段为空）
-    'tasks\evil\task.ts', // 含反斜杠 / Windows 分隔符
-    'C:\evil\task.ts', // Windows 盘符
+  const badPaths = [
+    'data/tasks/x/task.ts', // 旧数据目录
+    'tasks/x/task.ts', // 旧布局
+    '../x/task.ts', // 目录穿越
+    'assets/tasks/x/task.ts', // 任务定义目录不是程序目录
+    'a/b/c.ts', // 任意目录
+    'assets/../x/task.ts', // 含 `..`
+    'assets///task.ts', // 空段
+    'assets/pro grams/task.ts', // 含空格
+    '/abs/task.ts', // 绝对路径
     './task.ts', // `.` 段
-    'tasks/.hidden/task.ts', // 隐式（合法，但保留对照）
+    'C:\\evil\\task.ts', // Windows 盘符
   ]
 
-  // 注意：`.hidden` 段匹配 [A-Za-z0-9._-]+，因此 tasks/.hidden/task.ts 实际应**通过**。
-  // 此处仅前 6 项为非法（目录穿越/非法字符），下面单独断言非法项。
-  const multiLevelInvalid = badMultiLevel.slice(0, 6)
-
-  it.each(multiLevelInvalid)('非法多级路径 task_path=%j 应抛 [path-guard]', async (task_path) => {
+  it.each(badPaths)('非法路径 task_path=%j 抛 [path-guard]', async (task_path) => {
     await expect(
       run('task_create', validCreate({ task_path })),
     ).rejects.toThrow(/\[path-guard\]/)
@@ -282,9 +273,15 @@ describe('AC-10 task_path 多级相对路径语义', () => {
     expect(store.get('market-pulse')).toBeUndefined()
   })
 
-  it('含反斜杠的路径抛错信息含 [path-guard]（不回退到单段语义）', async () => {
+  it('非 assets/programs/ 前缀的错误信息明确指出前缀要求', async () => {
     await expect(
-      run('task_create', validCreate({ task_path: 'tasks\evil\task.ts' })),
+      run('task_create', validCreate({ task_path: 'tasks/x/task.ts' })),
+    ).rejects.toThrow('必须以 assets/programs/ 开头')
+  })
+
+  it('含反斜杠的路径抛错信息含 [path-guard]', async () => {
+    await expect(
+      run('task_create', validCreate({ task_path: 'assets\\programs\\x\\task.ts' })),
     ).rejects.toThrow(/\[path-guard\]/)
   })
 
@@ -295,11 +292,11 @@ describe('AC-10 task_path 多级相对路径语义', () => {
   })
 
   it('task_update 传入非法多级路径也抛错且原值保留', async () => {
-    await run('task_create', validCreate({ task_path: 'tasks/foo/task.ts' }))
+    await run('task_create', validCreate({ task_path: 'assets/programs/foo/task.ts' }))
     await expect(
       run('task_update', { id: 'market-pulse', task_path: 'tasks/../evil.ts' }),
     ).rejects.toThrow(/\[path-guard\]/)
-    expect(store.get('market-pulse')?.task_path).toBe('tasks/foo/task.ts')
+    expect(store.get('market-pulse')?.task_path).toBe('assets/programs/foo/task.ts')
   })
 })
 
@@ -342,7 +339,7 @@ describe('AC-7 返回 task 全字段', () => {
       id: 'market-pulse',
       name: '市场脉搏',
       cron: '0 9 * * *',
-      task_path: 'marketPulseTask',
+      task_path: 'assets/programs/market-pulse/task.ts',
       enabled: true,
     })
   })

@@ -106,26 +106,41 @@ function safeSegment(value: unknown, label: string): string {
 }
 
 /**
- * 校验多级相对路径（如 `tasks/market-pulse/task.ts`），并逐段复用
+ * 校验多级相对路径（如 `assets/programs/market-pulse/task.ts`），并逐段复用
  * {@link assertSafeSegment} 防目录穿越（§2.1 / §3.2 / §10.1 第 4 条）。
  *
  * 语义：`task_path` 是**多级相对路径**，不是单段。逐段校验意味着：
  * - 按 `/` 切分，每个段都必须是合法段（`^[A-Za-z0-9._-]+$`）；
  * - 任一段为 `.` / `..` / 空串 / 含非法字符 → 拒绝（防目录穿越）；
  * - 绝对路径（首段为空，如 `/abs/task.ts`）与 Windows 盘符（`C:\...`）
- *   因段内含 `:` 或空首段 / `\` 字符被拒绝。
+ *   因段内含 `:` 或空首段 / `\` 字符被拒绝；
+ * - 必须以 `assets/programs/` 开头（任务程序资产目录），否则拒绝——杜绝工具层
+ *   把 `task_path` 指回 `data/` 等旧路径或任意目录。
  */
 function safeTaskPath(value: unknown): string {
   if (typeof value !== 'string' || value.length === 0) {
     // 统一走 assertSafeSegment 抛 [path-guard]，保持错误风格一致。
     return assertSafeSegment(value, 'task_path')
   }
-  // 拒绝反斜杠（Windows 分隔符），避免跨平台歧义与 `\` 逃过 RE。
-  if (value.includes('\\')) {
-    throw new Error(`[path-guard] task_path 非法：${JSON.stringify(value)}`)
+  const hint = '必须以 assets/programs/ 开头'
+  // 统一拒绝文案：所有 `task_path` 非法场景都带上前缀指引，避免调用方拿到
+  // 只有片段信息（如 `".."`）的歧义错误。
+  const reject = (detail: string): never => {
+    throw new Error(
+      `[path-guard] task_path 非法：${JSON.stringify(value)}（${hint}${detail === '' ? '' : `；${detail}`}）`,
+    )
   }
-  const segments = value.split('/')
-  const checked = segments.map((seg) => assertSafeSegment(seg, 'task_path'))
+  // 拒绝反斜杠（Windows 分隔符），避免跨平台歧义与 `\` 逃过 RE。
+  if (value.includes('\\')) reject('不得使用反斜杠')
+  if (!value.startsWith('assets/programs/')) reject('')
+  let checked: string[] = []
+  try {
+    checked = value.split('/').map((seg) => assertSafeSegment(seg, 'task_path'))
+  } catch (err) {
+    reject(err instanceof Error ? err.message : String(err))
+  }
+  // 前缀校验：必须在 assets/programs/ 之下（至少 `assets/programs/<file>` 三段）。
+  if (checked.length < 3) reject('至少为 assets/programs/<id>/<file>')
   return checked.join('/')
 }
 
@@ -203,7 +218,7 @@ function createTaskCreateTool(opts: SchedulerToolsOptions): ToolDefinition {
       id: { type: 'string', required: true, description: '任务唯一标识（如 market-pulse）' },
       name: { type: 'string', required: true, description: '人类可读名称' },
       cron: { type: 'string', required: true, description: 'cron 表达式（5 段，Asia/Shanghai）' },
-      task_path: { type: 'string', required: true, description: '任务程序入口文件路径（如 tasks/market-pulse/task.ts）' },
+      task_path: { type: 'string', required: true, description: '任务程序入口文件路径（必须形如 assets/programs/<id>/task.ts）' },
       enabled: { type: 'boolean', description: '是否启用（缺省 true）' },
     },
     output: {
@@ -311,7 +326,7 @@ function createTaskUpdateTool(opts: SchedulerToolsOptions): ToolDefinition {
       id: { type: 'string', required: true, description: '任务唯一标识（定位目标）' },
       name: { type: 'string', description: '新名称（缺省保持原值）' },
       cron: { type: 'string', description: '新 cron 表达式（缺省保持原值）' },
-      task_path: { type: 'string', description: '新任务入口路径（缺省保持原值）' },
+      task_path: { type: 'string', description: '新任务入口路径，必须形如 assets/programs/<id>/task.ts（缺省保持原值）' },
       enabled: { type: 'boolean', description: '是否启用（缺省保持原值）' },
     },
     output: {

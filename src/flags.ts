@@ -8,7 +8,7 @@
  *
  * 两个可选环境变量：
  *   - `DSH_IA_HOME`：覆盖工作区根目录（默认 `~/.dsh-ia`）。
- *     data/、tasks/、skills/、workspace 归属全部跟随该目录。
+ *     data/、assets/（tasks/programs/skills/strategies）、logs/、workspace 归属全部跟随该目录。
  *   - `DSH_IA_SESSION_ID`：覆盖固定会话 id（默认 `investment-advisor`）。
  *     session 持久化文件、唤醒投递目标、开场 notice 目标全部跟随该 id。
  *

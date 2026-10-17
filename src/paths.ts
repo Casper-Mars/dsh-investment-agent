@@ -7,8 +7,9 @@
  *
  *   ~/.dsh-ia                     # workspace 归属目录（会话 cwd）
  *   ~/.dsh-ia/assets              # 资产层（可共享、进 git）
+ *   ~/.dsh-ia/assets/tasks        # 定时任务定义（TaskDef，可共享）
+ *   ~/.dsh-ia/assets/programs     # 定时任务程序（task.ts 及依赖，可共享）
  *   ~/.dsh-ia/data                # dataRoot（用户私有运行时数据，如台账）
- *   ~/.dsh-ia/data/tasks          # 定时任务清单目录
  *   ~/.dsh-ia/logs                # 日志层（不进 git）
  *
  * `~` 必须经 `os.homedir()` 展开为 fully-qualified 绝对路径（`workspaceRegistry.create`
@@ -68,15 +69,6 @@ export function ensureFinanceDataDir(): string {
   const dir = resolveFinanceDataDir()
   mkdirSync(dir, { recursive: true })
   return dir
-}
-
-/**
- * 默认任务清单目录绝对路径：`~/.dsh-ia/data/tasks`。
- *
- * 纯计算，无副作用；目录由 `TaskStore.save` 首次写入时惰性创建。
- */
-export function resolveFinanceTasksDir(): string {
-  return join(resolveFinanceHomeDir(), 'data', 'tasks')
 }
 
 /**
@@ -175,6 +167,56 @@ export function resolveAssetsDir(): string {
  */
 export function ensureAssetsDir(): string {
   const dir = resolveAssetsDir()
+  mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+/**
+ * 任务定义目录绝对路径：`~/.dsh-ia/assets/tasks`。
+ *
+ * 任务定义（`<id>.json`，即 `TaskDef`）属于**可分享资产**，与 skills / strategies
+ * 同处资产层、进 assets git；与用户私有的 `data/` 运行时数据分离。
+ *
+ * 纯计算，无副作用（不创建目录）；目录创建由 {@link ensureAssetsTasksDir} 或
+ * `TaskStore.save` 首次写入时惰性创建。
+ */
+export function resolveAssetsTasksDir(): string {
+  return join(resolveAssetsDir(), 'tasks')
+}
+
+/**
+ * 任务程序目录绝对路径：`~/.dsh-ia/assets/programs`。
+ *
+ * 任务程序（采集/监听代码，含 `package.json` / `task.ts` / `lib/…`）属于可分享资产。
+ * `TaskDef.task_path` 以 `assets/programs/<id>/task.ts` 的形式表达，且解析基准始终是
+ * {@link resolveFinanceHomeDir}（即 `~/.dsh-ia`），**不是** assetsDir——否则会重复拼
+ * `assets/`。
+ *
+ * 纯计算，无副作用（不创建目录）。
+ */
+export function resolveAssetsProgramsDir(): string {
+  return join(resolveAssetsDir(), 'programs')
+}
+
+/**
+ * 确保任务定义目录存在并返回其绝对路径：`~/.dsh-ia/assets/tasks`。
+ *
+ * `mkdirSync(dir, { recursive: true })` 幂等创建（已存在则 no-op），连带创建父级
+ * `assets/` 与 `~/.dsh-ia`。
+ */
+export function ensureAssetsTasksDir(): string {
+  const dir = resolveAssetsTasksDir()
+  mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+/**
+ * 确保任务程序目录存在并返回其绝对路径：`~/.dsh-ia/assets/programs`。
+ *
+ * `mkdirSync(dir, { recursive: true })` 幂等创建（已存在则 no-op）。
+ */
+export function ensureAssetsProgramsDir(): string {
+  const dir = resolveAssetsProgramsDir()
   mkdirSync(dir, { recursive: true })
   return dir
 }

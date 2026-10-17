@@ -104,7 +104,7 @@ function makeTask(id: string, overrides: Partial<TaskDef> = {}): TaskDef {
     id,
     name: `任务-${id}`,
     cron: '0 9 * * *',
-    task_path: `tasks/${id}/task.ts`,
+    task_path: `assets/programs/${id}/task.ts`,
     enabled: true,
     ...overrides,
   }
@@ -159,7 +159,7 @@ afterEach(() => {
 describe('T11-I1 tools→store→scheduler 端到端：写后即时生效', () => {
   it('task_create 落盘 → reload → 新任务被调度；到点触发 FakeRunner；disable/enable/delete 同步 timer', async () => {
     const dir = mkTmp()
-    const tasksDir = join(dir, 'tasks')
+    const tasksDir = join(dir, 'assets', 'tasks')
     const store = new TaskStore(tasksDir)
     const clock = new FakeClock(BASE)
     const timer = new FakeTimer(clock)
@@ -176,14 +176,14 @@ describe('T11-I1 tools→store→scheduler 端到端：写后即时生效', () =
       id: 'market-pulse',
       name: '市场脉搏',
       cron: '0 9 * * *',
-      task_path: 'tasks/market-pulse/task.ts',
+      task_path: 'assets/programs/market-pulse/task.ts',
     })
     expect(created.ok).toBe(true)
     expect(created.task).toEqual({
       id: 'market-pulse',
       name: '市场脉搏',
       cron: '0 9 * * *',
-      task_path: 'tasks/market-pulse/task.ts',
+      task_path: 'assets/programs/market-pulse/task.ts',
       enabled: true,
     })
     // 落盘真实存在
@@ -196,7 +196,7 @@ describe('T11-I1 tools→store→scheduler 端到端：写后即时生效', () =
     clock.set(new Date(firstAt))
     timer.fireDue(firstAt)
     await vi.waitFor(() => expect(runner.calls.length).toBe(1))
-    expect(runner.calls[0]).toBe('tasks/market-pulse/task.ts')
+    expect(runner.calls[0]).toBe('assets/programs/market-pulse/task.ts')
     // 链式自调度：触发后重设下一次 timer
     await vi.waitFor(() => expect(timer.pending).toBe(1))
 
@@ -225,7 +225,7 @@ describe('T11-I1 tools→store→scheduler 端到端：写后即时生效', () =
 
   it('多任务并存：各自独立 timer；disable 其一不影响另一', async () => {
     const dir = mkTmp()
-    const store = new TaskStore(join(dir, 'tasks'))
+    const store = new TaskStore(join(dir, 'assets', 'tasks'))
     const clock = new FakeClock(BASE)
     const timer = new FakeTimer(clock)
     const runner = new FakeRunner()
@@ -237,13 +237,13 @@ describe('T11-I1 tools→store→scheduler 端到端：写后即时生效', () =
       id: 'a',
       name: 'A',
       cron: '0 9 * * *',
-      task_path: 'tasks/a/task.ts',
+      task_path: 'assets/programs/a/task.ts',
     })
     await run(tools, 'task_create', {
       id: 'b',
       name: 'B',
       cron: '30 10 * * *',
-      task_path: 'tasks/b/task.ts',
+      task_path: 'assets/programs/b/task.ts',
     })
     expect(timer.pending).toBe(2)
 
@@ -259,7 +259,7 @@ describe('T11-I1 tools→store→scheduler 端到端：写后即时生效', () =
     const at = timer.timers[0].at
     clock.set(new Date(at))
     timer.fireDue(at)
-    await vi.waitFor(() => expect(runner.calls).toContain('tasks/b/task.ts'))
+    await vi.waitFor(() => expect(runner.calls).toContain('assets/programs/b/task.ts'))
   })
 })
 
@@ -270,13 +270,13 @@ describe('T11-I1 tools→store→scheduler 端到端：写后即时生效', () =
 describe('T11-C1 store 持久化结构契约（对齐 TaskDef 全字段）', () => {
   it('落盘 JSON 恰含 TaskDef 五字段（id/name/cron/task_path/enabled），round-trip 等价', () => {
     const dir = mkTmp()
-    const tasksDir = join(dir, 'tasks')
+    const tasksDir = join(dir, 'assets', 'tasks')
     const store = new TaskStore(tasksDir)
     const task: TaskDef = {
       id: 'contract',
       name: '契约任务',
       cron: '0 9 * * *',
-      task_path: 'tasks/contract/task.ts',
+      task_path: 'assets/programs/contract/task.ts',
       enabled: true,
     }
     store.save(task)
@@ -297,14 +297,14 @@ describe('T11-C1 store 持久化结构契约（对齐 TaskDef 全字段）', () 
 
   it('list() 对缺字段记录判为 corrupted；对多余字段记录仍然接受（守卫只做最小结构校验）', () => {
     const dir = mkTmp()
-    const tasksDir = join(dir, 'tasks')
+    const tasksDir = join(dir, 'assets', 'tasks')
     const store = new TaskStore(tasksDir)
     mkdirSync(tasksDir, { recursive: true })
 
     // 缺 enabled → 损坏
     writeFileSync(
       join(tasksDir, 'missing.json'),
-      JSON.stringify({ id: 'missing', name: 'M', cron: '0 9 * * *', task_path: 't' }),
+      JSON.stringify({ id: 'missing', name: 'M', cron: '0 9 * * *', task_path: 'assets/programs/missing/task.ts' }),
       'utf8',
     )
     // 多余字段 → 仍为合法（结构守卫只要求五字段存在且类型吻合）
@@ -314,7 +314,7 @@ describe('T11-C1 store 持久化结构契约（对齐 TaskDef 全字段）', () 
         id: 'extra',
         name: 'E',
         cron: '0 9 * * *',
-        task_path: 'tasks/extra/task.ts',
+        task_path: 'assets/programs/extra/task.ts',
         enabled: true,
         extra_field: 'tolerated',
       }),
@@ -323,7 +323,7 @@ describe('T11-C1 store 持久化结构契约（对齐 TaskDef 全字段）', () 
     // 类型不符 → 损坏
     writeFileSync(
       join(tasksDir, 'badenabled.json'),
-      JSON.stringify({ id: 'badenabled', name: 'BE', cron: 'x', task_path: 't', enabled: 'true' }),
+      JSON.stringify({ id: 'badenabled', name: 'BE', cron: 'x', task_path: 'assets/programs/missing/task.ts', enabled: 'true' }),
       'utf8',
     )
 
@@ -356,7 +356,7 @@ describe('T11-B1 边界：月底 L cron 跨月（真实 cron + 假 clock）', ()
     // 触发 → runner 被调；重设为 2026-05-31 09:00 Shanghai = 2026-05-31T01:00:00Z（跨月）
     clock.set(new Date('2026-04-30T01:00:00Z'))
     timer.fireDue(clock.now().getTime())
-    await vi.waitFor(() => expect(runner.calls).toContain('tasks/eom/task.ts'))
+    await vi.waitFor(() => expect(runner.calls).toContain('assets/programs/eom/task.ts'))
     await vi.waitFor(() => expect(timer.pending).toBe(1))
     expect(timer.timers[0].at).toBe(Date.parse('2026-05-31T01:00:00Z'))
   })
@@ -375,6 +375,6 @@ describe('T11-B1 边界：月底 L cron 跨月（真实 cron + 假 clock）', ()
 
     clock.set(new Date('2026-10-08T16:00:00Z'))
     timer.fireDue(clock.now().getTime())
-    await vi.waitFor(() => expect(runner.calls).toContain('tasks/midnight/task.ts'))
+    await vi.waitFor(() => expect(runner.calls).toContain('assets/programs/midnight/task.ts'))
   })
 })

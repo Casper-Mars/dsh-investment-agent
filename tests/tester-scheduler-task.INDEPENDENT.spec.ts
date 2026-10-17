@@ -96,7 +96,7 @@ function makeTask(id: string, overrides: Partial<TaskDef> = {}): TaskDef {
     id,
     name: `任务-${id}`,
     cron: '0 9 * * *',
-    task_path: `/tasks/${id}/task.ts`,
+    task_path: `/assets/programs/${id}/task.ts`,
     enabled: true,
     ...overrides,
   }
@@ -219,7 +219,7 @@ describe('隐患2：异常隔离边界', () => {
     // 这里验证：run 同步 throw 后，scheduler 不抛、且该任务仍重设 timer。
     const store = new FakeStore([makeTask('a', { cron: '* * * * *' })])
     const runner = new SlowRunner()
-    runner.throwSync.set('/tasks/a/task.ts', true)
+    runner.throwSync.set('/assets/programs/a/task.ts', true)
     const clock = new FakeClock(BASE)
     const timer = new FakeTimer(clock)
     const s = createScheduler({ store, runner, timer, clock })
@@ -241,7 +241,7 @@ describe('隐患2：异常隔离边界', () => {
       makeTask('b', { cron: '* * * * *' }),
     ])
     const runner = new SlowRunner()
-    runner.throwSync.set('/tasks/a/task.ts', true)
+    runner.throwSync.set('/assets/programs/a/task.ts', true)
     const clock = new FakeClock(BASE)
     const timer = new FakeTimer(clock)
     const s = createScheduler({ store, runner, timer, clock })

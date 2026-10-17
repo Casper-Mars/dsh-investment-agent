@@ -50,6 +50,8 @@ vi.mock('../src/paths.js', async (importOriginal) => {
   return {
     ...actual,
     resolveFinanceHomeDir: () => H.cap.financeHome,
+    // 任务定义目录跟着 mock 后的 finance home 走（隔离真实 ~/.dsh-ia）。
+    resolveAssetsTasksDir: () => `${H.cap.financeHome}/assets/tasks`,
   }
 })
 
@@ -189,16 +191,16 @@ const tmpDirs: string[] = []
 function mkTmp(): string {
   const d = mkdtempSync(join(tmpdir(), 'dsh-t9-'))
   tmpDirs.push(d)
-  // finance home 与 dataRoot 各自独立（任务程序在 finance home，元数据在 dataRoot）。
+  // mock finance home；任务定义与程序都落在其资产层（隔离真实 ~/.dsh-ia）。
   const home = mkdtempSync(join(tmpdir(), 'dsh-t9-home-'))
   tmpDirs.push(home)
   H.cap.financeHome = home
   return d
 }
 
-/** 写一条任务清单记录到 `<dataRoot>/tasks/<id>.json`（并补齐任务入口文件）。 */
+/** 写一条任务定义到 `<financeHome>/assets/tasks/<id>.json`（并补齐任务入口文件）。 */
 function writeTask(dataRoot: string, def: Record<string, unknown>): void {
-  const dir = join(dataRoot, 'tasks')
+  const dir = join(H.cap.financeHome, 'assets', 'tasks')
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, `${String(def.id)}.json`), JSON.stringify(def), 'utf8')
   // §9.1：编排 runner 会校验任务程序入口文件存在性；默认补齐入口文件，避免被误判为
@@ -210,7 +212,7 @@ function writeTask(dataRoot: string, def: Record<string, unknown>): void {
 
 /** 仅写任务清单 JSON，不创建入口文件（供「入口文件缺失 → skipped」用例）。 */
 function writeTaskNoEntry(dataRoot: string, def: Record<string, unknown>): void {
-  const dir = join(dataRoot, 'tasks')
+  const dir = join(H.cap.financeHome, 'assets', 'tasks')
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, `${String(def.id)}.json`), JSON.stringify(def), 'utf8')
 }
@@ -313,12 +315,12 @@ describe('T9-A 交付物与顶层契约', () => {
 describe('T9-B 装配链完整性：store → 编排runner → scheduler → 工具 → effect 启停', () => {
   it('装配链完整：createScheduler 收到真实 store + 编排 runner；7 工具惰性注册；start 一次', async () => {
     const dataRoot = mkTmp()
-    // 放一条任务，证明 tasksDir 由 dataRoot 派生（不依赖 cwd）。
+    // 放一条任务，证明 tasksDir 来自资产层 assets/tasks（不依赖 cwd / dataRoot）。
     writeTask(dataRoot, {
       id: 'alpha',
       name: 'A',
       cron: '0 9 * * *',
-      task_path: 'tasks/alpha/task.mjs',
+      task_path: 'assets/programs/alpha/task.mjs',
       enabled: true,
     })
 
@@ -362,7 +364,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
       id: 'alpha',
       name: 'A',
       cron: '0 9 * * *',
-      task_path: 'tasks/alpha/task.mjs',
+      task_path: 'assets/programs/alpha/task.mjs',
       enabled: true,
     })
 
@@ -381,11 +383,11 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     }
 
     boot(dataRoot)
-    const out = await orch().run('alpha', 'tasks/alpha/task.mjs')
+    const out = await orch().run('alpha', 'assets/programs/alpha/task.mjs')
 
     expect(out.kind).toBe('quiet')
-    expect(loadCalls).toEqual([['alpha', resolve(H.cap.financeHome, 'tasks/alpha')]])
-    expect(runCalls).toEqual([resolve(H.cap.financeHome, 'tasks/alpha/task.mjs')])
+    expect(loadCalls).toEqual([['alpha', resolve(H.cap.financeHome, 'assets/programs/alpha')]])
+    expect(runCalls).toEqual([resolve(H.cap.financeHome, 'assets/programs/alpha/task.mjs')])
   })
 
   // t100411 起：编排层不再按 task_path 反查 taskId（删除了「未找到 → skipped」分支），
@@ -399,7 +401,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('ghost', 'tasks/ghost/task.mjs')
+    const out = await orch().run('ghost', 'assets/programs/ghost/task.mjs')
 
     expect(out.kind).toBe('skipped')
     expect(load).not.toHaveBeenCalled()
@@ -412,7 +414,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
       id: 'beta',
       name: 'B',
       cron: '0 9 * * *',
-      task_path: 'tasks/beta/task.mjs',
+      task_path: 'assets/programs/beta/task.mjs',
       enabled: true,
     })
 
@@ -425,7 +427,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('beta', 'tasks/beta/task.mjs')
+    const out = await orch().run('beta', 'assets/programs/beta/task.mjs')
 
     expect(out.kind).toBe('failed')
     expect(out.failureKind).toBe('install')
@@ -439,7 +441,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
       id: 'noloader',
       name: 'N',
       cron: '0 9 * * *',
-      task_path: 'tasks/noloader/task.mjs',
+      task_path: 'assets/programs/noloader/task.mjs',
       enabled: true,
     })
     H.loaderImpl.value = null // 真实 createTaskLoader
@@ -447,7 +449,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('noloader', 'tasks/noloader/task.mjs')
+    const out = await orch().run('noloader', 'assets/programs/noloader/task.mjs')
     expect(out.kind).toBe('failed')
     expect(out.failureKind).toBe('install')
     expect(run).not.toHaveBeenCalled()
@@ -459,17 +461,17 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
       id: 'nopkg',
       name: 'P',
       cron: '0 9 * * *',
-      task_path: 'tasks/nopkg/task.mjs',
+      task_path: 'assets/programs/nopkg/task.mjs',
       enabled: true,
     })
     // 仅建目录（无 package.json）
-    mkdirSync(resolve(H.cap.financeHome, 'tasks/nopkg'), { recursive: true })
+    mkdirSync(resolve(H.cap.financeHome, 'assets/programs/nopkg'), { recursive: true })
     H.loaderImpl.value = null // 真实 createTaskLoader
     const run = vi.fn(async () => ({ kind: 'quiet', reason: 'x' }))
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('nopkg', 'tasks/nopkg/task.mjs')
+    const out = await orch().run('nopkg', 'assets/programs/nopkg/task.mjs')
     expect(out.kind).toBe('failed')
     expect(out.failureKind).toBe('install')
     expect(run).not.toHaveBeenCalled()
@@ -481,7 +483,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
       id: 'gamma',
       name: 'G',
       cron: '0 9 * * *',
-      task_path: 'tasks/gamma/task.mjs',
+      task_path: 'assets/programs/gamma/task.mjs',
       enabled: true,
     })
 
@@ -494,9 +496,9 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const o1 = await orch().run('gamma', 'tasks/gamma/task.mjs')
-    const o2 = await orch().run('gamma', 'tasks/gamma/task.mjs')
-    const o3 = await orch().run('gamma', 'tasks/gamma/task.mjs')
+    const o1 = await orch().run('gamma', 'assets/programs/gamma/task.mjs')
+    const o2 = await orch().run('gamma', 'assets/programs/gamma/task.mjs')
+    const o3 = await orch().run('gamma', 'assets/programs/gamma/task.mjs')
 
     expect(o1.kind).toBe('quiet')
     expect(o2.kind).toBe('skipped')
@@ -511,7 +513,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
       id: 'delta',
       name: 'D',
       cron: '0 9 * * *',
-      task_path: 'tasks/delta/task.mjs',
+      task_path: 'assets/programs/delta/task.mjs',
       enabled: true,
     })
 
@@ -538,7 +540,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     expect(ctx.injects[0].deps).toEqual(['agents'])
     ctx.injects[0].cb({ get: (n: string) => (n === 'agents' ? registry : undefined) })
 
-    const out = await orch().run('delta', 'tasks/delta/task.mjs')
+    const out = await orch().run('delta', 'assets/programs/delta/task.mjs')
 
     expect(out.kind).toBe('woke')
     expect(out.targets).toContain('investment-advisor')
@@ -553,7 +555,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
       id: 'eps',
       name: 'E',
       cron: '0 9 * * *',
-      task_path: 'tasks/eps/task.mjs',
+      task_path: 'assets/programs/eps/task.mjs',
       enabled: true,
     })
     H.loaderImpl.value = { installTaskDeps: vi.fn(async () => {}) }
@@ -569,7 +571,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     // (a) agents 服务不可用 → inject 回调里 waker 置 undefined
     let ctx = boot(dataRoot)
     ctx.injects[0].cb({ get: () => undefined })
-    const a = await orch().run('eps', 'tasks/eps/task.mjs')
+    const a = await orch().run('eps', 'assets/programs/eps/task.mjs')
     expect(a.kind).toBe('skipped')
     expect(String(a.reason)).toMatch(/waker|agents|降级/)
 
@@ -584,7 +586,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     }
     ctx = boot(dataRoot)
     ctx.injects[0].cb({ get: (n: string) => (n === 'agents' ? { get: () => ({ id: 'x', followup() {} }) } : undefined) })
-    const b = await orch().run('eps', 'tasks/eps/task.mjs')
+    const b = await orch().run('eps', 'assets/programs/eps/task.mjs')
     expect(b.kind).toBe('skipped')
 
     // (c) wake 抛错 → 降级 skipped（不穿透）
@@ -595,7 +597,7 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     }
     ctx = boot(dataRoot)
     ctx.injects[0].cb({ get: (n: string) => (n === 'agents' ? { get: () => ({ id: 'x', followup() {} }) } : undefined) })
-    const c = await orch().run('eps', 'tasks/eps/task.mjs')
+    const c = await orch().run('eps', 'assets/programs/eps/task.mjs')
     expect(c.kind).toBe('skipped')
   })
 
@@ -606,11 +608,11 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
       id: 'noentry',
       name: 'NE',
       cron: '0 9 * * *',
-      task_path: 'tasks/noentry/task.ts',
+      task_path: 'assets/programs/noentry/task.ts',
       enabled: true,
     })
-    mkdirSync(resolve(H.cap.financeHome, 'tasks/noentry'), { recursive: true })
-    writeFileSync(resolve(H.cap.financeHome, 'tasks/noentry/package.json'), '{}', 'utf8')
+    mkdirSync(resolve(H.cap.financeHome, 'assets/programs/noentry'), { recursive: true })
+    writeFileSync(resolve(H.cap.financeHome, 'assets/programs/noentry/package.json'), '{}', 'utf8')
 
     // loader 替身成功（目录 + package.json 就绪）；runner 替身不应被触达。
     H.loaderImpl.value = { installTaskDeps: vi.fn(async () => {}) }
@@ -618,12 +620,12 @@ describe('T9-C 编排 runner 运行时行为（loader/runner/waker 替身）', (
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('noentry', 'tasks/noentry/task.ts')
+    const out = await orch().run('noentry', 'assets/programs/noentry/task.ts')
 
     expect(out.kind).toBe('skipped')
     expect(out.kind).not.toBe('failed')
     expect(String(out.reason)).toMatch(/任务程序文件缺失/)
-    expect(out.detail).toBe(resolve(H.cap.financeHome, 'tasks/noentry/task.ts'))
+    expect(out.detail).toBe(resolve(H.cap.financeHome, 'assets/programs/noentry/task.ts'))
     expect(run).not.toHaveBeenCalled()
   })
 })
@@ -725,14 +727,14 @@ describe('T9-E 生命周期：幂等 start、卸载 stop', () => {
 
 describe('T9-F 编排 runner 真实端到端（真实 spawn + 真实投递）', () => {
   const programs: Array<{ id: string; taskPath: string; body: string }> = [
-    { id: 'rq', taskPath: 'tasks/rq/task.mjs', body: `console.log(JSON.stringify({ shouldWake: false }))` },
+    { id: 'rq', taskPath: 'assets/programs/rq/task.mjs', body: `console.log(JSON.stringify({ shouldWake: false }))` },
     {
       id: 'rw',
-      taskPath: 'tasks/rw/task.mjs',
+      taskPath: 'assets/programs/rw/task.mjs',
       body: `console.log(JSON.stringify({ shouldWake: true, data: 'REAL-PROC-CONTENT' }))`,
     },
-    { id: 'rs', taskPath: 'tasks/rs/task.mjs', body: `console.log('not-json-line')` },
-    { id: 'rf', taskPath: 'tasks/rf/task.mjs', body: `process.exit(3)` },
+    { id: 'rs', taskPath: 'assets/programs/rs/task.mjs', body: `console.log('not-json-line')` },
+    { id: 'rf', taskPath: 'assets/programs/rf/task.mjs', body: `process.exit(3)` },
   ]
 
   it('真实执行结局：quiet / woke(投递) / failed(解析) / failed(非零退出)', async () => {
@@ -761,19 +763,19 @@ describe('T9-F 编排 runner 真实端到端（真实 spawn + 真实投递）', 
     const ctx = boot(dataRoot)
     ctx.injects[0].cb({ get: (n: string) => (n === 'agents' ? registry : undefined) })
 
-    const quiet = await orch().run('rq', 'tasks/rq/task.mjs')
+    const quiet = await orch().run('rq', 'assets/programs/rq/task.mjs')
     expect(quiet.kind).toBe('quiet')
 
-    const woke = await orch().run('rw', 'tasks/rw/task.mjs')
+    const woke = await orch().run('rw', 'assets/programs/rw/task.mjs')
     expect(woke.kind).toBe('woke')
     expect(woke.targets).toContain('investment-advisor')
     expect(JSON.stringify(followup.mock.calls[0][0])).toContain('REAL-PROC-CONTENT')
 
-    const parseFailed = await orch().run('rs', 'tasks/rs/task.mjs')
+    const parseFailed = await orch().run('rs', 'assets/programs/rs/task.mjs')
     expect(parseFailed.kind).toBe('failed')
     expect(parseFailed.failureKind).toBe('parse')
 
-    const failed = await orch().run('rf', 'tasks/rf/task.mjs')
+    const failed = await orch().run('rf', 'assets/programs/rf/task.mjs')
     expect(failed.kind).toBe('failed')
     expect(failed.failureKind).toBe('exec')
   }, 30000)
@@ -792,7 +794,7 @@ describe('T9-G 真实 scheduler 触发链（fake timers）', () => {
         id: 'tick',
         name: 'T',
         cron: '* * * * *',
-        task_path: 'tasks/tick/task.mjs',
+        task_path: 'assets/programs/tick/task.mjs',
         enabled: true,
       })
       const run = vi.fn(async () => ({ kind: 'quiet', reason: 'ok' }))

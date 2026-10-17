@@ -11,7 +11,7 @@ import { createScheduler } from '../src/scheduler/scheduler.js'
 import type { Clock, TaskDef, TaskRunOutcome, Timer, TimerHandle } from '../src/scheduler/types.js'
 
 function makeTask(id: string, cron = '* * * * *'): TaskDef {
-  return { id, name: `任务-${id}`, cron, task_path: `/tasks/${id}/task.ts`, enabled: true }
+  return { id, name: `任务-${id}`, cron, task_path: `/assets/programs/${id}/task.ts`, enabled: true }
 }
 
 class FakeClock implements Clock {

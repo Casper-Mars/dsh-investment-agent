@@ -7,23 +7,25 @@
  *   - 旧：`const absTaskPath = resolve(dataRoot, taskPath)`
  *   - 新：`const financeHome = resolveFinanceHomeDir(); const absTaskPath = resolve(financeHome, taskPath)`
  *
- * Bug 背景：`task_path`（如 `tasks/002156-intraday/task.ts`）语义上是相对于
- * FINANCE_HOME（`~/.dsh-ia`），而非 dataRoot（`~/.dsh-ia/data`）。
- * 旧实现多拼一层 `data`，把程序文件定位到错误的 `~/.dsh-ia/data/tasks/...`。
+ * 语义（task-04 起）：`task_path` 形如 `assets/programs/<id>/task.ts`，相对
+ * FINANCE_HOME（`~/.dsh-ia`）解析；任务定义固定落在 `<financeHome>/assets/tasks`，
+ * dataRoot（`~/.dsh-ia/data`）不再参与任务层路径。
  *
  * 验收标准（逐条验证）：
- *   1. absTaskPath 解析为 `<financeHome>/tasks/<id>/task.ts`（无 data 层）。
- *   2. taskDir = dirname(absTaskPath) 指向 `<financeHome>/tasks/<id>`，使
+ *   1. absTaskPath 解析为 `<financeHome>/assets/programs/<id>/task.ts`
+ *      （无 data 层，也不重复拼 assets）。
+ *   2. taskDir = dirname(absTaskPath) 指向 `<financeHome>/assets/programs/<id>`，使
  *      loader.installTaskDeps(taskId, taskDir) 能命中任务目录下的 package.json。
- *   3. tasksDir = join(dataRoot, 'tasks')（元数据目录 `<dataRoot>/tasks`）语义不变。
+ *   3. tasksDir = `<financeHome>/assets/tasks`（任务定义在资产层）。
  *   4. 现有测试全绿（或至少 scheduler 相关测试通过），无回归。
  *
  * 独立性声明：不复用 Developer 用例、不做纯代码审查。通过
  *   - vi.mock('../src/paths.js') 将 `resolveFinanceHomeDir` 重定向到一个临时目录
- *     （隔离真实 `~/.dsh-ia`，避免污染 / 被测试清理影响）；
+ *     （隔离真实 `~/.dsh-ia`，避免污染 / 被测试清理影响），并同步 mock
+ *     `resolveAssetsTasksDir` 指向同一临时 home 的资产层；
  *   - vi.mock 注入 loader/runner 替身工厂，捕获「编排 runner」；
  *   - 对 `run(taskId, taskPath)` 逐链路验证：入口程序 + package.json 放在
- *     **mock 后的 financeHome** 下（而非 dataRoot 下），证明修复后 realpath
+ *     **mock 后的 financeHome** 下，证明 realpath
  *     命中正确位置（无 data 层）。
  * ==================================================================
  */
@@ -52,6 +54,8 @@ vi.mock('../src/paths.js', async (importOriginal) => {
   return {
     ...actual,
     resolveFinanceHomeDir: () => H.cap.financeHome,
+    // 任务定义目录跟着 mock 后的 finance home 走（隔离真实 ~/.dsh-ia）。
+    resolveAssetsTasksDir: () => `${H.cap.financeHome}/assets/tasks`,
   }
 })
 
@@ -189,22 +193,17 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('t100440 路径解析基准：task_path 相对 FINANCE_HOME 而非 dataRoot', () => {
-  it('验收1：absTaskPath = resolve(financeHome, taskPath)，无 data 层', async () => {
+  it('验收1：absTaskPath = resolve(financeHome, taskPath)，无 data 层、无重复 assets', async () => {
     const dataRoot = mkTmp()
     const financeHome = mkTmp()
 
-    // 入口程序放在 <financeHome>/tasks/<id>/task.ts（正确语义位置），**不放** dataRoot 下。
-    const programDir = join(financeHome, 'tasks/002156-intraday')
+    // 入口程序放在 <financeHome>/assets/programs/<id>/task.ts（正确语义位置）。
+    const programDir = join(financeHome, 'assets/programs/002156-intraday')
     mkdirSync(programDir, { recursive: true })
     writeFileSync(join(programDir, 'task.ts'), '// task.ts\n', 'utf8')
 
-    const loadCalls: Array<[string, string]> = []
     const runCalls: string[] = []
-    H.loaderImpl.value = {
-      installTaskDeps: vi.fn(async (_id: string, dir: string) => {
-        loadCalls.push([_id, dir])
-      }),
-    }
+    H.loaderImpl.value = { installTaskDeps: vi.fn(async () => {}) }
     H.runnerImpl.value = {
       run: vi.fn(async (p: string) => {
         runCalls.push(p)
@@ -213,24 +212,24 @@ describe('t100440 路径解析基准：task_path 相对 FINANCE_HOME 而非 data
     }
 
     boot(dataRoot, financeHome)
-    const out = await orch().run('002156-intraday', 'tasks/002156-intraday/task.ts')
+    const taskPath = 'assets/programs/002156-intraday/task.ts'
+    const out = await orch().run('002156-intraday', taskPath)
 
     expect(out.kind).toBe('quiet')
 
-    // 关键断言：absPath 基准是 financeHome，**不含** data 层。
-    const expectedAbs = resolve(financeHome, 'tasks/002156-intraday/task.ts')
+    // 关键断言：absPath 基准是 financeHome，**不含** data 层，也**不重复** assets 层。
+    const expectedAbs = resolve(financeHome, taskPath)
     expect(runCalls).toEqual([expectedAbs])
-    // 绝不能是旧的错误基准 resolve(dataRoot, taskPath)。
-    expect(runCalls[0]).not.toBe(resolve(dataRoot, 'tasks/002156-intraday/task.ts'))
-    expect(expectedAbs).toContain('/tasks/002156-intraday/task.ts')
-    expect(expectedAbs).not.toContain('/data/tasks/')
+    expect(runCalls[0]).not.toBe(resolve(dataRoot, taskPath))
+    expect(runCalls[0]).not.toBe(join(financeHome, 'assets', 'assets', 'programs', '002156-intraday', 'task.ts'))
+    expect(expectedAbs).not.toContain('/data/')
   })
 
-  it('验收2：taskDir = dirname(absTaskPath) 指向 financeHome/tasks/<id>，命中任务目录 package.json', async () => {
+  it('验收2：taskDir = dirname(absTaskPath) 指向 financeHome/assets/programs/<id>，命中 package.json', async () => {
     const dataRoot = mkTmp()
     const financeHome = mkTmp()
 
-    const programDir = join(financeHome, 'tasks/002156-intraday')
+    const programDir = join(financeHome, 'assets/programs/002156-intraday')
     mkdirSync(programDir, { recursive: true })
     writeFileSync(join(programDir, 'task.ts'), '// task.ts\n', 'utf8')
     // 任务目录下的 package.json（loader.installTaskDeps 需要命中它）。
@@ -247,17 +246,17 @@ describe('t100440 路径解析基准：task_path 相对 FINANCE_HOME 而非 data
     }
 
     boot(dataRoot, financeHome)
-    await orch().run('002156-intraday', 'tasks/002156-intraday/task.ts')
+    await orch().run('002156-intraday', 'assets/programs/002156-intraday/task.ts')
 
-    const expectedDir = join(financeHome, 'tasks/002156-intraday')
+    const expectedDir = join(financeHome, 'assets/programs/002156-intraday')
     expect(loadCalls).toEqual([['002156-intraday', expectedDir]])
-    expect(dirname(resolve(financeHome, 'tasks/002156-intraday/task.ts'))).toBe(expectedDir)
+    expect(dirname(resolve(financeHome, 'assets/programs/002156-intraday/task.ts'))).toBe(expectedDir)
   })
 
-  it('验收3：tasksDir = join(dataRoot, "tasks") 语义不变（元数据目录仍在 dataRoot 下）', () => {
+  it('验收3：tasksDir = financeHome/assets/tasks（任务定义在资产层，dataRoot 不再参与）', () => {
     const dataRoot = mkTmp()
     const financeHome = mkTmp()
-    const tasksRoot = join(dataRoot, 'tasks')
+    const tasksRoot = join(financeHome, 'assets', 'tasks')
     mkdirSync(tasksRoot, { recursive: true })
     writeFileSync(
       join(tasksRoot, '002156-eod.json'),
@@ -265,7 +264,7 @@ describe('t100440 路径解析基准：task_path 相对 FINANCE_HOME 而非 data
         id: '002156-eod',
         name: 'EOD',
         cron: '0 15 * * *',
-        task_path: 'tasks/002156-eod/task.ts',
+        task_path: 'assets/programs/002156-eod/task.ts',
         enabled: true,
       }),
       'utf8',
@@ -275,25 +274,24 @@ describe('t100440 路径解析基准：task_path 相对 FINANCE_HOME 而非 data
     const store = (H.cap.options as { store: any }).store
     const listed = store.list()
     expect(listed.tasks.map((t: any) => t.id)).toContain('002156-eod')
-    // 元数据仍固定 dataRoot/tasks，未被改动。
-    expect(tasksRoot).toBe(join(dataRoot, 'tasks'))
-    // financeHome 下不存在 data/tasks（元数据不混入 financeHome）。
-    expect(join(financeHome, 'data/tasks')).not.toBe(tasksRoot)
+    // 任务定义目录跟随 FINANCE_HOME 的资产层，而非 dataRoot。
+    expect(tasksRoot).toBe(join(financeHome, 'assets', 'tasks'))
+    expect(tasksRoot).not.toContain(dataRoot)
   })
 })
 
-describe('t100440 语义区分：程序目录 vs 元数据目录落在不同基准', () => {
-  it('程序文件命中 financeHome/tasks，元数据命中 dataRoot/tasks，二者不串', async () => {
+describe('t100440 语义区分：程序目录 vs 任务定义目录同处资产层', () => {
+  it('程序命中 financeHome/assets/programs，定义命中 financeHome/assets/tasks，dataRoot 不参与', async () => {
     const dataRoot = mkTmp()
     const financeHome = mkTmp()
 
-    // 程序：financeHome/tasks/<id>/task.ts
-    const programDir = join(financeHome, 'tasks/alpha')
+    // 程序：financeHome/assets/programs/<id>/task.ts
+    const programDir = join(financeHome, 'assets/programs/alpha')
     mkdirSync(programDir, { recursive: true })
     writeFileSync(join(programDir, 'task.ts'), '// task.ts\n', 'utf8')
 
-    // 元数据：dataRoot/tasks/<id>.json
-    const metaDir = join(dataRoot, 'tasks')
+    // 定义：financeHome/assets/tasks/<id>.json
+    const metaDir = join(financeHome, 'assets', 'tasks')
     mkdirSync(metaDir, { recursive: true })
     writeFileSync(
       join(metaDir, 'alpha.json'),
@@ -301,7 +299,7 @@ describe('t100440 语义区分：程序目录 vs 元数据目录落在不同基�
         id: 'alpha',
         name: 'A',
         cron: '0 9 * * *',
-        task_path: 'tasks/alpha/task.ts',
+        task_path: 'assets/programs/alpha/task.ts',
         enabled: true,
       }),
       'utf8',
@@ -317,11 +315,13 @@ describe('t100440 语义区分：程序目录 vs 元数据目录落在不同基�
     }
 
     boot(dataRoot, financeHome)
-    const out = await orch().run('alpha', 'tasks/alpha/task.ts')
+    const out = await orch().run('alpha', 'assets/programs/alpha/task.ts')
     expect(out.kind).toBe('quiet')
 
-    // 程序 realpath = financeHome/tasks/alpha/task.ts（非 dataRoot）。
-    expect(runCalls[0]).toBe(resolve(financeHome, 'tasks/alpha/task.ts'))
+    // 程序 realpath = financeHome/assets/programs/alpha/task.ts。
+    expect(runCalls[0]).toBe(resolve(financeHome, 'assets/programs/alpha/task.ts'))
     expect(runCalls[0]).not.toContain(resolve(dataRoot))
+    // 定义目录同样不落在 dataRoot。
+    expect((H.cap.options as { store: any }).store.list().tasks.map((t: any) => t.id)).toContain('alpha')
   })
 })

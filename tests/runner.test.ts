@@ -64,7 +64,7 @@ function makeSpawner(proc: FakeProcess) {
   return { spawner, spawn }
 }
 
-const TASK_PATH = '/tmp/tasks/market-pulse/task.ts'
+const TASK_PATH = '/tmp/assets/programs/market-pulse/task.ts'
 
 describe('parseLastJsonLine：最后非空行解析', () => {
   it('多行日志 + 尾随空行 → 取最后一个非空行 JSON', () => {

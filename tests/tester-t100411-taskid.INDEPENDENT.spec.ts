@@ -40,6 +40,8 @@ vi.mock('../src/paths.js', async (importOriginal) => {
   return {
     ...actual,
     resolveFinanceHomeDir: () => H.cap.financeHome,
+    // 任务定义目录跟着 mock 后的 finance home 走（隔离真实 ~/.dsh-ia）。
+    resolveAssetsTasksDir: () => `${H.cap.financeHome}/assets/tasks`,
   }
 })
 
@@ -128,7 +130,7 @@ class SpyRunner {
   }
 }
 
-const SHARED = 'tasks/shared/task.ts'
+const SHARED = 'assets/programs/shared/task.ts'
 function def(id: string, overrides: Partial<TaskDef> = {}): TaskDef {
   return {
     id,
@@ -249,7 +251,7 @@ function mkTmp(): string {
   return d
 }
 function putTask(dataRoot: string, t: TaskDef, entry: boolean): void {
-  const dir = join(dataRoot, 'tasks')
+  const dir = join(H.cap.financeHome, 'assets', 'tasks')
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, `${t.id}.json`), JSON.stringify(t), 'utf8')
   if (entry) {
@@ -306,30 +308,30 @@ describe('tester-t100411-B 编排层：run 直用入参 taskId，不再 store.li
   it('B1 loader 收到入参 taskId（依赖安装按传入 id，不反查）', async () => {
     const dataRoot = mkTmp()
     // 清单里根本没有该任务，但入口在 → 旧实现反查失败会 skipped，新实现应正常跑。
-    putEntryOnly(dataRoot, 'tasks/standalone/task.ts')
+    putEntryOnly(dataRoot, 'assets/programs/standalone/task.ts')
     const install = vi.fn(async () => {})
     H.loader.value = { installTaskDeps: install }
     H.waker.value = { wake: vi.fn(okWake) }
 
     boot(dataRoot)
-    const out = await orch().run('standalone', 'tasks/standalone/task.ts')
+    const out = await orch().run('standalone', 'assets/programs/standalone/task.ts')
 
     expect(out.kind).toBe('woke')
     // loader 依赖安装以入参 id 调用（旧实现此处是 store 反查到的 id 或根本不调用）。
     expect(install).toHaveBeenCalledTimes(1)
     expect(install.mock.calls[0][0]).toBe('standalone')
-    expect(install.mock.calls[0][1]).toBe(resolve(H.cap.financeHome, 'tasks/standalone'))
+    expect(install.mock.calls[0][1]).toBe(resolve(H.cap.financeHome, 'assets/programs/standalone'))
   })
 
   it('B2 清单为空 + 入口存在 → 直接按入参 id 执行并投递（证明反查已移除）', async () => {
     const dataRoot = mkTmp()
-    putEntryOnly(dataRoot, 'tasks/onlyarg/task.ts')
+    putEntryOnly(dataRoot, 'assets/programs/onlyarg/task.ts')
     H.loader.value = { installTaskDeps: vi.fn(async () => {}) }
     const wake = vi.fn(okWake)
     H.waker.value = { wake }
 
     boot(dataRoot)
-    const out = await orch().run('onlyarg', 'tasks/onlyarg/task.ts')
+    const out = await orch().run('onlyarg', 'assets/programs/onlyarg/task.ts')
 
     expect(out.kind).toBe('woke')
     expect(wake).toHaveBeenCalledTimes(1)
@@ -338,14 +340,14 @@ describe('tester-t100411-B 编排层：run 直用入参 taskId，不再 store.li
 
   it('B3 同 path 两任务：run("b", path) 必须投递到 b（旧实现会投到首个 a）', async () => {
     const dataRoot = mkTmp()
-    putTask(dataRoot, def('a', { task_path: 'tasks/shared/task.ts' }), true)
-    putTask(dataRoot, def('b', { task_path: 'tasks/shared/task.ts' }), true)
+    putTask(dataRoot, def('a', { task_path: 'assets/programs/shared/task.ts' }), true)
+    putTask(dataRoot, def('b', { task_path: 'assets/programs/shared/task.ts' }), true)
     H.loader.value = { installTaskDeps: vi.fn(async () => {}) }
     const wake = vi.fn(okWake)
     H.waker.value = { wake }
 
     boot(dataRoot)
-    const out = await orch().run('b', 'tasks/shared/task.ts')
+    const out = await orch().run('b', 'assets/programs/shared/task.ts')
 
     expect(out.kind).toBe('woke')
     expect(wake).toHaveBeenCalledTimes(1)
@@ -356,13 +358,13 @@ describe('tester-t100411-B 编排层：run 直用入参 taskId，不再 store.li
   it('B4 store 同 path 却是另一个 id("x")：按入参 "b" 投递，而非反查到的 "x"', async () => {
     const dataRoot = mkTmp()
     // 清单只有 x，其 task_path 恰好等于我们要跑的 path；但我们以 "b" 触发。
-    putTask(dataRoot, def('x', { task_path: 'tasks/shared/task.ts' }), true)
+    putTask(dataRoot, def('x', { task_path: 'assets/programs/shared/task.ts' }), true)
     H.loader.value = { installTaskDeps: vi.fn(async () => {}) }
     const wake = vi.fn(okWake)
     H.waker.value = { wake }
 
     boot(dataRoot)
-    const out = await orch().run('b', 'tasks/shared/task.ts')
+    const out = await orch().run('b', 'assets/programs/shared/task.ts')
 
     expect(out.kind).toBe('woke')
     // 若仍在反查 → 会命中 store 里的 x；只有直用入参才会是 b。
@@ -372,7 +374,7 @@ describe('tester-t100411-B 编排层：run 直用入参 taskId，不再 store.li
 
   it('B5 入口缺失 → skipped（去反查不影响 §9.1 门禁）且不触达 loader/runner', async () => {
     const dataRoot = mkTmp()
-    mkdirSync(join(dataRoot, 'tasks'), { recursive: true })
+    mkdirSync(join(H.cap.financeHome, 'assets', 'tasks'), { recursive: true })
     const install = vi.fn(async () => {})
     const run = vi.fn(async () => ({ kind: 'quiet', reason: 'x' }))
     H.loader.value = { installTaskDeps: install }
@@ -380,7 +382,7 @@ describe('tester-t100411-B 编排层：run 直用入参 taskId，不再 store.li
     H.waker.value = { wake: vi.fn(okWake) }
 
     boot(dataRoot)
-    const out = await orch().run('ghost', 'tasks/ghost/task.ts')
+    const out = await orch().run('ghost', 'assets/programs/ghost/task.ts')
 
     expect(out.kind).toBe('skipped')
     expect(install).not.toHaveBeenCalled()

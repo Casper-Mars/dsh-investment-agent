@@ -560,7 +560,7 @@ function setupE2E(): E2EEnv {
   process.env.DSH_IA_HOME = home
   process.env.DSH_IA_LOG_DIR = mkTmp('t100438-logs-')
   const dataRoot = join(home, 'data')
-  mkdirSync(join(dataRoot, 'tasks'), { recursive: true })
+  mkdirSync(join(home, 'assets', 'tasks'), { recursive: true })
 
   const app = new Context()
   const messages: Message[] = []
@@ -574,7 +574,7 @@ function setupE2E(): E2EEnv {
 }
 
 function writeTask(env: E2EEnv, def: Record<string, unknown>): void {
-  writeFileSync(join(env.dataRoot, 'tasks', `${String(def.id)}.json`), JSON.stringify(def), 'utf8')
+  writeFileSync(join(env.home, 'assets', 'tasks', `${String(def.id)}.json`), JSON.stringify(def), 'utf8')
   const abs = resolve(env.home, String(def.task_path))
   mkdirSync(dirname(abs), { recursive: true })
   writeFileSync(abs, '// test entry\n', 'utf8')
@@ -614,7 +614,7 @@ describe('⑤ 端到端：真实 Context + applyScheduler（同链路一致 / �
     env.app.provide('agents', {
       get: () => ({ id: 'investment-advisor', followup: (m: unknown) => void delivered.push(m as CapturedNotice) }),
     })
-    writeTask(env, { id: 'alpha', name: 'A', cron: '* * * * *', task_path: 'tasks/alpha/task.mjs', enabled: true })
+    writeTask(env, { id: 'alpha', name: 'A', cron: '* * * * *', task_path: 'assets/programs/alpha/task.mjs', enabled: true })
 
     applyScheduler(env.app, { dataRoot: env.dataRoot, wakeCooldownMs: 0 })
 
@@ -653,7 +653,7 @@ describe('⑤ 端到端：真实 Context + applyScheduler（同链路一致 / �
       },
     }
     env.app.provide('agents', { get: () => ({ id: 'investment-advisor', followup: () => {} }) })
-    writeTask(env, { id: 'beta', name: 'B', cron: '* * * * *', task_path: 'tasks/beta/task.mjs', enabled: true })
+    writeTask(env, { id: 'beta', name: 'B', cron: '* * * * *', task_path: 'assets/programs/beta/task.mjs', enabled: true })
 
     applyScheduler(env.app, { dataRoot: env.dataRoot, wakeCooldownMs: 0 })
 
@@ -689,7 +689,7 @@ describe('⑤ 端到端：真实 Context + applyScheduler（同链路一致 / �
     }
     env.app.provide('agents', { get: () => ({ id: 'investment-advisor', followup: () => {} }) })
     for (const id of ['m1', 'm2']) {
-      writeTask(env, { id, name: id, cron: '* * * * *', task_path: `tasks/${id}/task.mjs`, enabled: true })
+      writeTask(env, { id, name: id, cron: '* * * * *', task_path: `assets/programs/${id}/task.mjs`, enabled: true })
     }
     applyScheduler(env.app, { dataRoot: env.dataRoot, wakeCooldownMs: 0 })
     await vi.advanceTimersByTimeAsync(61_000)
@@ -713,7 +713,7 @@ describe('⑤ 端到端：真实 Context + applyScheduler（同链路一致 / �
     env.app.provide('agents', {
       get: () => ({ id: 'investment-advisor', followup: (m: unknown) => void delivered.push(m as CapturedNotice) }),
     })
-    writeTask(env, { id: 'gamma', name: 'G', cron: '* * * * *', task_path: 'tasks/gamma/task.mjs', enabled: true })
+    writeTask(env, { id: 'gamma', name: 'G', cron: '* * * * *', task_path: 'assets/programs/gamma/task.mjs', enabled: true })
 
     applyScheduler(env.app, { dataRoot: env.dataRoot, wakeCooldownMs: 0 })
     await vi.advanceTimersByTimeAsync(61_000)
@@ -742,7 +742,7 @@ describe('⑤ 端到端：真实 Context + applyScheduler（同链路一致 / �
       },
     }
     env.app.provide('agents', { get: () => undefined })
-    writeTask(env, { id: 'scope', name: 'S', cron: '* * * * *', task_path: 'tasks/scope/task.mjs', enabled: true })
+    writeTask(env, { id: 'scope', name: 'S', cron: '* * * * *', task_path: 'assets/programs/scope/task.mjs', enabled: true })
     applyScheduler(env.app, { dataRoot: env.dataRoot, wakeCooldownMs: 0 })
     await vi.advanceTimersByTimeAsync(61_000)
 
@@ -766,7 +766,7 @@ describe('⑤ 端到端：真实 Context + applyScheduler（同链路一致 / �
       },
     }
     env.app.provide('agents', { get: () => undefined })
-    writeTask(env, { id: 'delta', name: 'D', cron: '* * * * *', task_path: 'tasks/delta/task.mjs', enabled: true })
+    writeTask(env, { id: 'delta', name: 'D', cron: '* * * * *', task_path: 'assets/programs/delta/task.mjs', enabled: true })
     applyScheduler(env.app, { dataRoot: env.dataRoot, wakeCooldownMs: 0 })
     await vi.advanceTimersByTimeAsync(61_000)
 

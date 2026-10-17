@@ -17,7 +17,7 @@ whenToUse: "生成、修改或替换某个定时任务的任务程序时。"
 1. **执行**：拉数据、处理、计算（自由 `import` 依赖、发 HTTP、调 SDK）。
 2. **判读**：判断结果是否值得唤醒 agent，并给出唤醒正文（`data`）。
 
-交易判断属于 agent（被唤醒后依据其它 skill 作出）；「何时跑」由 `data/tasks/*.json` 的 cron 决定，经 `task_create` 注册。
+交易判断属于 agent（被唤醒后依据其它 skill 作出）；「何时跑」由 `assets/tasks/*.json` 的 cron 决定，经 `task_create` 注册（`task_path` 指向 `assets/programs/<id>/task.ts`）。
 
 ## 任务程序结构
 

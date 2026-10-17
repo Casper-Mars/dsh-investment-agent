@@ -3,7 +3,7 @@
  *
  * 覆盖任务卡验收点：
  * - 复用 path-guard 的 assertSafeSegment（防目录穿越：`../` 之类 id 抛错）
- * - dataDir 依赖注入（可覆盖、不写死路径）
+ * - tasksDir 依赖注入（可覆盖、不写死路径）
  * - list 遇到损坏 JSON 跳过不崩（不抛异常）
  * - save 后跨实例可恢复（同一 dataDir 重新 new 一个 store 可读到）
  */
@@ -26,7 +26,7 @@ let tasksDir: string
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'dsh-ia-store-'))
-  tasksDir = join(dir, 'data', 'tasks')
+  tasksDir = join(dir, 'assets', 'tasks')
 })
 
 afterEach(() => {
@@ -39,7 +39,7 @@ function makeTask(id: string): TaskDef {
     id,
     name: `任务-${id}`,
     cron: '0 9 * * *',
-    task_path: `tasks/${id}/task.ts`,
+    task_path: `assets/programs/${id}/task.ts`,
     enabled: true,
   }
 }
@@ -102,7 +102,7 @@ describe('TaskStore.remove', () => {
   })
 })
 
-describe('依赖注入（dataDir 覆盖）', () => {
+describe('依赖注入（tasksDir 覆盖）', () => {
   it('createTaskStore 支持注入 tasksDir', () => {
     const custom = join(dir, 'custom', 'tasks')
     const store = createTaskStore(custom)
@@ -113,10 +113,10 @@ describe('依赖注入（dataDir 覆盖）', () => {
     expect(store.list().tasks.map((t) => t.id)).toEqual(['x'])
   })
 
-  it('createTaskStore 缺省使用 defaultTasksDir（~/.dsh-ia/data/tasks）', () => {
+  it('createTaskStore 缺省使用 defaultTasksDir（~/.dsh-ia/assets/tasks）', () => {
     const store = createTaskStore()
     // factory 缺省目录即 defaultTasksDir；此处仅验证函数引用一致，不落盘避免污染主目录。
-    expect(defaultTasksDir()).toBe(join(homedir(), '.dsh-ia', 'data', 'tasks'))
+    expect(defaultTasksDir()).toBe(join(homedir(), '.dsh-ia', 'assets', 'tasks'))
     expect(store).toBeInstanceOf(TaskStore)
   })
 })
@@ -187,7 +187,7 @@ describe('目录穿越拦截（复用 path-guard）', () => {
     expect(() => store.remove(id)).toThrow(/\[path-guard\]/)
   })
 
-  it('穿越尝试不产生 data/tasks 之外的任何文件', () => {
+  it('穿越尝试不产生 tasksDir 之外的任何文件', () => {
     const store = new TaskStore(tasksDir)
     expect(() => store.save(makeTask('../../esc'))).toThrow(/\[path-guard\]/)
     // 守卫在 mkdir 前抛出，故越界位置不应产生文件。
@@ -196,7 +196,7 @@ describe('目录穿越拦截（复用 path-guard）', () => {
 })
 
 describe('跨实例恢复（AC-4）', () => {
-  it('同一 dataDir 重新 new 一个 store 可读到已保存数据', () => {
+  it('同一 tasksDir 重新 new 一个 store 可读到已保存数据', () => {
     const store1 = new TaskStore(tasksDir)
     store1.save(makeTask('market-pulse'))
 

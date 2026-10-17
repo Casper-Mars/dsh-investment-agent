@@ -560,7 +560,7 @@ describe('[6] runner × task-log：taskId 透传与零副作用', () => {
 // ---------------------------------------------------------------------------
 
 describe('[7] 结局语义回归（日志旁路不改变任何结局）', () => {
-  const PATH = '/tmp/tasks/x/task.ts'
+  const PATH = '/tmp/assets/programs/x/task.ts'
   function runner(proc: TaskProcess, extra: Partial<ConstructorParameters<typeof TaskRunner>[0]> = {}) {
     return new TaskRunner({
       spawner: spawnerOf(proc),

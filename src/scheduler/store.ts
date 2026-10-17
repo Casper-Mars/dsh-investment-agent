@@ -1,17 +1,17 @@
 /**
- * scheduler/store.ts —— 定时任务清单持久化（`data/tasks/<id>.json`）。
+ * scheduler/store.ts —— 定时任务清单持久化（`assets/tasks/<id>.json`）。
  *
  * 唯一权威设计文档：《感知层详细设计（dsh-ia 插件）》 v0.7。
  *
- * 职责（§2.1 / 持久化）：把「任务清单」持久化在 `data/tasks/<id>.json`，每条记录是
+ * 职责（§2.1 / 持久化）：把「任务清单」持久化在 `assets/tasks/<id>.json`，每条记录是
  * {@link TaskDef}。store 只负责机制的读写，不做调度、不做唤醒判读（那由 runner /
  * scheduler / wake 承担），故此处不出现在任何「定时 → 执行 → 判读」链路里，仅是
  * 一批「读/写任务清单」的纯函数集合。
  *
  * 关键约束：
  * - **数据目录依赖注入**：`tasksDir`（或 `baseDir`）通过工厂参数注入，不写死绝对 /
- *   相对路径。默认值 `~/.dsh-ia/data/tasks`（经 {@link resolveFinanceTasksDir}
- *   展开，不再锚定 `process.cwd()`），可被覆盖。
+ *   相对路径。默认值 `~/.dsh-ia/assets/tasks`（经 {@link resolveAssetsTasksDir}
+ *   展开，不再锚定 `process.cwd()`），可被覆盖。任务定义属于可分享资产。
  * - **id 防目录穿越**：所有 id 拼入路径前必须经 `assertSafeSegment(id, 'task-id')`
  *   校验（复用 `../domain/path-guard.js`，不自建守卫）。
  * - **损坏文件跳过**：`list()` 遍历目录时，遇到解析失败 / 结构非法的 JSON 跳过并继续，
@@ -32,7 +32,7 @@ import {
 import { join } from 'node:path'
 import type { TaskDef } from './types.js'
 import { assertSafeSegment } from '../domain/path-guard.js'
-import { resolveFinanceTasksDir } from '../paths.js'
+import { resolveAssetsTasksDir } from '../paths.js'
 
 /** `list()` 的返回结构：有效任务 + 损坏（无法解析为 TaskDef）的文件名清单。 */
 export interface TaskListResult {
@@ -45,9 +45,9 @@ export interface TaskListResult {
 /** 任务清单文件扩展名（不含点）。 */
 const TASK_FILE_EXT = '.json'
 
-/** 默认任务清单目录：`~/.dsh-ia/data/tasks`（固定目录，可被注入覆盖）。 */
+/** 默认任务清单目录：`~/.dsh-ia/assets/tasks`（固定目录，可被注入覆盖）。 */
 export function defaultTasksDir(): string {
-  return resolveFinanceTasksDir()
+  return resolveAssetsTasksDir()
 }
 
 /**
@@ -152,7 +152,7 @@ export class TaskStore {
     }
   }
 
-  /** 写入 / 覆盖单个任务（TaskDef），同步落盘到 `data/tasks/<id>.json`。 */
+  /** 写入 / 覆盖单个任务（TaskDef），同步落盘到 `assets/tasks/<id>.json`。 */
   save(task: TaskDef): void {
     const path = this.filePath(task.id)
     mkdirSync(join(this.tasksDir), { recursive: true })

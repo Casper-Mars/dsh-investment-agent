@@ -47,7 +47,7 @@ function makeFs(dirExists = true, packageJsonExists = true): LoaderFs {
 }
 
 const TASK_ID = 'market-pulse'
-const TASK_DIR = '/tmp/tasks/market-pulse'
+const TASK_DIR = '/tmp/assets/programs/market-pulse'
 
 describe('installTaskDeps：成功路径', () => {
   it('exitCode 0 → resolve（void），并调用 mock spawner', async () => {

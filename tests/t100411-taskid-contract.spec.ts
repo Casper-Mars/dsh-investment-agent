@@ -46,6 +46,8 @@ vi.mock('../src/paths.js', async (importOriginal) => {
   return {
     ...actual,
     resolveFinanceHomeDir: () => H.cap.financeHome,
+    // 任务定义目录跟着 mock 后的 finance home 走（隔离真实 ~/.dsh-ia）。
+    resolveAssetsTasksDir: () => `${H.cap.financeHome}/assets/tasks`,
   }
 })
 
@@ -134,7 +136,7 @@ class RecordingRunner {
   }
 }
 
-const SHARED_PATH = '/tasks/shared/task.ts'
+const SHARED_PATH = '/assets/programs/shared/task.ts'
 function makeTask(id: string, overrides: Partial<TaskDef> = {}): TaskDef {
   return {
     id,
@@ -215,7 +217,7 @@ function mkTmp(): string {
 }
 /** 写任务清单记录（可选补齐入口文件）。 */
 function writeTaskDef(dataRoot: string, def: Record<string, unknown>, withEntry: boolean): void {
-  const dir = join(dataRoot, 'tasks')
+  const dir = join(H.cap.financeHome, 'assets', 'tasks')
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, `${String(def.id)}.json`), JSON.stringify(def), 'utf8')
   if (withEntry) {
@@ -277,8 +279,8 @@ describe('t100411-B 编排层不再按 task_path 反查 taskId', () => {
     'b 而非首个 a）', async () => {
     const dataRoot = mkTmp()
     // a、b 共用同一 task_path；a 的清单文件名在前（store 读取顺序 a 先于 b）。
-    writeTaskDef(dataRoot, { id: 'a', name: 'A', cron: '0 9 * * *', task_path: 'tasks/shared/task.ts', enabled: true }, true)
-    writeTaskDef(dataRoot, { id: 'b', name: 'B', cron: '0 9 * * *', task_path: 'tasks/shared/task.ts', enabled: true }, true)
+    writeTaskDef(dataRoot, { id: 'a', name: 'A', cron: '0 9 * * *', task_path: 'assets/programs/shared/task.ts', enabled: true }, true)
+    writeTaskDef(dataRoot, { id: 'b', name: 'B', cron: '0 9 * * *', task_path: 'assets/programs/shared/task.ts', enabled: true }, true)
 
     const wake = vi.fn((id: string, _data: unknown) => ({
       delivered: true,
@@ -289,7 +291,7 @@ describe('t100411-B 编排层不再按 task_path 反查 taskId', () => {
     H.wakerImpl.value = { wake }
 
     boot(dataRoot)
-    const out = await orch().run('b', 'tasks/shared/task.ts')
+    const out = await orch().run('b', 'assets/programs/shared/task.ts')
 
     expect(out.kind).toBe('woke')
     // 关键：投递按传入的 taskId='b'，而非旧实现反查得到的首个同 path 任务 'a'。
@@ -300,8 +302,8 @@ describe('t100411-B 编排层不再按 task_path 反查 taskId', () => {
   it('B2 store 中查无该路径：直接采用传入 taskId 执行（证明反查已移除）', async () => {
     const dataRoot = mkTmp()
     // 清单为空（不含任何任务），但入口文件存在。
-    mkdirSync(join(dataRoot, 'tasks'), { recursive: true })
-    const abs = resolve(H.cap.financeHome, 'tasks/only-by-arg/task.ts')
+    mkdirSync(join(H.cap.financeHome, 'assets', 'tasks'), { recursive: true })
+    const abs = resolve(H.cap.financeHome, 'assets/programs/only-by-arg/task.ts')
     mkdirSync(dirname(abs), { recursive: true })
     writeFileSync(abs, '// entry\n', 'utf8')
 
@@ -315,7 +317,7 @@ describe('t100411-B 编排层不再按 task_path 反查 taskId', () => {
 
     boot(dataRoot)
     // 旧实现会因 store.list() 反查不到 → skipped；新实现直接用入参 id 跑通并投递。
-    const out = await orch().run('only-by-arg', 'tasks/only-by-arg/task.ts')
+    const out = await orch().run('only-by-arg', 'assets/programs/only-by-arg/task.ts')
 
     expect(out.kind).toBe('woke')
     expect(wake.mock.calls[0][0]).toBe('only-by-arg')

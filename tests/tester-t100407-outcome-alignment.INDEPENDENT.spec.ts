@@ -35,6 +35,8 @@ vi.mock('../src/paths.js', async (importOriginal) => {
   return {
     ...actual,
     resolveFinanceHomeDir: () => H.cap.financeHome,
+    // 任务定义目录跟着 mock 后的 finance home 走（隔离真实 ~/.dsh-ia）。
+    resolveAssetsTasksDir: () => `${H.cap.financeHome}/assets/tasks`,
   }
 })
 
@@ -106,7 +108,7 @@ function mkTmp(): string {
 
 /** 写任务清单 JSON（可选是否补齐入口文件）。 */
 function writeTaskDef(dataRoot: string, def: Record<string, unknown>, withEntry: boolean): void {
-  const dir = join(dataRoot, 'tasks')
+  const dir = join(H.cap.financeHome, 'assets', 'tasks')
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, `${String(def.id)}.json`), JSON.stringify(def), 'utf8')
   const abs = resolve(H.cap.financeHome, String(def.task_path))
@@ -161,7 +163,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     const dataRoot = mkTmp()
     writeTaskDef(
       dataRoot,
-      { id: 'noentry', name: 'NE', cron: '0 9 * * *', task_path: 'tasks/noentry/task.ts', enabled: true },
+      { id: 'noentry', name: 'NE', cron: '0 9 * * *', task_path: 'assets/programs/noentry/task.ts', enabled: true },
       false,
     )
     H.loaderImpl.value = { installTaskDeps: vi.fn(async () => {}) }
@@ -169,12 +171,12 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('noentry', 'tasks/noentry/task.ts')
+    const out = await orch().run('noentry', 'assets/programs/noentry/task.ts')
 
     expect(out.kind).toBe('skipped')
     expect(out.kind).not.toBe('failed')
     expect(String(out.reason)).toContain('任务程序文件缺失')
-    expect(out.detail).toBe(resolve(H.cap.financeHome, 'tasks/noentry/task.ts'))
+    expect(out.detail).toBe(resolve(H.cap.financeHome, 'assets/programs/noentry/task.ts'))
     // 关键：runner 必须完全未被触达
     expect(run).not.toHaveBeenCalled()
   })
@@ -183,7 +185,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     const dataRoot = mkTmp()
     writeTaskDef(
       dataRoot,
-      { id: 'noentry2', name: 'NE2', cron: '0 9 * * *', task_path: 'tasks/noentry2/task.ts', enabled: true },
+      { id: 'noentry2', name: 'NE2', cron: '0 9 * * *', task_path: 'assets/programs/noentry2/task.ts', enabled: true },
       false,
     )
     const install = vi.fn(async () => {})
@@ -192,7 +194,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('noentry2', 'tasks/noentry2/task.ts')
+    const out = await orch().run('noentry2', 'assets/programs/noentry2/task.ts')
 
     expect(out.kind).toBe('skipped')
     // 观察点：可读性校验前移到依赖安装之前，故缺程序时连依赖都不装。
@@ -204,7 +206,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     const dataRoot = mkTmp()
     writeTaskDef(
       dataRoot,
-      { id: 'ok', name: 'OK', cron: '0 9 * * *', task_path: 'tasks/ok/task.ts', enabled: true },
+      { id: 'ok', name: 'OK', cron: '0 9 * * *', task_path: 'assets/programs/ok/task.ts', enabled: true },
       true,
     )
     const runCalls: string[] = []
@@ -217,17 +219,17 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     }
 
     boot(dataRoot)
-    const out = await orch().run('ok', 'tasks/ok/task.ts')
+    const out = await orch().run('ok', 'assets/programs/ok/task.ts')
 
     expect(out.kind).toBe('quiet')
-    expect(runCalls).toEqual([resolve(H.cap.financeHome, 'tasks/ok/task.ts')])
+    expect(runCalls).toEqual([resolve(H.cap.financeHome, 'assets/programs/ok/task.ts')])
   })
 
   it('A4 顺序：缺失文件 + loader 会抛错 → 仍 skipped（校验先于安装，install 未被触发）', async () => {
     const dataRoot = mkTmp()
     writeTaskDef(
       dataRoot,
-      { id: 'noentry3', name: 'NE3', cron: '0 9 * * *', task_path: 'tasks/noentry3/task.ts', enabled: true },
+      { id: 'noentry3', name: 'NE3', cron: '0 9 * * *', task_path: 'assets/programs/noentry3/task.ts', enabled: true },
       false,
     )
     H.loaderImpl.value = {
@@ -239,7 +241,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('noentry3', 'tasks/noentry3/task.ts')
+    const out = await orch().run('noentry3', 'assets/programs/noentry3/task.ts')
 
     // 校验先于安装：即使 loader 会抛，也不触发安装；缺程序 → skipped（不误归 failed/install）。
     expect(out.kind).toBe('skipped')
@@ -253,21 +255,21 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     // 任务目录 + package.json 存在；入口 task.ts 位置被建成「目录」（existsSync=true 但非普通文件）。
     writeTaskDef(
       dataRoot,
-      { id: 'direntry', name: 'DE', cron: '0 9 * * *', task_path: 'tasks/direntry/task.ts', enabled: true },
+      { id: 'direntry', name: 'DE', cron: '0 9 * * *', task_path: 'assets/programs/direntry/task.ts', enabled: true },
       false,
     )
-    mkdirSync(resolve(H.cap.financeHome, 'tasks/direntry/task.ts'), { recursive: true })
+    mkdirSync(resolve(H.cap.financeHome, 'assets/programs/direntry/task.ts'), { recursive: true })
     const install = vi.fn(async () => {})
     H.loaderImpl.value = { installTaskDeps: install }
     const run = vi.fn(async () => ({ kind: 'quiet', reason: 'SHOULD-NOT-RUN' }))
     H.runnerImpl.value = { run }
 
     boot(dataRoot)
-    const out = await orch().run('direntry', 'tasks/direntry/task.ts')
+    const out = await orch().run('direntry', 'assets/programs/direntry/task.ts')
 
     expect(out.kind).toBe('skipped')
     expect(String(out.reason)).toContain('任务程序文件缺失或不可读')
-    expect(out.detail).toBe(resolve(H.cap.financeHome, 'tasks/direntry/task.ts'))
+    expect(out.detail).toBe(resolve(H.cap.financeHome, 'assets/programs/direntry/task.ts'))
     expect(install).not.toHaveBeenCalled()
     expect(run).not.toHaveBeenCalled()
   })
@@ -276,10 +278,10 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
     const dataRoot = mkTmp()
     writeTaskDef(
       dataRoot,
-      { id: 'unreadable', name: 'UR', cron: '0 9 * * *', task_path: 'tasks/unreadable/task.ts', enabled: true },
+      { id: 'unreadable', name: 'UR', cron: '0 9 * * *', task_path: 'assets/programs/unreadable/task.ts', enabled: true },
       true,
     )
-    const abs = resolve(H.cap.financeHome, 'tasks/unreadable/task.ts')
+    const abs = resolve(H.cap.financeHome, 'assets/programs/unreadable/task.ts')
     const { chmodSync } = await import('node:fs')
     chmodSync(abs, 0o000)
     const install = vi.fn(async () => {})
@@ -289,7 +291,7 @@ describe('T100407-A 验收1：入口缺失/不可读 → skipped + 不启动 run
 
     try {
       boot(dataRoot)
-      const out = await orch().run('unreadable', 'tasks/unreadable/task.ts')
+      const out = await orch().run('unreadable', 'assets/programs/unreadable/task.ts')
       expect(out.kind).toBe('skipped')
       expect(String(out.reason)).toContain('任务程序文件缺失或不可读')
       expect(out.detail).toBe(abs)
@@ -330,7 +332,7 @@ function spawnerOf(proc: FakeProcess) {
   const spawner: Spawner = { spawn }
   return { spawner, spawn }
 }
-const TASK = '/tmp/tasks/x/task.ts'
+const TASK = '/tmp/assets/programs/x/task.ts'
 
 describe('T100407-B 验收2：exit 0 输出不可解析 → failed/parse', () => {
   const cases: Array<[string, string, number | null]> = [

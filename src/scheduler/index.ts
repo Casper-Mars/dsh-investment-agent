@@ -2,9 +2,9 @@
  * scheduler 层入口：装配「定时任务多任务调度 + 依赖加载 + 唤醒投递 + 7 工具」并接入插件生命周期。
  *
  * `applyScheduler(ctx)`（由 `src/plugin.ts` 的 `apply` 调用）：
- *   1. 解析 dataRoot（复用 tools 层 {@link DATA_ROOT_ENV} / {@link DEFAULT_DATA_DIR} 的
- *      注入优先级：构造注入 > 环境变量 `DSH_IA_DATA_DIR` > 默认 `~/.dsh-ia/data`），
- *      并显式派生任务清单目录 `join(dataRoot, 'tasks')`——**不依赖 `process.cwd()`**；
+ *   1. 解析任务定义目录 `~/.dsh-ia/assets/tasks`（经 {@link resolveAssetsTasksDir}，
+ *      继承 `DSH_IA_HOME` 覆盖语义，**不依赖 `process.cwd()`**）；
+ *      任务定义属可分享资产，统一落在资产层（不再使用旧数据目录）；
  *   2. `createTaskStore(tasksDir)` 建任务清单 store；
  *   3. 组装「编排 runner」（本层真正难点）：满足 `TaskRunnerLike`（`run(taskId, taskPath)`），
  *      在 `run()` 内完成设计文档 §4.3 完整链路——
@@ -20,10 +20,9 @@
  * `ctx.inject` / `ctx.get` 软取，不加入顶层 inject）。
  */
 import { accessSync, constants, statSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { DATA_ROOT_ENV, DEFAULT_DATA_DIR } from '../tools/context.js'
-import { ensureFinanceDataDir, resolveFinanceHomeDir } from '../paths.js'
+import { resolveAssetsTasksDir, resolveFinanceHomeDir } from '../paths.js'
 import { createTaskStore, type TaskStore } from './store.js'
 import { createTaskLoader, LoaderError, type TaskLoader } from './loader.js'
 import { createTaskRunner, type TaskRunner } from './runner.js'
@@ -85,7 +84,10 @@ export {
 
 /** `applyScheduler` 配置。 */
 export interface SchedulerApplyOptions {
-  /** 数据根目录（可选）；省略时依次取环境变量 → 默认值。 */
+  /**
+   * @deprecated 自任务-04 起任务定义固定落在资产层 `~/.dsh-ia/assets/tasks`，
+   * 本字段不再参与路径解析，仅为保持装配方公开签名兼容而保留。
+   */
   dataRoot?: string
   /** 唤醒文本预算（字符）；默认 {@link DEFAULT_WAKE_TEXT_BUDGET}。 */
   wakeTextBudget?: number
@@ -93,21 +95,6 @@ export interface SchedulerApplyOptions {
   wakeCooldownMs?: number
   /** 调度日志钩子（level + message）。默认走统一日志门面（{@link createLeveledLogFunction}）。 */
   logger?: (level: 'info' | 'warn' | 'error', message: string) => void
-}
-
-/**
- * 解析数据根目录（构造注入 > 环境变量 > 默认值）。
- *
- * 与 `src/tools/context.ts` 的 `resolveDataRoot` 逻辑完全一致（复用其导出的
- * {@link DATA_ROOT_ENV} / {@link DEFAULT_DATA_DIR} 常量），仅在 scheduler 装配层独立
- * 实现，避免为取一个路径而实例化整个 ToolContext（Ledger / Predicts 等领域类）。
- */
-function resolveDataRoot(explicit?: string): string {
-  if (explicit && explicit.trim() !== '') return resolve(explicit)
-  const env = process.env[DATA_ROOT_ENV]
-  if (env && env.trim() !== '') return resolve(env)
-  // 固定默认值：`~/.dsh-ia/data`（经 os.homedir() 展开，目录幂等创建）。
-  return ensureFinanceDataDir()
 }
 
 /**
@@ -121,9 +108,9 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
   const log: (level: 'info' | 'warn' | 'error', message: string) => void =
     options.logger ?? createLeveledLogFunction('dsh-ia:scheduler', ctx.logger)
 
-  // ---- 1) 解析 dataRoot，并显式派生任务清单目录（不依赖 process.cwd()） ----
-  const dataRoot = resolveDataRoot(options.dataRoot)
-  const tasksDir = join(dataRoot, 'tasks')
+  // ---- 1) 解析任务定义目录（资产层，不依赖 process.cwd()） ----
+  // `options.dataRoot` 已 deprecated：任务定义迁出到 assets/tasks 后不再由 dataRoot 派生。
+  const tasksDir = resolveAssetsTasksDir()
 
   // ---- 2) 任务清单 store ----
   const store: TaskStore = createTaskStore(tasksDir)
@@ -155,9 +142,9 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
       //     旧契约因不携带 taskId 才需反查；现契约已携带，故删除反查及其「未找到 → skipped」
       //     分支。taskPath 即 TaskDef.task_path 原文（相对路径）。
       // taskPath 为 TaskDef.task_path 原文，是相对于 FINANCE_HOME（`~/.dsh-ia`）的
-      // 多级相对路径（如 `tasks/002156-intraday/task.ts`），因此解析基准是 finance home，
-      // 而非 dataRoot（`~/.dsh-ia/data`）——后者会多拼一层 `data`，导致程序文件
-      // 定位到错误的 `~/.dsh-ia/data/tasks/...`。
+      // 多级相对路径（如 `assets/programs/002156-intraday/task.ts`），因此解析基准是
+      // finance home，而非 assetsDir（`~/.dsh-ia/assets`）——后者会重复拼一层 `assets`，
+      // 导致程序文件定位到错误的 `~/.dsh-ia/assets/assets/programs/...`。
       const financeHome = resolveFinanceHomeDir()
       const absTaskPath = resolve(financeHome, taskPath)
       const taskDir = dirname(absTaskPath)

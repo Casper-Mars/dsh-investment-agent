@@ -46,6 +46,8 @@ vi.mock('../src/paths.js', async (importOriginal) => {
   return {
     ...actual,
     resolveFinanceHomeDir: () => H.cap.financeHome,
+    // 任务定义目录跟着 mock 后的 finance home 走（隔离真实 ~/.dsh-ia）。
+    resolveAssetsTasksDir: () => `${H.cap.financeHome}/assets/tasks`,
   }
 })
 
@@ -146,7 +148,7 @@ function mkTmp(): string {
 
 /** 写一条任务清单记录到 `<dataRoot>/tasks/<id>.json`（并补齐任务入口文件）。 */
 function writeTask(dataRoot: string, def: Record<string, unknown>): void {
-  const dir = join(dataRoot, 'tasks')
+  const dir = join(H.cap.financeHome, 'assets', 'tasks')
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, `${String(def.id)}.json`), JSON.stringify(def), 'utf8')
   // §9.1：编排 runner 会校验任务程序入口文件存在性；默认补齐入口文件，避免被误判为
@@ -264,7 +266,7 @@ describe('T11-I2 全链路（真实 loader/runner/waker + mock spawner + 假 tim
         id: 'alpha',
         name: 'A',
         cron: '* * * * *',
-        task_path: 'tasks/alpha/task.mjs',
+        task_path: 'assets/programs/alpha/task.mjs',
         enabled: true,
       })
 
@@ -290,10 +292,10 @@ describe('T11-I2 全链路（真实 loader/runner/waker + mock spawner + 假 tim
 
       // 依赖就绪：真实 loader 被调用，cwd = 任务目录。
       expect(inst.install).toHaveBeenCalledTimes(1)
-      expect(inst.install.mock.calls[0][0]).toBe(resolve(H.cap.financeHome, 'tasks/alpha'))
+      expect(inst.install.mock.calls[0][0]).toBe(resolve(H.cap.financeHome, 'assets/programs/alpha'))
       // 独立执行：真实 runner 起进程，路径 = 任务入口绝对路径。
       expect(sp.spawn).toHaveBeenCalledTimes(1)
-      expect(sp.spawn.mock.calls[0][0]).toBe(resolve(H.cap.financeHome, 'tasks/alpha/task.mjs'))
+      expect(sp.spawn.mock.calls[0][0]).toBe(resolve(H.cap.financeHome, 'assets/programs/alpha/task.mjs'))
       // 唤醒投递：定点到固定会话，正文 = data 原文 + 合规声明。
       expect(followup).toHaveBeenCalledTimes(1)
       const msg = JSON.stringify(followup.mock.calls[0][0])
@@ -318,14 +320,14 @@ describe('T11-I2 全链路（真实 loader/runner/waker + mock spawner + 假 tim
         id: 'on',
         name: 'ON',
         cron: '* * * * *',
-        task_path: 'tasks/on/task.mjs',
+        task_path: 'assets/programs/on/task.mjs',
         enabled: true,
       })
       writeTask(dataRoot, {
         id: 'off',
         name: 'OFF',
         cron: '* * * * *',
-        task_path: 'tasks/off/task.mjs',
+        task_path: 'assets/programs/off/task.mjs',
         enabled: false,
       })
 
@@ -341,8 +343,8 @@ describe('T11-I2 全链路（真实 loader/runner/waker + mock spawner + 假 tim
       await vi.advanceTimersByTimeAsync(61_000)
 
       const spawned = sp.spawn.mock.calls.map((c) => c[0])
-      expect(spawned).toContain(resolve(H.cap.financeHome, 'tasks/on/task.mjs'))
-      expect(spawned).not.toContain(resolve(H.cap.financeHome, 'tasks/off/task.mjs'))
+      expect(spawned).toContain(resolve(H.cap.financeHome, 'assets/programs/on/task.mjs'))
+      expect(spawned).not.toContain(resolve(H.cap.financeHome, 'assets/programs/off/task.mjs'))
     } finally {
       vi.useRealTimers()
     }
@@ -357,7 +359,7 @@ describe('T11-I2 全链路（真实 loader/runner/waker + mock spawner + 假 tim
           id,
           name: id,
           cron: '* * * * *',
-          task_path: `tasks/${id}/task.mjs`,
+          task_path: `assets/programs/${id}/task.mjs`,
           enabled: true,
         })
       }
@@ -391,7 +393,7 @@ describe('T11-I2 全链路（真实 loader/runner/waker + mock spawner + 假 tim
         id: 'stopme',
         name: 'S',
         cron: '* * * * *',
-        task_path: 'tasks/stopme/task.mjs',
+        task_path: 'assets/programs/stopme/task.mjs',
         enabled: true,
       })
 
@@ -420,7 +422,7 @@ describe('T11-I2 全链路（真实 loader/runner/waker + mock spawner + 假 tim
 // ===========================================================================
 
 describe('T11-C2 契约：failureKind 归因矩阵（真实 runner/loader + 注入替身）', () => {
-  const TASK_PATH = 'tasks/alpha/task.mjs'
+  const TASK_PATH = 'assets/programs/alpha/task.mjs'
 
   function setupTask(): string {
     const dataRoot = mkTmp()

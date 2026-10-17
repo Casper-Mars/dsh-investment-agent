@@ -15,13 +15,13 @@
 // ---------------------------------------------------------------------------
 
 /**
- * 一条定时任务的持久化记录（`data/tasks/<id>.json`）。
+ * 一条定时任务的持久化记录（`assets/tasks/<id>.json`）。
  *
  * 对应设计文档 §2.1「任务记录」。每个字段直接对齐文档字段表：
  * - `id`      唯一标识
  * - `name`    人类可读名称
  * - `cron`    cron 表达式（Asia/Shanghai 时区，最小粒度「分钟」，见 §2.2 / §7）
- * - `task_path` 任务程序入口文件路径（如 `tasks/market-pulse/task.ts`）
+ * - `task_path` 任务程序入口文件路径（如 `assets/programs/market-pulse/task.ts`）
  * - `enabled` 是否启用
  */
 export interface TaskDef {
@@ -31,7 +31,10 @@ export interface TaskDef {
   readonly name: string;
   /** cron 表达式（5 段：分 时 日 月 周），始终按 Asia/Shanghai 解析，最小粒度分钟。§2.1 / §2.2 */
   readonly cron: string;
-  /** 任务程序入口文件路径（相对路径，指向该任务的 `task.ts`）。§2.1 */
+  /**
+   * 任务程序入口文件路径（相对 `~/.dsh-ia` 的多级相对路径，形如
+   * `assets/programs/<id>/task.ts`）。§2.1
+   */
   readonly task_path: string;
   /** 是否启用；`enabled=false` 的任务不被调度。§2.1 */
   readonly enabled: boolean;

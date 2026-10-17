@@ -113,7 +113,7 @@ function makeTask(id: string, overrides: Partial<TaskDef> = {}): TaskDef {
     id,
     name: `任务-${id}`,
     cron: '* * * * *', // 每分钟
-    task_path: `/tasks/${id}/task.ts`,
+    task_path: `/assets/programs/${id}/task.ts`,
     enabled: true,
     ...overrides,
   }
