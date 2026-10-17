@@ -1,12 +1,13 @@
 /**
- * skill 资产仓库（`<dataRoot>/skills` 独立 git 仓库）单测 —— 任务-1。
+ * skill 资产仓库（`<assetsDir>/skills` 独立 git 仓库）单测 —— 任务-1 / 任务-2（资产层迁移）。
  *
  * 覆盖：
- *   ① 全新 dataRoot 冷启动 → 目录 / git 仓库 / 5 个可进化 skill / 首版 commit 齐备；
+ *   ① 全新 assetsDir 冷启动 → 目录 / git 仓库 / 5 个可进化 skill / 首版 commit 齐备；
  *   ② 幂等：二次调用 no-op（commit 数不增、内容逐字节不变）；
  *   ③ git 不可用 / 命令失败 → 降级不抛、不中断；
  *   ④ 目录名 / 文件名 / frontmatter.name 三者一致；
- *   ⑤ 与 `DSH_IA_DATA_DIR` 覆盖联动（env 生效 + 构造注入优先）。
+ *   ⑤ 与 `DSH_IA_HOME` 覆盖联动（env 生效 + 构造注入优先）；
+ *   ⑥ assetsDir 纯计算语义 / 显式作者身份 / 不写旧路径。
  *
  * 所有用例使用 `os.tmpdir()` 下随机子目录，**不污染**真实 `~/.dsh-ia`。
  */
@@ -27,7 +28,7 @@ import {
   SKILLS_REPO_DIRNAME,
   type GitRunner,
 } from '../src/skills/repo.js'
-import { DATA_ROOT_ENV } from '../src/paths.js'
+import { FINANCE_HOME_ENV } from '../src/flags.js'
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 
@@ -72,7 +73,7 @@ function assertGitAvailable(): void {
 }
 
 let tmp: string
-const savedEnv = process.env[DATA_ROOT_ENV]
+const savedEnv = process.env[FINANCE_HOME_ENV]
 
 beforeEach(() => {
   assertGitAvailable()
@@ -81,23 +82,23 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(tmp, { recursive: true, force: true })
-  if (savedEnv === undefined) delete process.env[DATA_ROOT_ENV]
-  else process.env[DATA_ROOT_ENV] = savedEnv
+  if (savedEnv === undefined) delete process.env[FINANCE_HOME_ENV]
+  else process.env[FINANCE_HOME_ENV] = savedEnv
 })
 
 /* ------------------------------------------------------------------ *
- * ① 全新 dataRoot 冷启动
+ * ① 全新 assetsDir 冷启动
  * ------------------------------------------------------------------ */
 
-describe('① 冷启动预置（全新 dataRoot）', () => {
+describe('① 冷启动预置（全新 assetsDir）', () => {
   it('创建目录 + git 仓库 + 5 个可进化 skill + 首版 commit', () => {
-    const dataRoot = join(tmp, 'data')
+    const assetsDir = join(tmp, 'assets')
     const logs: string[] = []
-    const out = ensureSkillAssetsRepo({ dataRoot, logger: (m) => logs.push(m) })
+    const out = ensureSkillAssetsRepo({ assetsDir, logger: (m) => logs.push(m) })
 
-    const repoDir = resolveSkillsRepoDir(dataRoot)
+    const repoDir = resolveSkillsRepoDir(assetsDir)
     expect(out.dir).toBe(repoDir)
-    expect(out.dir).toBe(join(dataRoot, SKILLS_REPO_DIRNAME))
+    expect(out.dir).toBe(join(assetsDir, SKILLS_REPO_DIRNAME))
     expect(out.provisioned).toBe(true)
     expect(out.degraded).toBe(false)
 
@@ -119,9 +120,9 @@ describe('① 冷启动预置（全新 dataRoot）', () => {
   })
 
   it('预置日志包含仓库路径与 message', () => {
-    const dataRoot = join(tmp, 'data')
+    const assetsDir = join(tmp, 'assets')
     const logs: string[] = []
-    ensureSkillAssetsRepo({ dataRoot, logger: (m) => logs.push(m) })
+    ensureSkillAssetsRepo({ assetsDir, logger: (m) => logs.push(m) })
     const joined = logs.join('\n')
     expect(joined).toMatch(/冷启动预置完成/)
     expect(joined).toContain(INITIAL_COMMIT_MESSAGE)
@@ -134,19 +135,19 @@ describe('① 冷启动预置（全新 dataRoot）', () => {
 
 describe('② 幂等（重复调用 no-op）', () => {
   it('二次/三次调用不重复 init、不产生第二个 commit、内容不变', () => {
-    const dataRoot = join(tmp, 'data')
-    const first = ensureSkillAssetsRepo({ dataRoot, logger: noop })
+    const assetsDir = join(tmp, 'assets')
+    const first = ensureSkillAssetsRepo({ assetsDir, logger: noop })
     expect(first.provisioned).toBe(true)
     const repoDir = first.dir
     const countBefore = commitCount(repoDir)
     const before = SKILL_NAMES.map((n) => readFileSync(join(repoDir, n, SKILL_FILENAME), 'utf8'))
 
-    const second = ensureSkillAssetsRepo({ dataRoot, logger: noop })
+    const second = ensureSkillAssetsRepo({ assetsDir, logger: noop })
     expect(second.provisioned).toBe(false)
     expect(second.degraded).toBe(false)
     expect(commitCount(repoDir)).toBe(countBefore)
 
-    const third = ensureSkillAssetsRepo({ dataRoot, logger: noop })
+    const third = ensureSkillAssetsRepo({ assetsDir, logger: noop })
     expect(third.provisioned).toBe(false)
     expect(commitCount(repoDir)).toBe(countBefore)
 
@@ -155,14 +156,14 @@ describe('② 幂等（重复调用 no-op）', () => {
   })
 
   it('已就绪仓库即使存在额外未提交改动也不自动提交（严格 no-op）', () => {
-    const dataRoot = join(tmp, 'data')
-    const first = ensureSkillAssetsRepo({ dataRoot, logger: noop })
+    const assetsDir = join(tmp, 'assets')
+    const first = ensureSkillAssetsRepo({ assetsDir, logger: noop })
     const repoDir = first.dir
     const countBefore = commitCount(repoDir)
     // 制造一个未提交改动：no-op 语义下不应被本模块提交。
     writeFileSync(join(repoDir, 'README.tmp.md'), 'stray\n', 'utf8')
 
-    const second = ensureSkillAssetsRepo({ dataRoot, logger: noop })
+    const second = ensureSkillAssetsRepo({ assetsDir, logger: noop })
     expect(second.provisioned).toBe(false)
     expect(commitCount(repoDir)).toBe(countBefore)
   })
@@ -174,7 +175,7 @@ describe('② 幂等（重复调用 no-op）', () => {
 
 describe('③ 降级（git 不可用 / 命令失败不抛）', () => {
   it('git 可执行文件缺失（runner 抛错）→ 降级不抛、不中断', () => {
-    const dataRoot = join(tmp, 'data')
+    const assetsDir = join(tmp, 'assets')
     const logs: string[] = []
     const failing: GitRunner = () => {
       throw new Error('spawn git ENOENT')
@@ -182,7 +183,7 @@ describe('③ 降级（git 不可用 / 命令失败不抛）', () => {
 
     let out!: ReturnType<typeof ensureSkillAssetsRepo>
     expect(() => {
-      out = ensureSkillAssetsRepo({ dataRoot, gitRunner: failing, logger: (m) => logs.push(m) })
+      out = ensureSkillAssetsRepo({ assetsDir, gitRunner: failing, logger: (m) => logs.push(m) })
     }).not.toThrow()
 
     expect(out.degraded).toBe(true)
@@ -193,7 +194,7 @@ describe('③ 降级（git 不可用 / 命令失败不抛）', () => {
   })
 
   it('git 命令非零退出（commit 阶段失败）→ 降级不抛、不中断', () => {
-    const dataRoot = join(tmp, 'data')
+    const assetsDir = join(tmp, 'assets')
     const partial: GitRunner = (args, cwd) => {
       if (args[0] === 'commit') throw new Error('commit failed: exit status 1')
       return git(args, cwd)
@@ -201,7 +202,7 @@ describe('③ 降级（git 不可用 / 命令失败不抛）', () => {
 
     let out!: ReturnType<typeof ensureSkillAssetsRepo>
     expect(() => {
-      out = ensureSkillAssetsRepo({ dataRoot, gitRunner: partial, logger: noop })
+      out = ensureSkillAssetsRepo({ assetsDir, gitRunner: partial, logger: noop })
     }).not.toThrow()
 
     expect(out.degraded).toBe(true)
@@ -230,8 +231,8 @@ describe('④ 目录名 / 文件名 / frontmatter.name 三者一致', () => {
   })
 
   it('落盘后：目录名 = 文件名 SKILL.md = frontmatter.name', () => {
-    const dataRoot = join(tmp, 'data')
-    const out = ensureSkillAssetsRepo({ dataRoot, logger: noop })
+    const assetsDir = join(tmp, 'assets')
+    const out = ensureSkillAssetsRepo({ assetsDir, logger: noop })
     for (const name of SKILL_NAMES) {
       const file = join(out.dir, name, SKILL_FILENAME)
       expect(existsSync(file)).toBe(true)
@@ -244,28 +245,68 @@ describe('④ 目录名 / 文件名 / frontmatter.name 三者一致', () => {
 })
 
 /* ------------------------------------------------------------------ *
- * ⑤ DSH_IA_DATA_DIR 联动
+ * ⑤ DSH_IA_HOME 联动（资产层由 home 派生）
  * ------------------------------------------------------------------ */
 
-describe('⑤ 与 DSH_IA_DATA_DIR 覆盖联动', () => {
-  it('env 覆盖默认：仓库落在 <env>/skills', () => {
-    const envRoot = join(tmp, 'env-data')
-    process.env[DATA_ROOT_ENV] = envRoot
+describe('⑤ 与 DSH_IA_HOME 覆盖联动', () => {
+  it('env 覆盖 home：仓库落在 <home>/assets/skills', () => {
+    const envHome = join(tmp, 'env-home')
+    const envAssets = join(envHome, 'assets')
+    process.env[FINANCE_HOME_ENV] = envHome
 
     const out = ensureSkillAssetsRepo({ logger: noop })
-    expect(out.dir).toBe(resolveSkillsRepoDir(envRoot))
+    expect(out.dir).toBe(resolveSkillsRepoDir(envAssets))
     expect(out.provisioned).toBe(true)
     expect(existsSync(join(out.dir, 'trend-analysis', SKILL_FILENAME))).toBe(true)
   })
 
-  it('构造注入 dataRoot 优先于 env', () => {
-    const envRoot = join(tmp, 'env-data')
-    const injected = join(tmp, 'injected-data')
-    process.env[DATA_ROOT_ENV] = envRoot
+  it('构造注入 assetsDir 优先于 env', () => {
+    const envHome = join(tmp, 'env-home')
+    const injected = join(tmp, 'injected-assets')
+    process.env[FINANCE_HOME_ENV] = envHome
 
-    const out = ensureSkillAssetsRepo({ dataRoot: injected, logger: noop })
+    const out = ensureSkillAssetsRepo({ assetsDir: injected, logger: noop })
     expect(out.dir).toBe(resolveSkillsRepoDir(injected))
-    expect(existsSync(resolveSkillsRepoDir(envRoot))).toBe(false)
+    expect(existsSync(resolveSkillsRepoDir(join(envHome, 'assets')))).toBe(false)
+  })
+})
+
+/* ------------------------------------------------------------------ *
+ * ⑥ assetsDir 语义 / 作者身份 / 不写旧路径
+ * ------------------------------------------------------------------ */
+
+describe('⑥ assetsDir 纯计算语义 + 显式作者身份 + 不产生旧路径', () => {
+  it('resolveSkillsRepoDir 纯计算：等于 <assetsDir>/skills，且无副作用', () => {
+    const assetsDir = join(tmp, 'pure')
+    expect(resolveSkillsRepoDir(assetsDir)).toBe(join(assetsDir, 'skills'))
+    // 纯计算：不创建目录。
+    expect(existsSync(assetsDir)).toBe(false)
+  })
+
+  it('首版 commit 作者显式注入为 dsh-ia <dsh-ia@localhost>（不依赖宿主机 git config）', () => {
+    const assetsDir = join(tmp, 'assets')
+    const out = ensureSkillAssetsRepo({ assetsDir, logger: noop })
+    expect(out.provisioned).toBe(true)
+    expect(git(['log', '-1', '--format=%an <%ae>'], out.dir).trim()).toBe('dsh-ia <dsh-ia@localhost>')
+  })
+
+  it('幂等：连续两次 provisioned=false 且 commit 数不变', () => {
+    const assetsDir = join(tmp, 'assets')
+    expect(ensureSkillAssetsRepo({ assetsDir, logger: noop }).provisioned).toBe(true)
+    const repoDir = resolveSkillsRepoDir(assetsDir)
+    const count = commitCount(repoDir)
+    expect(commitCount(repoDir)).toBe(1)
+    expect(ensureSkillAssetsRepo({ assetsDir, logger: noop }).provisioned).toBe(false)
+    expect(ensureSkillAssetsRepo({ assetsDir, logger: noop }).provisioned).toBe(false)
+    expect(commitCount(repoDir)).toBe(count)
+  })
+
+  it('不产生旧路径：<assetsDir 的父目录> 下不存在 data/skills（无回落写旧位置）', () => {
+    const assetsDir = join(tmp, 'assets')
+    const out = ensureSkillAssetsRepo({ assetsDir, logger: noop })
+    expect(out.dir).toBe(join(assetsDir, 'skills'))
+    expect(existsSync(join(tmp, 'data', 'skills'))).toBe(false)
+    expect(existsSync(join(tmp, 'data'))).toBe(false)
   })
 })
 
@@ -275,8 +316,8 @@ describe('⑤ 与 DSH_IA_DATA_DIR 覆盖联动', () => {
 
 describe('「为空」判定稳健性', () => {
   it('有 .git 但无提交 → 需预置并产生首版 commit（不重复）', () => {
-    const dataRoot = join(tmp, 'data')
-    const repoDir = resolveSkillsRepoDir(dataRoot)
+    const assetsDir = join(tmp, 'assets')
+    const repoDir = resolveSkillsRepoDir(assetsDir)
     mkdirSync(repoDir, { recursive: true })
     git(['init'], repoDir)
     for (const name of SKILL_NAMES) {
@@ -284,7 +325,7 @@ describe('「为空」判定稳健性', () => {
       writeFileSync(join(repoDir, name, SKILL_FILENAME), seedBytes(name), 'utf8')
     }
 
-    const out = ensureSkillAssetsRepo({ dataRoot, logger: noop })
+    const out = ensureSkillAssetsRepo({ assetsDir, logger: noop })
     expect(out.provisioned).toBe(true)
     expect(out.degraded).toBe(false)
     expect(commitCount(repoDir)).toBe(1)
@@ -293,34 +334,34 @@ describe('「为空」判定稳健性', () => {
     }
 
     // 再次调用 no-op，不产生第二个 commit。
-    expect(ensureSkillAssetsRepo({ dataRoot, logger: noop }).provisioned).toBe(false)
+    expect(ensureSkillAssetsRepo({ assetsDir, logger: noop }).provisioned).toBe(false)
     expect(commitCount(repoDir)).toBe(1)
   })
 
   it('仅有空目录（无 skill 内容）→ 需预置', () => {
-    const dataRoot = join(tmp, 'data')
-    const repoDir = resolveSkillsRepoDir(dataRoot)
+    const assetsDir = join(tmp, 'assets')
+    const repoDir = resolveSkillsRepoDir(assetsDir)
     mkdirSync(join(repoDir, 'stray-empty'), { recursive: true })
 
-    const out = ensureSkillAssetsRepo({ dataRoot, logger: noop })
+    const out = ensureSkillAssetsRepo({ assetsDir, logger: noop })
     expect(out.provisioned).toBe(true)
     expect(commitCount(out.dir)).toBe(1)
   })
 
   it('已 git init 但仅有空目录（无 skill 内容）→ 需预置', () => {
-    const dataRoot = join(tmp, 'data')
-    const repoDir = resolveSkillsRepoDir(dataRoot)
+    const assetsDir = join(tmp, 'assets')
+    const repoDir = resolveSkillsRepoDir(assetsDir)
     mkdirSync(join(repoDir, 'stray-empty'), { recursive: true })
     git(['init'], repoDir)
 
-    const out = ensureSkillAssetsRepo({ dataRoot, logger: noop })
+    const out = ensureSkillAssetsRepo({ assetsDir, logger: noop })
     expect(out.provisioned).toBe(true)
     expect(commitCount(out.dir)).toBe(1)
   })
 
   it('仓库内 .gitignore 不忽略 skill 内容', () => {
-    const dataRoot = join(tmp, 'data')
-    const out = ensureSkillAssetsRepo({ dataRoot, logger: noop })
+    const assetsDir = join(tmp, 'assets')
+    const out = ensureSkillAssetsRepo({ assetsDir, logger: noop })
     // `git check-ignore` 命中时退出码 0 并输出规则；未命中退出码 1 → 抛错。
     // skill 内容不应被忽略 → 期望抛错。
     expect(() =>

@@ -5,11 +5,11 @@
  *   历史上 skill（5 个可进化 + 1 个固有）由 `src/skills/index.ts` 以「读文件 + `ctx.skills.register`」
  *   静态注册到运行时层。该路径无法热更新（改 SKILL.md 需重启），且把「资产发现」
  *   与「资产内容」耦合在本插件里。本模块改为挂载 dsh 原生 filesystem provider，
- *   指向运行时数据目录 `<dataRoot>/skills`（`src/skills/repo.ts` 的独立 git 仓库），
- *   并开启 `watch` 热更新。
+ *   指向资产层目录 `<assetsDir>/skills`（`src/skills/repo.ts` 的独立 git 仓库，
+ *   即 `~/.dsh-ia/assets/skills`），并开启 `watch` 热更新。
  *
  * 范围：本 provider 发现的是 **5 个「可进化 SKILL」**（= `SKILL_NAMES`）。固有 SKILL
- *   `task-authorship` 不落数据目录、不参与本 provider 发现，改由 `src/plugin.ts` 静态注册。
+ *   `task-authorship` 不落资产目录、不参与本 provider 发现，改由 `src/plugin.ts` 静态注册。
  *
  * 挂载语义（已在 harness 源码核实）：
  *   - `@deepseek-ai/dsh-skill-filesystem` 是标准 cordis 插件（`name` / `inject=['skills']`
@@ -27,7 +27,7 @@
  *   - 注销器绑定 `ctx.effect`，插件 fiber 卸载（含 HMR 重载）时自动注销并关闭 watch。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { resolveDataRoot } from '../paths.js'
+import { resolveAssetsDir } from '../paths.js'
 import { resolveSkillsRepoDir } from './repo.js'
 import { createLogger } from '../log/logger.js'
 
@@ -44,8 +44,8 @@ export const SKILL_PROVIDER_NAME = 'dsh-ia-skills'
 
 /** 挂载选项。 */
 export interface MountSkillProviderOptions {
-  /** 数据根目录（可选）；省略时依次取环境变量 `DSH_IA_DATA_DIR` → 默认值。 */
-  dataRoot?: string
+  /** 资产层根目录（可选）；省略时取 `resolveAssetsDir()`（`~/.dsh-ia/assets`）。 */
+  assetsDir?: string
   /** provider 名（默认 {@link SKILL_PROVIDER_NAME}）。 */
   providerName?: string
   /** 是否开启 watch 热更新（默认 `true`）。 */
@@ -54,7 +54,7 @@ export interface MountSkillProviderOptions {
 
 /** 已挂载的 provider 句柄。 */
 export interface SkillProviderMount {
-  /** 被扫描的 skills 目录（`<dataRoot>/skills`）。 */
+  /** 被扫描的 skills 目录（`<assetsDir>/skills`）。 */
   dir: string
   /** 注册进 `ctx.skills` 的 provider 名。 */
   providerName: string
@@ -67,7 +67,7 @@ export interface SkillProviderMount {
  *
  * 动态加载 `@deepseek-ai/dsh-skill-filesystem` 并 `ctx.plugin(...)` 到**当前 ctx**
  * （未 scoped → global 层）。config 固定为「只扫 customSkillDirs、指向
- * `<dataRoot>/skills`、开启 watch」。
+ * `<assetsDir>/skills`、开启 watch」。
  *
  * @param ctx 插件上下文（需 `skills` 服务就绪；`ctx.get('fs')` 缺失时 provider 回落 node fs）。
  * @param options 见 {@link MountSkillProviderOptions}。
@@ -79,13 +79,13 @@ export async function mountSkillFilesystemProviderAsync(
 ): Promise<SkillProviderMount> {
   const providerName = options.providerName ?? SKILL_PROVIDER_NAME
   const watch = options.watch ?? true
-  const dataRoot = resolveDataRoot(options.dataRoot)
-  const skillsDir = resolveSkillsRepoDir(dataRoot)
+  const assetsDir = options.assetsDir ?? resolveAssetsDir()
+  const skillsDir = resolveSkillsRepoDir(assetsDir)
 
   // 惰性加载：可选 peer，模块图（chokidar / yaml）不随插件本体强制解析。
   const mod = await import('@deepseek-ai/dsh-skill-filesystem')
 
-  // 仅扫自定义目录、不做 project/user 默认 roots 发现；指向运行时数据目录。
+  // 仅扫自定义目录、不做 project/user 默认 roots 发现；指向资产层 skills 目录。
   const fiber = ctx.plugin(mod, {
     providerName,
     includeDefaultRoots: false,

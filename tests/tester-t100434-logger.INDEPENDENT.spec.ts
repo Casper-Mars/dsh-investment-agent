@@ -51,8 +51,8 @@ import { applyScheduler } from '../src/scheduler/index.js'
 
 /** 项目根（tests/ 的上一级）。 */
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-/** 插件真实数据根环境变量（`src/paths.ts` 的 DATA_ROOT_ENV）。 */
-const DATA_ROOT_ENV = 'DSH_IA_DATA_DIR'
+/** 插件真实 finance home 环境变量（`src/flags.ts` 的 FINANCE_HOME_ENV）。 */
+const FINANCE_HOME_ENV = 'DSH_IA_HOME'
 
 // ---------------------------------------------------------------------------
 // 通用夹具
@@ -129,10 +129,10 @@ function stripComments(src: string): string {
     .replace(/^\s*\/\/.*$/gm, '')
 }
 
-/** 在 tmp 下造一个「已预置」的数据根，使 `ensureSkillAssetsRepo` 判定为 no-op。 */
-function makeProvisionedDataRoot(): string {
-  const dir = mkdtempSync(join(tmpdir(), 't100434-data-'))
-  const repo = join(dir, 'skills')
+/** 在 tmp 下造一个「已预置」的 finance home（assets/skills），使 `ensureSkillAssetsRepo` 判定为 no-op。 */
+function makeProvisionedFinanceHome(): string {
+  const dir = mkdtempSync(join(tmpdir(), 't100434-home-'))
+  const repo = join(dir, 'assets', 'skills')
   mkdirSync(join(repo, 'seed-skill'), { recursive: true })
   writeFileSync(
     join(repo, 'seed-skill', 'SKILL.md'),
@@ -163,14 +163,14 @@ beforeEach(() => {
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
   errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
   delete process.env[LOG_LEVEL_ENV]
-  savedDataRoot = process.env[DATA_ROOT_ENV]
+  savedDataRoot = process.env[FINANCE_HOME_ENV]
 })
 
 afterEach(() => {
   vi.restoreAllMocks()
   delete process.env[LOG_LEVEL_ENV]
-  if (savedDataRoot === undefined) delete process.env[DATA_ROOT_ENV]
-  else process.env[DATA_ROOT_ENV] = savedDataRoot
+  if (savedDataRoot === undefined) delete process.env[FINANCE_HOME_ENV]
+  else process.env[FINANCE_HOME_ENV] = savedDataRoot
   for (const d of tmpDirs.splice(0)) {
     try {
       rmSync(d, { recursive: true, force: true })
@@ -470,9 +470,9 @@ describe('AC6 顶层 inject 契约不变', () => {
 
 describe('AC7 apply(ctx) / applyScheduler(ctx) 装配不回归', () => {
   it('AC7a：tools/skills/agents/logger 均缺失的最小 mock ctx 下 apply 不抛，且走门面降级 console', () => {
-    const dataRoot = makeProvisionedDataRoot()
-    tmpDirs.push(dataRoot)
-    process.env[DATA_ROOT_ENV] = dataRoot
+    const home = makeProvisionedFinanceHome()
+    tmpDirs.push(home)
+    process.env[FINANCE_HOME_ENV] = home
 
     const { ctx, disposeAll } = makeMockCtx()
     try {
@@ -486,8 +486,8 @@ describe('AC7 apply(ctx) / applyScheduler(ctx) 装配不回归', () => {
   })
 
   it('AC7b：applyScheduler 不传 options.logger 时默认走门面（真实 native ctx 收日志）', () => {
-    const dataRoot = makeProvisionedDataRoot()
-    tmpDirs.push(dataRoot)
+    const home = makeProvisionedFinanceHome()
+    tmpDirs.push(home)
 
     const nativeCtx = new Context()
     const { exporter, messages } = captureExporter()
@@ -495,7 +495,7 @@ describe('AC7 apply(ctx) / applyScheduler(ctx) 装配不回归', () => {
 
     const { ctx, disposeAll } = makeMockCtx({ logger: nativeCtx.logger })
     try {
-      expect(() => applyScheduler(ctx as never, { dataRoot })).not.toThrow()
+      expect(() => applyScheduler(ctx as never, { dataRoot: home })).not.toThrow()
       // scheduler 的「tools 服务不可用」告警 → 经门面 native 出口，name=dsh-ia:scheduler。
       const sched = messages.filter((m) => m.name === 'dsh-ia:scheduler')
       expect(sched.length).toBeGreaterThan(0)
@@ -506,9 +506,9 @@ describe('AC7 apply(ctx) / applyScheduler(ctx) 装配不回归', () => {
   })
 
   it('AC7c：真实 native ctx 驱动 apply，加载日志经 native 出口（name=dsh-ia），非 console', () => {
-    const dataRoot = makeProvisionedDataRoot()
-    tmpDirs.push(dataRoot)
-    process.env[DATA_ROOT_ENV] = dataRoot
+    const home = makeProvisionedFinanceHome()
+    tmpDirs.push(home)
+    process.env[FINANCE_HOME_ENV] = home
 
     const nativeCtx = new Context()
     const { exporter, messages } = captureExporter()

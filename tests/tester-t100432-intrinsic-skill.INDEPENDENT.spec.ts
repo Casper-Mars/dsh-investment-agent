@@ -15,7 +15,7 @@
  *       报错 / 传合法名通过」——而非只做运行期断言；
  *     - 装载语义：**自建最小 mock ctx** 驱动 `apply(ctx)`，逐条捕获 `ctx.effect`
  *       的 execute/disposer，独立观测注册 / 降级 / 卸载三态；
- *     - 真实环境：真实 `SkillRegistry` + 真实 `git init/commit` 临时 dataRoot + 编译态
+ *     - 真实环境：真实 `SkillRegistry` + 真实 `git init/commit` 临时 finance home + 编译态
  *       `dist-server` 装载。
  *
  * 覆盖 AC1–AC6 + 对抗性检验，详见同名 REPORT.md。
@@ -82,7 +82,7 @@ afterEach(() => {
     const dir = tempDirs.pop() as string
     rmSync(dir, { recursive: true, force: true })
   }
-  delete process.env.DSH_IA_DATA_DIR
+  delete process.env.DSH_IA_HOME
 })
 
 /* ================================================================== *
@@ -270,7 +270,7 @@ function disposeMockEffects(effects: MockEffect[]): void {
 
 describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载', () => {
   it('AC3a：skills 可用 → apply 不抛，注册 2 次（2 个固有 SKILL），注册对象契约正确，含注册 disposer', () => {
-    process.env.DSH_IA_DATA_DIR = mkTmp('dsh-fin-ta-mock-ok-')
+    process.env.DSH_IA_HOME = mkTmp('dsh-fin-ta-mock-ok-')
     const m = buildMockCtx('ok')
 
     expect(() => srcPlugin.apply(m.ctx as never)).not.toThrow()
@@ -301,7 +301,7 @@ describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载',
   }, 30_000)
 
   it('AC3b：skills 不可用 → apply 降级不抛、不中断装载、不注册', () => {
-    process.env.DSH_IA_DATA_DIR = mkTmp('dsh-fin-ta-mock-absent-')
+    process.env.DSH_IA_HOME = mkTmp('dsh-fin-ta-mock-absent-')
     const m = buildMockCtx('absent')
 
     // 关键对抗点：skills 缺失时 apply 必须**不抛**（降级不中断装载）。
@@ -318,7 +318,7 @@ describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载',
   }, 30_000)
 
   it('AC3c：卸载语义 → 调用 effect disposer 后，注册的 task-authorship 被注销', () => {
-    process.env.DSH_IA_DATA_DIR = mkTmp('dsh-fin-ta-mock-unload-')
+    process.env.DSH_IA_HOME = mkTmp('dsh-fin-ta-mock-unload-')
     const m = buildMockCtx('ok')
 
     srcPlugin.apply(m.ctx as never)
@@ -338,8 +338,8 @@ describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载',
   it(
     'AC3-real：真实 SkillRegistry 装载——5 可进化经 provider 发现 + task-authorship 静态注册可见；卸载后皆消失（无冲突）',
     async () => {
-      const dataRoot = mkTmp('dsh-fin-ta-real-')
-      process.env.DSH_IA_DATA_DIR = dataRoot
+      const financeHome = mkTmp('dsh-fin-ta-real-')
+      process.env.DSH_IA_HOME = financeHome
 
       const distPlugin = (await import('../dist-server/index.js')) as unknown as {
         name: string
@@ -420,17 +420,17 @@ describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载',
 })
 
 /* ================================================================== *
- * AC4：冷启动预置 <dataRoot>/skills（真实 git，临时 dataRoot）
+ * AC4：冷启动预置 <assetsDir>/skills（真实 git，临时 assetsDir）
  * ================================================================== */
 
 describe('[AC4] ensureSkillAssetsRepo 预置恰 5 个可进化目录，不含 task-authorship', () => {
   it('AC4a：预置后目录 = 5 可进化、无 task-authorship，且每个 frontmatter.name 与目录一致', () => {
-    const dataRoot = mkTmp('dsh-fin-ta-repo-')
-    const out = ensureSkillAssetsRepo({ dataRoot, logger: () => {} })
+    const assetsDir = mkTmp('dsh-fin-ta-assets-repo-')
+    const out = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
     expect(out.provisioned).toBe(true)
     expect(out.degraded).toBe(false)
 
-    const repoDir = join(dataRoot, 'skills')
+    const repoDir = join(assetsDir, 'skills')
     const dirs = readdirSync(repoDir).filter(
       (e) => e !== '.git' && statSync(join(repoDir, e)).isDirectory(),
     )
@@ -445,9 +445,9 @@ describe('[AC4] ensureSkillAssetsRepo 预置恰 5 个可进化目录，不含 ta
   }, 30_000)
 
   it('AC4b：真实 git 仓库——含 .git、首版恰 1 个 commit、被追踪 SKILL.md 恰 5 个且无 task-authorship', () => {
-    const dataRoot = mkTmp('dsh-fin-ta-git-')
-    ensureSkillAssetsRepo({ dataRoot, logger: () => {} })
-    const repoDir = join(dataRoot, 'skills')
+    const assetsDir = mkTmp('dsh-fin-ta-assets-git-')
+    ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
+    const repoDir = join(assetsDir, 'skills')
 
     expect(existsSync(join(repoDir, '.git'))).toBe(true)
 
@@ -469,15 +469,15 @@ describe('[AC4] ensureSkillAssetsRepo 预置恰 5 个可进化目录，不含 ta
   }, 30_000)
 
   it('AC4c：幂等——二次预置为 no-op，不产生第二个 commit', () => {
-    const dataRoot = mkTmp('dsh-fin-ta-idem-')
-    const first = ensureSkillAssetsRepo({ dataRoot, logger: () => {} })
+    const assetsDir = mkTmp('dsh-fin-ta-assets-idem-')
+    const first = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
     expect(first.provisioned).toBe(true)
 
-    const second = ensureSkillAssetsRepo({ dataRoot, logger: () => {} })
+    const second = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
     expect(second.provisioned).toBe(false)
     expect(second.degraded).toBe(false)
 
-    const repoDir = join(dataRoot, 'skills')
+    const repoDir = join(assetsDir, 'skills')
     const commits = execFileSync('git', ['-C', repoDir, 'log', '--oneline'], {
       encoding: 'utf8',
     })
@@ -488,9 +488,9 @@ describe('[AC4] ensureSkillAssetsRepo 预置恰 5 个可进化目录，不含 ta
   }, 30_000)
 
   it('AC4d：预置产物与随包种子（src/skills）逐字一致', () => {
-    const dataRoot = mkTmp('dsh-fin-ta-seed-')
-    ensureSkillAssetsRepo({ dataRoot, logger: () => {} })
-    const repoDir = join(dataRoot, 'skills')
+    const assetsDir = mkTmp('dsh-fin-ta-assets-seed-')
+    ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
+    const repoDir = join(assetsDir, 'skills')
     for (const n of EVOLVABLE) {
       const seeded = readFileSync(join(repoDir, n, 'SKILL.md'), 'utf8')
       const src = readFileSync(join(PROJECT_ROOT, 'src', 'skills', n, 'SKILL.md'), 'utf8')
@@ -575,7 +575,7 @@ describe('[对抗性] 重复注册先到先得 + 卸载语义', () => {
 
 describe('[对抗性·补强] 注册抛错降级 与 卸载幂等', () => {
   it('AC-adv2：skills.register 抛错 → apply 不抛（降级），固有 SKILL effect 仍存在且 disposer 安全', () => {
-    process.env.DSH_IA_DATA_DIR = mkTmp('dsh-fin-ta-reg-throw-')
+    process.env.DSH_IA_HOME = mkTmp('dsh-fin-ta-reg-throw-')
     const effects: MockEffect[] = []
     const ctx = {
       get(name: string): unknown {
@@ -619,7 +619,7 @@ describe('[对抗性·补强] 注册抛错降级 与 卸载幂等', () => {
   }, 30_000)
 
   it('AC-adv3：卸载 disposer 幂等——连续两次调用不抛，且不重复注销', () => {
-    process.env.DSH_IA_DATA_DIR = mkTmp('dsh-fin-ta-unload-idem-')
+    process.env.DSH_IA_HOME = mkTmp('dsh-fin-ta-unload-idem-')
     const m = buildMockCtx('ok')
 
     srcPlugin.apply(m.ctx as never)

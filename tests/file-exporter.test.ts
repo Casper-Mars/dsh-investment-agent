@@ -86,10 +86,10 @@ function mkTmp(): string {
   return dir
 }
 
-/** 造一个「已预置」的数据根，使 `ensureSkillAssetsRepo` 判定为 no-op（apply 集成用）。 */
-function makeProvisionedDataRoot(): string {
+/** 造一个「已预置」的 finance home（assets/skills），使 `ensureSkillAssetsRepo` 判定为 no-op（apply 集成用）。 */
+function makeProvisionedFinanceHome(): string {
   const dir = mkTmp()
-  const repo = join(dir, 'skills')
+  const repo = join(dir, 'assets', 'skills')
   mkdirSync(join(repo, 'seed-skill'), { recursive: true })
   writeFileSync(
     join(repo, 'seed-skill', 'SKILL.md'),
@@ -118,7 +118,7 @@ beforeEach(() => {
   savedLogDir = process.env[LOG_DIR_ENV]
   savedLogLevel = process.env[LOG_LEVEL_ENV]
   savedMaxSize = process.env[LOG_MAX_SIZE_ENV]
-  savedDataDir = process.env.DSH_IA_DATA_DIR
+  savedDataDir = process.env.DSH_IA_HOME
   delete process.env[LOG_DIR_ENV]
   delete process.env[LOG_LEVEL_ENV]
   delete process.env[LOG_MAX_SIZE_ENV]
@@ -133,7 +133,7 @@ afterEach(() => {
   restore(LOG_DIR_ENV, savedLogDir)
   restore(LOG_LEVEL_ENV, savedLogLevel)
   restore(LOG_MAX_SIZE_ENV, savedMaxSize)
-  restore('DSH_IA_DATA_DIR', savedDataDir)
+  restore('DSH_IA_HOME', savedDataDir)
   for (const d of tmpDirs.splice(0)) {
     try {
       rmSync(d, { recursive: true, force: true })
@@ -375,9 +375,9 @@ describe('⑦ 降级（fs 抛错吞掉，不中断）', () => {
 describe('⑧ apply(ctx) 装配后日志落地', () => {
   it('插件加载日志写入 DSH_IA_LOG_DIR 当日文件', () => {
     const logDir = mkTmp()
-    const dataDir = makeProvisionedDataRoot()
+    const dataDir = makeProvisionedFinanceHome()
     process.env[LOG_DIR_ENV] = logDir
-    process.env.DSH_IA_DATA_DIR = dataDir
+    process.env.DSH_IA_HOME = dataDir
 
     const app = new Context()
     const ctx = {

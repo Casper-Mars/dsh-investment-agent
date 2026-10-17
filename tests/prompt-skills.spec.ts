@@ -52,12 +52,13 @@ const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 
 const tmpDirs: string[] = []
 
-/** 建临时 dataRoot 并预置 5 个可进化 skill 资产（真实 git 仓库）。 */
-function makeSeededDataRoot(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'dsh-ia-prompt-skills-'))
-  tmpDirs.push(dir)
-  ensureSkillAssetsRepo({ dataRoot: dir, logger: () => {} })
-  return dir
+/** 建临时 finance home 并在其 assets/ 下预置 5 个可进化 skill（真实 git 仓库）。 */
+function makeSeededFinanceHome(): { home: string; assetsDir: string } {
+  const home = mkdtempSync(join(tmpdir(), 'dsh-ia-prompt-skills-'))
+  tmpDirs.push(home)
+  const assetsDir = join(home, 'assets')
+  ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
+  return { home, assetsDir }
 }
 
 afterEach(() => {
@@ -248,9 +249,9 @@ async function newSkillContext(): Promise<Context> {
 
 describe('验收 5：经 skill-filesystem provider 发现 / 卸载 5 个可进化 SKILL', () => {
   it('挂载 provider 后 5 个 skill 均可列出、get() 返回正文；注销后消失', async () => {
-    const dataRoot = makeSeededDataRoot()
+    const { assetsDir } = makeSeededFinanceHome()
     const ctx = await newSkillContext()
-    const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
+    const mount = await mountSkillFilesystemProviderAsync(ctx, { assetsDir })
 
     const summaries = await ctx.skills.list({})
     for (const name of SKILL_NAMES) {
@@ -369,10 +370,10 @@ describe('插件 apply 接入', () => {
   }
 
   it('apply 仅静态注册 2 个固有 SKILL（task-authorship / skill-authorship），5 个可进化 SKILL 改由 provider 承担；注入 1 个 prompt section，且不抛异常', () => {
-    // 防止 ensureSkillAssetsRepo 回落到默认 `~/.dsh-ia`（污染 home）。
-    const dataRoot = makeSeededDataRoot()
-    const prev = process.env.DSH_IA_DATA_DIR
-    process.env.DSH_IA_DATA_DIR = dataRoot
+    // 防止 ensureSkillAssetsRepo 回落到默认 `~/.dsh-ia`（污染 home）：DSH_IA_HOME 指向临时 home。
+    const { home } = makeSeededFinanceHome()
+    const prev = process.env.DSH_IA_HOME
+    process.env.DSH_IA_HOME = home
     try {
       const { ctx, registeredSkills, injectedSections } = makeMockCtx()
       expect(() => apply(ctx)).not.toThrow()
@@ -387,15 +388,15 @@ describe('插件 apply 接入', () => {
       expect(injectedSections).toHaveLength(1)
       expect(injectedSections[0].name).toBe(ADVISOR_SECTION_NAME)
     } finally {
-      if (prev === undefined) delete process.env.DSH_IA_DATA_DIR
-      else process.env.DSH_IA_DATA_DIR = prev
+      if (prev === undefined) delete process.env.DSH_IA_HOME
+      else process.env.DSH_IA_HOME = prev
     }
   })
 
   it('缺失 skills 服务时不抛错（安全降级）', () => {
-    const dataRoot = makeSeededDataRoot()
-    const prev = process.env.DSH_IA_DATA_DIR
-    process.env.DSH_IA_DATA_DIR = dataRoot
+    const { home } = makeSeededFinanceHome()
+    const prev = process.env.DSH_IA_HOME
+    process.env.DSH_IA_HOME = home
     try {
       const ctx = {
         effect(body: () => unknown) {
@@ -408,8 +409,8 @@ describe('插件 apply 接入', () => {
       } as unknown as Context
       expect(() => apply(ctx)).not.toThrow()
     } finally {
-      if (prev === undefined) delete process.env.DSH_IA_DATA_DIR
-      else process.env.DSH_IA_DATA_DIR = prev
+      if (prev === undefined) delete process.env.DSH_IA_HOME
+      else process.env.DSH_IA_HOME = prev
     }
   })
 })

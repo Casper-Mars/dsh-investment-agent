@@ -4,7 +4,7 @@
  * 分野（关键）：
  *   - **5 个「可进化 SKILL」**（{@link SKILL_NAMES}，类型 {@link SkillName}）：
  *     趋势研判 / 网格策略 / 止损纪律 / 策略创作 / 分析与决策。它们是「可进化资产」——
- *     随 `src/skills/repo.ts` 冷启动种子落盘到 `<dataRoot>/skills` 独立 git 仓库，
+ *     随 `src/skills/repo.ts` 冷启动种子落盘到 `<assetsDir>/skills` 独立 git 仓库，
  *     并由 `src/skills/provider.ts` 挂载的 dsh 原生 `skill-filesystem` provider 发现
  *     且开启 watch 热更新（改 `SKILL.md` → 无需重启生效）。
  *   - **2 个「固有 SKILL」**（类型 {@link IntrinsicSkillName}）：
@@ -23,7 +23,7 @@
  *   4. 提供 2 个固有 SKILL（task-authorship / skill-authorship）的静态读取 / 注册对象装配入口。
  *
  * 运行时注册：5 个可进化 SKILL 由 `src/skills/provider.ts` 挂载 dsh 原生
- *   `skill-filesystem` provider 发现（指向 `<dataRoot>/skills`，watch 热更新，
+ *   `skill-filesystem` provider 发现（指向 `<assetsDir>/skills`，watch 热更新，
  *   见 skill 重构任务-2）；固有 SKILL 由 `src/plugin.ts` 静态注册。本模块保留的
  *   `SKILL_NAMES` / `loadSkillMarkdown` 是 `src/skills/repo.ts` 冷启动种子预置所需的
  *   **纯静态读取**；`parseSkill` 供种子 / 测试校验「目录名 = frontmatter.name」一致性。

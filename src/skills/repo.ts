@@ -1,15 +1,15 @@
 /**
- * skill 资产仓库 —— 数据目录内的**独立 git 仓库**（`<dataRoot>/skills`）。
+ * skill 资产仓库 —— 资产层内的**独立 git 仓库**（`<assetsDir>/skills`）。
  *
  * 背景（skill 重构任务-1）：
  *   历史上 skill（5 个可进化 + 1 个固有）以「随源码编译的静态 `.md`」形式存在于
  *   `src/skills/<name>/SKILL.md`（`scripts/copy-assets.mjs` 搬运到
  *   `dist-server/skills/`），只能随包发布、运行时不改写。目标是把 skill 资产
- *   迁移为「运行时可写 + 可 git 版本管理」的载体，落在数据目录下的独立 git
- *   仓库 `<dataRoot>/skills`：
+ *   迁移为「运行时可写 + 可 git 版本管理」的载体，落在资产层下的独立 git
+ *   仓库 `<assetsDir>/skills`（即 `~/.dsh-ia/assets/skills`）：
  *
- *     <dataRoot>/skills                 # 独立 git 仓库根
- *     <dataRoot>/skills/<name>/SKILL.md # 5 个「可进化 skill」（目录名 = frontmatter.name）
+ *     <assetsDir>/skills                 # 独立 git 仓库根
+ *     <assetsDir>/skills/<name>/SKILL.md # 5 个「可进化 skill」（目录名 = frontmatter.name）
  *
  *   注意：`task-authorship` 是「固有 SKILL」（任务程序方法论），**不**落入本仓库——
  *   它不随 git 进化链 / 热更新时间线变动，由 `src/plugin.ts` 单独静态注册。故本模块
@@ -18,7 +18,7 @@
  *   此后 agent 复盘改文件 → `git commit` → 热更新（provider 切换属后续任务）。
  *
  * 本模块职责（仅「数据载体 + 迁移 + 幂等预置」这一层地基）：
- *   1. {@link resolveSkillsRepoDir}：`<dataRoot>/skills` 路径解析；
+ *   1. {@link resolveSkillsRepoDir}：`<assetsDir>/skills` 路径解析；
  *   2. {@link loadSkillSeeds}：从随包发布的**首版种子**（`src/skills/<name>/SKILL.md`，
  *      编译态为 `dist-server/skills/<name>/SKILL.md`）读取 5 份原文，并校验
  *      「目录名 / 文件名 / frontmatter.name」三者一致；
@@ -28,8 +28,8 @@
  *
  * 设计约束：
  *   - **不新增第三方依赖**：git 一律经 `node:child_process`（`execFileSync`）调用；
- *   - **路径来源统一**：dataRoot 复用 `src/paths.ts` 的 {@link resolveDataRoot}
- *     （构造注入 > `DSH_IA_DATA_DIR` > `~/.dsh-ia/data`），**不**用
+ *   - **路径来源统一**：assetsDir 复用 `src/paths.ts` 的 {@link resolveAssetsDir}
+ *     （`~/.dsh-ia/assets`，跟随 `DSH_IA_HOME` 覆盖），**不**用
  *     `process.cwd()` 锚定（历史漂移问题，已修）；
  *   - **降级语义**：git 不可用 / 命令非零退出 / 无写权限等 → 记日志、降级不抛、
  *     不中断插件装载（对齐 `src/plugin.ts` / `src/session-ensure.ts` 的软取 +
@@ -43,12 +43,12 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { resolveDataRoot } from '../paths.js'
+import { resolveAssetsDir } from '../paths.js'
 import { loadSkillMarkdown, SKILL_NAMES, type SkillName } from './index.js'
 import { parseSkillFile } from './frontmatter.js'
 import { createLogFunction } from '../log/logger.js'
 
-/** skill 资产仓库的目录名（位于 dataRoot 下）。 */
+/** skill 资产仓库的目录名（位于 assetsDir 下）。 */
 export const SKILLS_REPO_DIRNAME = 'skills'
 
 /** 每个 skill 的固定文件名。 */
@@ -99,8 +99,8 @@ function defaultGitRunner(args: string[], cwd: string): string {
 
 /** 预置选项。 */
 export interface EnsureSkillAssetsOptions {
-  /** 数据根目录（可选）；省略时依次取环境变量 `DSH_IA_DATA_DIR` → 默认值。 */
-  dataRoot?: string
+  /** 资产层根目录（可选）；省略时取 `resolveAssetsDir()`（`~/.dsh-ia/assets`）。 */
+  assetsDir?: string
   /** 日志函数（默认走统一日志门面，info 级）。 */
   logger?: (message: string) => void
   /** 自定义 git 执行器（仅测试注入；默认走 `node:child_process` 调系统 git）。 */
@@ -109,7 +109,7 @@ export interface EnsureSkillAssetsOptions {
 
 /** 预置结果（可判断，便于单测断言）。 */
 export interface SkillAssetsRepoOutcome {
-  /** skill 资产仓库绝对路径（`<dataRoot>/skills`）。 */
+  /** skill 资产仓库绝对路径（`<assetsDir>/skills`）。 */
   dir: string
   /** 本次是否执行了预置（写入 + 提交）。false 表示 no-op 或降级未预置。 */
   provisioned: boolean
@@ -127,9 +127,9 @@ export interface SkillSeed {
   markdown: string
 }
 
-/** 解析 skill 资产仓库路径：`<dataRoot>/skills`（纯计算，无副作用）。 */
-export function resolveSkillsRepoDir(dataRoot: string): string {
-  return join(dataRoot, SKILLS_REPO_DIRNAME)
+/** 解析 skill 资产仓库路径：`<assetsDir>/skills`（纯计算，无副作用）。 */
+export function resolveSkillsRepoDir(assetsDir: string): string {
+  return join(assetsDir, SKILLS_REPO_DIRNAME)
 }
 
 /**
@@ -277,8 +277,8 @@ export function ensureSkillAssetsRepo(
 
   let dir = ''
   try {
-    const dataRoot = resolveDataRoot(options.dataRoot)
-    dir = resolveSkillsRepoDir(dataRoot)
+    const assetsDir = options.assetsDir ?? resolveAssetsDir()
+    dir = resolveSkillsRepoDir(assetsDir)
 
     const state = inspectRepo(dir, run)
     if (!state.needsProvision) {

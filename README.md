@@ -26,7 +26,7 @@
 | 类别 | 目录 | 载体 | dsh 契约 |
 |------|------|------|----------|
 | 提示注入（投资专家人设） | `src/prompts/` | Markdown | system-prompt 注入 |
-| 可复用指令（Skill） | `src/skills/`（种子）/ `<dataRoot>/skills`（运行时） | `<name>/SKILL.md` | `ctx.skills` |
+| 可复用指令（Skill） | `src/skills/`（种子）/ `<assetsDir>/skills`（运行时） | `<name>/SKILL.md` | `ctx.skills` |
 | 模型工具 | `src/tools/` | `defineTool` | `ctx.tools` |
 | 定时任务层（感知） | `src/scheduler/` | 独立定时任务层 | 见下 |
 | 公共包 | `src/domain/` + `src/log/` | 纯 TS 模块 | 内部依赖 |
@@ -72,16 +72,17 @@ dsh plugin --profile <name> add .
 
 ```
 ~/.dsh-ia/
-├── data/                              # dataRoot
+├── assets/                            # 资产层（可共享、进 git）
+│   └── skills/                        # 可进化 SKILL（独立 git 仓库，main=当前版本）
+├── data/                              # dataRoot（用户私有运行时数据）
 │   ├── ledger/<symbol>/…              # 台账（持仓 / 成本 / 流水）
 │   ├── strategy/<symbol>.md           # 策略文档（文本实体，当前版）
 │   ├── strategy_versions/<symbol>/…   # 策略版本链（+ rationale）
-│   ├── skills/                        # 可进化 SKILL（独立 git 仓库，main=当前版本）
 │   └── tasks/                         # 定时任务清单
 └── logs/                              # 运行日志（JSONL）
 ```
 
-`data/` 及子目录为**运行时动态创建**（非项目固有目录）；其中 `data/skills/` 是一个独立 git 仓库，由插件冷启动幂等预置。
+`assets/` 与 `data/` 及子目录均为**运行时动态创建**（非项目固有目录）；其中 `assets/skills/` 是一个独立 git 仓库，由插件冷启动幂等预置。
 
 ## 开发
 
@@ -98,7 +99,7 @@ pnpm clean        # 清理 dist / dist-server
 src/
 ├── index.ts            # 包入口
 ├── plugin.ts           # Cordis 插件契约（name / inject / apply）
-├── paths.ts            # 路径解析（~/.dsh-ia、dataRoot、日志目录）
+├── paths.ts            # 路径解析（~/.dsh-ia、assets/data/logs）
 ├── flags.ts            # 环境变量解析（home / session id 覆盖与派生）
 ├── session.ts          # 会话类型与工具
 ├── session-ensure.ts   # 固定会话确保（检查 → 恢复 → 新建）

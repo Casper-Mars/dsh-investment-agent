@@ -15,7 +15,7 @@
  *     ④ 注册时机在 ensureSkillAssetsRepo / mountSkillFilesystemProvider 之后；
  *     ⑤ 卸载归零 + 幂等。
  *
- * 环境隔离：所有用例只在临时 `DSH_IA_DATA_DIR` / 临时 dataRoot 内预置，
+ * 环境隔离：所有用例只在临时 `DSH_IA_HOME` / 临时 assetsDir 内预置，
  *   不污染真实 `~/.dsh-ia`（真实进程 / 真实 git）。
  *
  * 注意（仓库级守卫规避，见 t100419 C1）：本文件**不写字面量**“ctx 点 skills 点 register
@@ -70,9 +70,9 @@ function mkTmp(prefix: string): string {
   return dir
 }
 
-const savedEnv = process.env.DSH_IA_DATA_DIR
-function useDataRoot(dir: string): void {
-  process.env.DSH_IA_DATA_DIR = dir
+const savedEnv = process.env.DSH_IA_HOME
+function useFinanceHome(dir: string): void {
+  process.env.DSH_IA_HOME = dir
 }
 
 afterEach(() => {
@@ -83,19 +83,19 @@ afterEach(() => {
       /* ignore */
     }
   }
-  if (savedEnv === undefined) delete process.env.DSH_IA_DATA_DIR
-  else process.env.DSH_IA_DATA_DIR = savedEnv
+  if (savedEnv === undefined) delete process.env.DSH_IA_HOME
+  else process.env.DSH_IA_HOME = savedEnv
 })
 
 /* ------------------------------------------------------------------ *
  * helpers
  * ------------------------------------------------------------------ */
-/** 临时 dataRoot 并真实预置 `<dataRoot>/skills` 的 5 个可进化 SKILL（真实 git）。 */
-function seedDataRoot(): string {
-  const dir = mkTmp('dsh-fin-t100429-data-')
-  const out = ensureSkillAssetsRepo({ dataRoot: dir, logger: () => {} })
+/** 临时 finance home 并真实预置 `<home>/assets/skills` 的 5 个可进化 SKILL（真实 git）。 */
+function seedFinanceHome(): string {
+  const home = mkTmp('dsh-fin-t100429-home-')
+  const out = ensureSkillAssetsRepo({ assetsDir: join(home, 'assets'), logger: () => {} })
   if (out.degraded) throw new Error(`预置降级：${out.reason}`)
-  return dir
+  return home
 }
 
 /** 在给定 skills 目录下写一个合法 SKILL.md。 */
@@ -317,8 +317,8 @@ describe('[AC1] 固有 SKILL 经 runtime 内存注册可见，来源与 provider
   it(
     'AC1a：真实 dist-server 装载后 task-authorship 可见，source=runtime、provider=runtime（非 filesystem provider）',
     async () => {
-      const dataRoot = seedDataRoot()
-      useDataRoot(dataRoot)
+      const home = seedFinanceHome()
+      useFinanceHome(home)
 
       const { app, toolsFiber, pluginFiber } = await bootRealPlugin()
       try {
@@ -345,13 +345,13 @@ describe('[AC1] 固有 SKILL 经 runtime 内存注册可见，来源与 provider
   )
 
   it(
-    'AC1b：即便 <dataRoot>/skills 同名存在 task-authorship（不同描述），仍以 runtime 嵌入为准（来源不混）',
+    'AC1b：即便 <assetsDir>/skills 同名存在 task-authorship（不同描述），仍以 runtime 嵌入为准（来源不混）',
     async () => {
-      const dataRoot = seedDataRoot()
-      const skillsDir = resolveSkillsRepoDir(dataRoot)
+      const home = seedFinanceHome()
+      const skillsDir = resolveSkillsRepoDir(join(home, 'assets'))
       // 在数据目录塞入同名 task-authorship（描述带伪标记），provider 会将其作为 custom 候选。
       writeSkill(skillsDir, TA, 'DECOY-DATA-DIR-DESC', '# decoy data dir body')
-      useDataRoot(dataRoot)
+      useFinanceHome(home)
 
       const { app, toolsFiber, pluginFiber } = await bootRealPlugin()
       try {
@@ -388,12 +388,12 @@ describe('[AC1] 固有 SKILL 经 runtime 内存注册可见，来源与 provider
 /* ================================================================== *
  * [AC2] 5 个可进化 SKILL 仍由 skill-filesystem provider 发现
  * ================================================================== */
-describe('[AC2] 5 可进化 SKILL 经 provider（providerName=dsh-ia-skills，指向 <dataRoot>/skills）', () => {
+describe('[AC2] 5 可进化 SKILL 经 provider（providerName=dsh-ia-skills，指向 <assetsDir>/skills）', () => {
   it(
     'AC2a：5 可进化皆 provider=dsh-ia-skills 且 source=custom（非 runtime）',
     async () => {
-      const dataRoot = seedDataRoot()
-      useDataRoot(dataRoot)
+      const home = seedFinanceHome()
+      useFinanceHome(home)
       const { app, toolsFiber, pluginFiber } = await bootRealPlugin()
       try {
         await waitEvolvableVisible(app)
@@ -415,10 +415,10 @@ describe('[AC2] 5 可进化 SKILL 经 provider（providerName=dsh-ia-skills，�
   )
 
   it(
-    'AC2b：provider 只扫 <dataRoot>/skills——新增项被发现 / 目录外 decoy 不可见 / 改写内容被反射',
+    'AC2b：provider 只扫 <assetsDir>/skills——新增项被发现 / 目录外 decoy 不可见 / 改写内容被反射',
     async () => {
-      const dataRoot = seedDataRoot()
-      const skillsDir = resolveSkillsRepoDir(dataRoot)
+      const home = seedFinanceHome()
+      const skillsDir = resolveSkillsRepoDir(join(home, 'assets'))
       // (1) 预置后新增一个额外 skill（应被发现）。
       writeSkill(skillsDir, 'extra-provider-skill', 'EXTRA-PROVIDER-DESC')
       // (2) 改写一个既有可进化 skill 的描述（应反射到 list，证明内容读自数据目录而非随包嵌入）。
@@ -427,7 +427,7 @@ describe('[AC2] 5 可进化 SKILL 经 provider（providerName=dsh-ia-skills，�
       const outsideDir = mkTmp('dsh-fin-t100429-outside-')
       writeSkill(outsideDir, 'decoy-skill', 'DECOY-OUTSIDE-DESC')
 
-      useDataRoot(dataRoot)
+      useFinanceHome(home)
       const { app, toolsFiber, pluginFiber } = await bootRealPlugin()
       try {
         await waitEvolvableVisible(app)
@@ -442,7 +442,7 @@ describe('[AC2] 5 可进化 SKILL 经 provider（providerName=dsh-ia-skills，�
         expect(extra?.provider).toBe(PROVIDER_NAME)
         expect(extra?.description).toBe('EXTRA-PROVIDER-DESC')
 
-        // decoy（<dataRoot>/skills 之外）不被 provider 发现。
+        // decoy（<assetsDir>/skills 之外）不被 provider 发现。
         expect(names).not.toContain('decoy-skill')
 
         // 改写内容被反射（数据目录为准）。
@@ -465,8 +465,8 @@ describe('[AC2] 5 可进化 SKILL 经 provider（providerName=dsh-ia-skills，�
   it(
     'AC2c：来源集合互斥——runtime 源={task-authorship}，custom 源=5 可进化，二者不重叠',
     async () => {
-      const dataRoot = seedDataRoot()
-      useDataRoot(dataRoot)
+      const home = seedFinanceHome()
+      useFinanceHome(home)
       const { app, toolsFiber, pluginFiber } = await bootRealPlugin()
       try {
         await waitEvolvableVisible(app)
@@ -495,8 +495,8 @@ describe('[AC3] skills.register 抛错降级不中断装载，其它贡献照常
   it(
     'AC3a：register 抛错 → apply 不抛；tools/prompt/scheduler 贡献照常装载；TA effect 存在且 disposer 安全',
     async () => {
-      const dataRoot = seedDataRoot()
-      useDataRoot(dataRoot)
+      const home = seedFinanceHome()
+      useFinanceHome(home)
       const m = buildMockCtx({ skillsMode: 'throw', withTools: true })
 
       // 关键：注册本身抛错时，apply 必须**降级不抛**，不中断插件装载。
@@ -536,7 +536,7 @@ describe('[AC3] skills.register 抛错降级不中断装载，其它贡献照常
   )
 
   it('AC3b：skills 服务缺失 → apply 降级不抛、不注册、TA effect 仍注册（no-op 分支）', () => {
-    useDataRoot(seedDataRoot())
+    useFinanceHome(seedFinanceHome())
     const m = buildMockCtx({ skillsMode: 'absent' })
 
     expect(() => srcPlugin.apply(m.ctx as never)).not.toThrow()
@@ -555,11 +555,11 @@ describe('[AC4] TA 静态注册时机在预置与 provider 挂载之后', () => 
   it(
     'AC4a：effect 顺序 tools → provider → task-authorship → scheduler；且 TA effect 执行时仓库已预置',
     () => {
-      const dataRoot = seedDataRoot()
-      const skillsDir = resolveSkillsRepoDir(dataRoot)
+      const home = seedFinanceHome()
+      const skillsDir = resolveSkillsRepoDir(join(home, 'assets'))
       // 先删除仓库目录，验证「apply 内 ensureSkillAssetsRepo 先于 TA effect 把仓库建好」。
       rmSync(skillsDir, { recursive: true, force: true })
-      useDataRoot(dataRoot)
+      useFinanceHome(home)
 
       let repoExistedAtTa: boolean | undefined
       const m = buildMockCtx({
@@ -583,7 +583,7 @@ describe('[AC4] TA 静态注册时机在预置与 provider 挂载之后', () => 
       // 时机：provider 挂载（含 ensureSkillAssetsRepo 先行）→ TA 注册 → scheduler。
       expect(idxProvider).toBeLessThan(idxTa)
       expect(idxTa).toBeLessThan(idxScheduler)
-      // TA effect 执行瞬间，ensureSkillAssetsRepo 已把 <dataRoot>/skills 建好。
+      // TA effect 执行瞬间，ensureSkillAssetsRepo 已把 <assetsDir>/skills 建好。
       expect(repoExistedAtTa, 'TA effect 执行时应已预置仓库').toBe(true)
 
       console.log(
@@ -604,10 +604,10 @@ describe('[AC5] 注销器绑定 ctx.effect：卸载归零 + 幂等', () => {
   it(
     'AC5a：真实 fiber 卸载 → task-authorship 与 5 可进化（及额外项）全部归零',
     async () => {
-      const dataRoot = seedDataRoot()
-      const skillsDir = resolveSkillsRepoDir(dataRoot)
+      const home = seedFinanceHome()
+      const skillsDir = resolveSkillsRepoDir(join(home, 'assets'))
       writeSkill(skillsDir, 'extra-provider-skill', 'EXTRA-PROVIDER-DESC')
-      useDataRoot(dataRoot)
+      useFinanceHome(home)
 
       const { app, toolsFiber, pluginFiber } = await bootRealPlugin()
       try {
@@ -639,7 +639,7 @@ describe('[AC5] 注销器绑定 ctx.effect：卸载归零 + 幂等', () => {
   it(
     'AC5b：二次 dispose 幂等——连续两次 pluginFiber.dispose() 不抛',
     async () => {
-      useDataRoot(seedDataRoot())
+      useFinanceHome(seedFinanceHome())
       const { app, toolsFiber, pluginFiber } = await bootRealPlugin()
       try {
         await waitEvolvableVisible(app)
@@ -660,7 +660,7 @@ describe('[AC5] 注销器绑定 ctx.effect：卸载归零 + 幂等', () => {
   )
 
   it('AC5c：TA effect disposer 幂等——两次调用不抛、仅注销一次', () => {
-    useDataRoot(seedDataRoot())
+    useFinanceHome(seedFinanceHome())
     const m = buildMockCtx({ skillsMode: 'ok' })
     srcPlugin.apply(m.ctx as never)
     expect(m.registered).toHaveLength(2)

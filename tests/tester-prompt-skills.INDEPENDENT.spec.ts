@@ -51,12 +51,13 @@ const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 
 const tmpDirs: string[] = []
 
-/** 建临时 dataRoot 并预置 5 个可进化 skill 资产（真实 git 仓库）。 */
-function makeSeededDataRoot(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'dsh-ia-tester-prompt-skills-'))
-  tmpDirs.push(dir)
-  ensureSkillAssetsRepo({ dataRoot: dir, logger: () => {} })
-  return dir
+/** 建临时 finance home 并在其 assets/ 下预置 5 个可进化 skill（真实 git 仓库）。 */
+function makeSeededFinanceHome(): { home: string; assetsDir: string } {
+  const home = mkdtempSync(join(tmpdir(), 'dsh-ia-tester-prompt-skills-'))
+  tmpDirs.push(home)
+  const assetsDir = join(home, 'assets')
+  ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
+  return { home, assetsDir }
 }
 
 afterEach(() => {
@@ -77,7 +78,7 @@ const EXPECTED_SKILLS = [
 ]
 
 /**
- * 固有 SKILL（任务程序方法论）：**不**落 `<dataRoot>/skills`，不参与 provider 发现，
+ * 固有 SKILL（任务程序方法论）：**不**落 `<assetsDir>/skills`，不参与 provider 发现，
  * 由 `plugin.ts` 静态注册，独立于 git 进化链。
  */
 const INTRINSIC_SKILL = TASK_AUTHORSHIP_SKILL_NAME
@@ -198,7 +199,7 @@ describe('[2] 5 个可进化 SKILL.md 逐字段校验', () => {
 
 describe('[3] 经 skill-filesystem provider 发现', () => {
   it('挂载 provider 后 list() 发现 5 个；get() 取回正文；注销后归 0', async () => {
-    const dataRoot = makeSeededDataRoot()
+    const { assetsDir } = makeSeededFinanceHome()
     const ctx = new Context()
     await (ctx.plugin(SkillRegistry as never) as Promise<unknown>)
 
@@ -206,7 +207,7 @@ describe('[3] 经 skill-filesystem provider 发现', () => {
     const before = await ctx.skills.list({})
     expect(before.filter((s) => EXPECTED_SKILLS.includes(s.name))).toHaveLength(0)
 
-    const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
+    const mount = await mountSkillFilesystemProviderAsync(ctx, { assetsDir })
 
     const after = await ctx.skills.list({})
     const got = after.filter((s) => EXPECTED_SKILLS.includes(s.name))
@@ -313,9 +314,9 @@ describe('[5] 顶层 inject 契约', () => {
 
   it('apply(ctx) 后顶层 inject 未被改写', () => {
     // 防 ensureSkillAssetsRepo 回落到默认 `~/.dsh-ia`（污染 home）。
-    const dataRoot = makeSeededDataRoot()
-    const prev = process.env.DSH_IA_DATA_DIR
-    process.env.DSH_IA_DATA_DIR = dataRoot
+    const { home } = makeSeededFinanceHome()
+    const prev = process.env.DSH_IA_HOME
+    process.env.DSH_IA_HOME = home
     try {
       const ctx = {
         effect(body: () => unknown) {
@@ -329,8 +330,8 @@ describe('[5] 顶层 inject 契约', () => {
       apply(ctx)
       expect(topLevelInject).toEqual(['tools', 'skills', 'fs'])
     } finally {
-      if (prev === undefined) delete process.env.DSH_IA_DATA_DIR
-      else process.env.DSH_IA_DATA_DIR = prev
+      if (prev === undefined) delete process.env.DSH_IA_HOME
+      else process.env.DSH_IA_HOME = prev
     }
   })
 })
@@ -364,9 +365,9 @@ describe('[0] advisor.md 人设结构', () => {
 
 describe('[5b] 真实 cordis 下 apply(ctx) 端到端装配', () => {
   it('apply 后 5 个可进化 skill 经 provider 可发现（+ 固有 SKILL 静态注册），且 advisor section 被注入', async () => {
-    const dataRoot = makeSeededDataRoot()
-    const prev = process.env.DSH_IA_DATA_DIR
-    process.env.DSH_IA_DATA_DIR = dataRoot
+    const { home } = makeSeededFinanceHome()
+    const prev = process.env.DSH_IA_HOME
+    process.env.DSH_IA_HOME = home
     try {
       const ctx = new Context()
       await (ctx.plugin(SkillRegistry as never) as Promise<unknown>)
@@ -403,8 +404,8 @@ describe('[5b] 真实 cordis 下 apply(ctx) 端到端装配', () => {
 
       await ctx.fiber.dispose()
     } finally {
-      if (prev === undefined) delete process.env.DSH_IA_DATA_DIR
-      else process.env.DSH_IA_DATA_DIR = prev
+      if (prev === undefined) delete process.env.DSH_IA_HOME
+      else process.env.DSH_IA_HOME = prev
     }
   })
 })

@@ -8,16 +8,16 @@
  *     SKILL」表述同步为「5 个可进化 + 1 个固有」）。
  *
  * 覆盖 AC1–AC3（AC4 由三命令外部执行，见同名 REPORT.md §三，避免「测试内跑测试」）：
- *   - AC1：`<dataRoot>/skills` 冷启动只预置 5 个 skill，**无** task-authorship。
+ *   - AC1：`<assetsDir>/skills` 冷启动只预置 5 个 skill，**无** task-authorship。
  *          真实调用 `loadSkillSeeds()` + 真实 `ensureSkillAssetsRepo()` 冷启动路径
- *          （临时 dataRoot + 真实 git），断言种子 name 集合 = 5 个可进化 SKILL。
+ *          （临时 assetsDir + 真实 git），断言种子 name 集合 = 5 个可进化 SKILL。
  *   - AC2：`dist-server` **仍保留** task-authorship（固有 SKILL 原文可静态读取）。
  *   - AC3：计数注释无「6 个」残留（`src/**` 全文件递归扫描 5 种写法）。
  *
  * 独立性声明（关键）：
  *   本文件由 Tester **独立编写**，不复用 Developer 的 `tests/skill-assets-repo.spec.ts`
  *   / `tests/skill-provider.spec.ts`，也不逐字复制 t100432 的用例。证据链：
- *     - AC1 走 **真实进程 + 真实 git** 的冷启动预置（临时 dataRoot，不污染真实
+ *     - AC1 走 **真实进程 + 真实 git** 的冷启动预置（临时 assetsDir，不污染真实
  *       数据目录），并在预置产物上做**递归文件树**核验（不止顶层目录）；
  *     - AC2 用**编译态 dist-server 动态 import** 读固有 SKILL 原文（产物级，非源态）；
  *     - AC3 用**独立正则扫描器** walk `src/**`，并附「检测器自检」对抗用例。
@@ -62,7 +62,7 @@ const EVOLVABLE = [
   'analysis-decision',
 ] as const
 
-/** 固有 SKILL 名（**不应**落入 <dataRoot>/skills）。 */
+/** 固有 SKILL 名（**不应**落入 <assetsDir>/skills）。 */
 const TA = TASK_AUTHORSHIP_SKILL_NAME
 
 /** 新建并在用例结束后自动清理的临时目录。 */
@@ -78,7 +78,7 @@ afterEach(() => {
     const dir = tempDirs.pop() as string
     rmSync(dir, { recursive: true, force: true })
   }
-  delete process.env.DSH_IA_DATA_DIR
+  delete process.env.DSH_IA_HOME
 })
 
 /** 直接调系统 git（仅用于测试断言，显式注入身份以脱离宿主全局配置）。 */
@@ -132,13 +132,13 @@ describe('[AC1] 冷启动只预置 5 个可进化 SKILL，无 task-authorship', 
   it(
     'AC1b：真实数据目录冷启动预置——产物目录集合恰 5 可进化、递归无 TA、git 仅 1 提交',
     () => {
-      const dataRoot = mkTmp('dsh-fin-t100433-cold-')
-      const out = ensureSkillAssetsRepo({ dataRoot, logger: () => {} })
+      const assetsDir = mkTmp('dsh-fin-t100433-cold-')
+      const out = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
       expect(out.provisioned).toBe(true)
       expect(out.degraded).toBe(false)
 
       const repoDir = out.dir
-      expect(repoDir).toBe(resolveSkillsRepoDir(dataRoot))
+      expect(repoDir).toBe(resolveSkillsRepoDir(assetsDir))
 
       // 顶层子目录（排除 .git）= 5 可进化。
       const subDirs = readdirSync(repoDir)
@@ -180,11 +180,11 @@ describe('[AC1] 冷启动只预置 5 个可进化 SKILL，无 task-authorship', 
   it(
     'AC1c：幂等——二次预置 no-op，既不产生第二个 commit，也不会补回 TA',
     () => {
-      const dataRoot = mkTmp('dsh-fin-t100433-idem-')
-      const first = ensureSkillAssetsRepo({ dataRoot, logger: () => {} })
+      const assetsDir = mkTmp('dsh-fin-t100433-idem-')
+      const first = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
       expect(first.provisioned).toBe(true)
 
-      const second = ensureSkillAssetsRepo({ dataRoot, logger: () => {} })
+      const second = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
       expect(second.provisioned).toBe(false)
       expect(second.degraded).toBe(false)
 
@@ -202,8 +202,8 @@ describe('[AC1] 冷启动只预置 5 个可进化 SKILL，无 task-authorship', 
   )
 
   it('AC1d：预置产物与随包种子（src/skills）逐字一致', () => {
-    const dataRoot = mkTmp('dsh-fin-t100433-bytes-')
-    const out = ensureSkillAssetsRepo({ dataRoot, logger: () => {} })
+    const assetsDir = mkTmp('dsh-fin-t100433-bytes-')
+    const out = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
     for (const n of EVOLVABLE) {
       const seeded = readFileSync(join(out.dir, n, 'SKILL.md'), 'utf8')
       const src = readFileSync(join(SRC_DIR, 'skills', n, 'SKILL.md'), 'utf8')

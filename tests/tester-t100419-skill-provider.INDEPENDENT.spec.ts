@@ -65,17 +65,17 @@ beforeAll(async () => {
 })
 
 /* ------------------------------------------------------------------ *
- * 环境隔离：把默认 dataRoot 指向临时目录，杜绝任何回落污染真实 home。
+ * 环境隔离：把默认 finance home 指向临时目录，杜绝任何回落污染真实 home。
  * ------------------------------------------------------------------ */
-const savedEnv = process.env.DSH_IA_DATA_DIR
+const savedEnv = process.env.DSH_IA_HOME
 let envRoot: string
 beforeAll(() => {
   envRoot = mkdtempSync(join(tmpdir(), 'dsh-fin-t100419-env-'))
-  process.env.DSH_IA_DATA_DIR = envRoot
+  process.env.DSH_IA_HOME = envRoot
 })
 afterAll(() => {
-  if (savedEnv === undefined) delete process.env.DSH_IA_DATA_DIR
-  else process.env.DSH_IA_DATA_DIR = savedEnv
+  if (savedEnv === undefined) delete process.env.DSH_IA_HOME
+  else process.env.DSH_IA_HOME = savedEnv
   rmSync(envRoot, { recursive: true, force: true })
 })
 
@@ -90,10 +90,10 @@ function mkTmpRaw(): string {
   return track(mkdtempSync(join(tmpdir(), 'dsh-fin-t100419-raw-')))
 }
 
-/** 临时 dataRoot 并预置真实 skills 仓库（5 个可进化 skill，独立 git 仓库）。 */
-function mkSeededDataRoot(): string {
-  const dir = track(mkdtempSync(join(tmpdir(), 'dsh-fin-t100419-data-')))
-  const out = ensureSkillAssetsRepo({ dataRoot: dir, logger: () => {} })
+/** 临时 assetsDir 并预置真实 skills 仓库（5 个可进化 skill，独立 git 仓库）。 */
+function mkSeededAssetsDir(): string {
+  const dir = track(mkdtempSync(join(tmpdir(), 'dsh-fin-t100419-assets-')))
+  const out = ensureSkillAssetsRepo({ assetsDir: dir, logger: () => {} })
   if (out.degraded) throw new Error(`预置降级：${out.reason}`)
   return dir
 }
@@ -183,10 +183,10 @@ async function importProviderModule(): Promise<any> {
  * ================================================================== */
 describe('A · 真实热更新闭环（真实 chokidar watch）', () => {
   it('A1 改写 SKILL.md → invalidate → skills/change 事件 + 下次 list() 反映新内容（非磁盘重读）', async () => {
-    const dataRoot = mkSeededDataRoot()
-    const skillsDir = resolveSkillsRepoDir(dataRoot)
+    const assetsDir = mkSeededAssetsDir()
+    const skillsDir = resolveSkillsRepoDir(assetsDir)
     const ctx = await newRegistryCtx()
-    const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
+    const mount = await mountSkillFilesystemProviderAsync(ctx, { assetsDir })
 
     // 初次 list()：触发真实 watcher 装配（list() resolve 时 watcher 已 ready）。
     const before = await list(ctx)
@@ -228,10 +228,10 @@ describe('A · 真实热更新闭环（真实 chokidar watch）', () => {
   }, 30000)
 
   it('A2 新增一个合规 skill 目录 → watch 后新 skill 出现在 catalog', async () => {
-    const dataRoot = mkSeededDataRoot()
-    const skillsDir = resolveSkillsRepoDir(dataRoot)
+    const assetsDir = mkSeededAssetsDir()
+    const skillsDir = resolveSkillsRepoDir(assetsDir)
     const ctx = await newRegistryCtx()
-    const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
+    const mount = await mountSkillFilesystemProviderAsync(ctx, { assetsDir })
     await list(ctx) // 装配 watcher
 
     let changeEvents = 0
@@ -283,10 +283,10 @@ describe('A · 真实热更新闭环（真实 chokidar watch）', () => {
   }, 30000)
 
   it('A3 删除一个 skill 目录 → watch 后该 skill 从 catalog 消失', async () => {
-    const dataRoot = mkSeededDataRoot()
-    const skillsDir = resolveSkillsRepoDir(dataRoot)
+    const assetsDir = mkSeededAssetsDir()
+    const skillsDir = resolveSkillsRepoDir(assetsDir)
     const ctx = await newRegistryCtx()
-    const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
+    const mount = await mountSkillFilesystemProviderAsync(ctx, { assetsDir })
     await list(ctx)
 
     const victim = 'stop-rule'
@@ -331,9 +331,9 @@ describe('A · 真实热更新闭环（真实 chokidar watch）', () => {
  * ================================================================== */
 describe('B · provider 落在 global 层 → 任意 scope 读取方可见', () => {
   it('B1 unscoped root 挂载 → 固定会话 scope 与 workspace→session 链 scope 均命中全部 5', async () => {
-    const dataRoot = mkSeededDataRoot()
+    const assetsDir = mkSeededAssetsDir()
     const ctx = await newRegistryCtx()
-    const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
+    const mount = await mountSkillFilesystemProviderAsync(ctx, { assetsDir })
 
     const fixedSessionKey = { kind: 'fixed-session' }
     const workspaceKey = { kind: 'workspace' }
@@ -365,12 +365,12 @@ describe('B · provider 落在 global 层 → 任意 scope 读取方可见', () 
   }, 30000)
 
   it('B2 真实分层：scoped 注册的 provider 仅对该 scope 及子链可见；global provider 处处可见', async () => {
-    const dataRoot = mkSeededDataRoot()
+    const assetsDir = mkSeededAssetsDir()
     const extraDir = mkTmpRaw()
     writeSkill(extraDir, 'tester-scoped-skill', 'SCOPED-DESC', '# scoped body')
 
     const ctx = await newRegistryCtx()
-    const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot }) // global 层
+    const mount = await mountSkillFilesystemProviderAsync(ctx, { assetsDir }) // global 层
 
     const workspaceKey = { kind: 'ws' }
     const fixedKey = { kind: 'fx' }
@@ -475,7 +475,7 @@ describe('C · 旧静态注册删除无残留 + 装配正确', () => {
  * ================================================================== */
 describe('F · 与 preset 默认 provider 共存 / 同层重名边界', () => {
   it('F1 同层共存：dsh-ia-skills 与默认名 filesystem 互不冲突、各自可见', async () => {
-    const dataRoot = mkSeededDataRoot()
+    const assetsDir = mkSeededAssetsDir()
     const extraDir = mkTmpRaw()
     writeSkill(extraDir, 'preset-skill', 'PRESET-DESC', '# preset body')
 
@@ -488,7 +488,7 @@ describe('F · 与 preset 默认 provider 共存 / 同层重名边界', () => {
       customSkillDirs: [extraDir],
       watch: false,
     }) as unknown as Promise<unknown>)
-    const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
+    const mount = await mountSkillFilesystemProviderAsync(ctx, { assetsDir })
 
     const all = await list(ctx)
     expect(coreNames(all)).toEqual([...CORE].sort())
@@ -501,16 +501,16 @@ describe('F · 与 preset 默认 provider 共存 / 同层重名边界', () => {
   }, 20000)
 
   it('F2 同层重复 providerName 抛错（唯一性边界）', async () => {
-    const dataRoot = mkSeededDataRoot()
+    const assetsDir = mkSeededAssetsDir()
     const ctx = await newRegistryCtx()
-    const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
+    const mount = await mountSkillFilesystemProviderAsync(ctx, { assetsDir })
     const mod = await importProviderModule()
 
     await expect(
       ctx.plugin(mod, {
         providerName: SKILL_PROVIDER_NAME,
         includeDefaultRoots: false,
-        customSkillDirs: [resolveSkillsRepoDir(dataRoot)],
+        customSkillDirs: [resolveSkillsRepoDir(assetsDir)],
         watch: false,
       }) as unknown as Promise<unknown>,
     ).rejects.toThrow()
@@ -537,11 +537,11 @@ describe('D · 降级对抗（不抛、可观测）', () => {
       } as unknown as Context
 
       await expect(
-        mountSkillFilesystemProviderAsync(ctx, { dataRoot: '/tmp/t100419-nope' }),
+        mountSkillFilesystemProviderAsync(ctx, { assetsDir: '/tmp/t100419-nope' }),
       ).rejects.toThrow('mount-boom')
 
       expect(() =>
-        mountSkillFilesystemProvider(ctx, { dataRoot: '/tmp/t100419-nope' }),
+        mountSkillFilesystemProvider(ctx, { assetsDir: '/tmp/t100419-nope' }),
       ).not.toThrow()
       await new Promise((r) => setTimeout(r, 60))
       expect(
@@ -561,11 +561,11 @@ describe('D · 降级对抗（不抛、可观测）', () => {
     try {
       const ctx = await newRegistryCtx()
       await expect(
-        mountSkillFilesystemProviderAsync(ctx, { dataRoot: mkSeededDataRoot() }),
+        mountSkillFilesystemProviderAsync(ctx, { assetsDir: mkSeededAssetsDir() }),
       ).rejects.toThrow()
 
       expect(() =>
-        mountSkillFilesystemProvider(ctx, { dataRoot: mkSeededDataRoot() }),
+        mountSkillFilesystemProvider(ctx, { assetsDir: mkSeededAssetsDir() }),
       ).not.toThrow()
       await new Promise((r) => setTimeout(r, 80))
       expect(
@@ -622,12 +622,12 @@ describe('D · 降级对抗（不抛、可观测）', () => {
  * ================================================================== */
 describe('E · 卸载语义（dispose → 归零 + watch 关闭）', () => {
   it('E1 async dispose 后 list 归 0、改写不再复活（watch 关闭）', async () => {
-    const dataRoot = mkSeededDataRoot()
-    const skillsDir = resolveSkillsRepoDir(dataRoot)
+    const assetsDir = mkSeededAssetsDir()
+    const skillsDir = resolveSkillsRepoDir(assetsDir)
     const ctx = await newRegistryCtx()
 
     const fsBefore = countFsWatchers()
-    const mount = await mountSkillFilesystemProviderAsync(ctx, { dataRoot })
+    const mount = await mountSkillFilesystemProviderAsync(ctx, { assetsDir })
     expect(coreNames(await list(ctx))).toHaveLength(5)
     const fsDuring = countFsWatchers()
 
@@ -649,9 +649,9 @@ describe('E · 卸载语义（dispose → 归零 + watch 关闭）', () => {
   }, 30000)
 
   it('E2 同步入口经 ctx.effect 装配；注销后 provider 移除、list 归 0', async () => {
-    const dataRoot = mkSeededDataRoot()
+    const assetsDir = mkSeededAssetsDir()
     const ctx = await newRegistryCtx()
-    const dispose = mountSkillFilesystemProvider(ctx, { dataRoot })
+    const dispose = mountSkillFilesystemProvider(ctx, { assetsDir })
     expect(typeof dispose).toBe('function')
 
     await waitFor(
@@ -675,7 +675,7 @@ describe('E · 卸载语义（dispose → 归零 + watch 关闭）', () => {
 describe('数据隔离', () => {
   it('本文件全部用例只在临时目录预置，不触碰默认数据目录', () => {
     expect(envRoot.startsWith(tmpdir())).toBe(true)
-    const dataRoot = mkSeededDataRoot()
-    expect(existsSync(join(dataRoot, 'skills', CORE[0], SKILL_FILENAME))).toBe(true)
+    const assetsDir = mkSeededAssetsDir()
+    expect(existsSync(join(assetsDir, 'skills', CORE[0], SKILL_FILENAME))).toBe(true)
   })
 })

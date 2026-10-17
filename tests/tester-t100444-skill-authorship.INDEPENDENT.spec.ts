@@ -13,7 +13,7 @@
  *       `frontmatter.ts`，从而交叉验证「注册对象 content 与磁盘正文逐字一致」；
  *     - 运行时三态：**自建 store 版 mock ctx**（register 以 name 建 Map、首名先到先得、
  *       disposer 删表项），独立观测注册 / 降级 / 卸载，与 Developer 的 register 替身模型不同；
- *     - 真实环境：真实 `SkillRegistry` + 编译态 `dist-server` 装载 + 真实临时 dataRoot。
+ *     - 真实环境：真实 `SkillRegistry` + 编译态 `dist-server` 装载 + 真实临时 assetsDir / finance home。
  *
  * 覆盖 AC1–AC7 + 对抗性检验，逐条明细见同名 REPORT.md。
  *
@@ -114,9 +114,9 @@ function mkTmp(prefix: string): string {
   return dir
 }
 
-const savedEnv = process.env.DSH_IA_DATA_DIR
-function useDataRoot(dir: string): void {
-  process.env.DSH_IA_DATA_DIR = dir
+const savedEnv = process.env.DSH_IA_HOME
+function useFinanceHome(dir: string): void {
+  process.env.DSH_IA_HOME = dir
 }
 
 afterEach(() => {
@@ -127,8 +127,8 @@ afterEach(() => {
       /* ignore */
     }
   }
-  if (savedEnv === undefined) delete process.env.DSH_IA_DATA_DIR
-  else process.env.DSH_IA_DATA_DIR = savedEnv
+  if (savedEnv === undefined) delete process.env.DSH_IA_HOME
+  else process.env.DSH_IA_HOME = savedEnv
 })
 
 /** 递归收集文件（相对路径，跳过 .git）。 */
@@ -321,16 +321,16 @@ describe('[AC6] 与可进化 strategy-authorship 的区分清晰', () => {
 })
 
 /* ================================================================== *
- * AC1：静态加载 + 不落可进化清单（真实临时 dataRoot + 真实 git）
+ * AC1：静态加载 + 不落可进化清单（真实临时 assetsDir + 真实 git）
  * ================================================================== */
 describe('[AC1] 静态加载；ensureSkillAssetsRepo 只落 5 可进化、不含 skill-authorship', () => {
   it('AC1a：预置产物目录集合 = SKILL_NAMES（5），无 skill-authorship / task-authorship', () => {
-    const dataRoot = mkTmp('dsh-fin-t100444-repo-')
-    const out = ensureSkillAssetsRepo({ dataRoot, logger: () => {} })
+    const assetsDir = mkTmp('dsh-fin-t100444-assets-repo-')
+    const out = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
     expect(out.provisioned).toBe(true)
     expect(out.degraded).toBe(false)
 
-    const repoDir = resolveSkillsRepoDir(dataRoot)
+    const repoDir = resolveSkillsRepoDir(assetsDir)
     const dirs = readdirSync(repoDir)
       .filter((e) => e !== '.git' && statSync(join(repoDir, e)).isDirectory())
       .sort()
@@ -348,8 +348,8 @@ describe('[AC1] 静态加载；ensureSkillAssetsRepo 只落 5 可进化、不含
   })
 
   it('AC1b：真实 git——被追踪文件无 skill-authorship，工作区干净，恰 1 提交', () => {
-    const dataRoot = mkTmp('dsh-fin-t100444-git-')
-    const out = ensureSkillAssetsRepo({ dataRoot, logger: () => {} })
+    const assetsDir = mkTmp('dsh-fin-t100444-assets-git-')
+    const out = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
     const repoDir = out.dir
     expect(existsSync(join(repoDir, '.git'))).toBe(true)
 
@@ -363,8 +363,8 @@ describe('[AC1] 静态加载；ensureSkillAssetsRepo 只落 5 可进化、不含
   })
 
   it('AC1c（组合证据）：disk 无 skill-authorship，但注册对象仍可取（静态加载非盘上发现）', () => {
-    const dataRoot = mkTmp('dsh-fin-t100444-static-')
-    const out = ensureSkillAssetsRepo({ dataRoot, logger: () => {} })
+    const assetsDir = mkTmp('dsh-fin-t100444-assets-static-')
+    const out = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
     // 盘上（可进化仓库）不存在 skill-authorship。
     expect(existsSync(join(out.dir, SA))).toBe(false)
     // 却仍能静态读取 + 组装注册对象 → 证明「随包静态加载」而非「数据目录发现」。
@@ -454,7 +454,7 @@ const TA_EFFECT_LABEL = 'dsh-ia task-authorship skill'
 
 describe('[AC3-runtime] apply(ctx) 三态：注册 / 降级 / 卸载', () => {
   it('AC3a：skills 可用 → 注册恰 2 个固件 skill，契约正确，effect 标签齐备', () => {
-    useDataRoot(mkTmp('dsh-fin-t100444-mock-ok-'))
+    useFinanceHome(mkTmp('dsh-fin-t100444-mock-ok-'))
     const m = buildMockCtx('ok')
 
     expect(() => srcPlugin.apply(m.ctx as never)).not.toThrow()
@@ -481,7 +481,7 @@ describe('[AC3-runtime] apply(ctx) 三态：注册 / 降级 / 卸载', () => {
   }, 30_000)
 
   it('AC3b：skills 不可用 → apply 降级不抛、不注册，标签仍在且 disposer 安全', () => {
-    useDataRoot(mkTmp('dsh-fin-t100444-mock-absent-'))
+    useFinanceHome(mkTmp('dsh-fin-t100444-mock-absent-'))
     const m = buildMockCtx('absent')
 
     expect(() => srcPlugin.apply(m.ctx as never)).not.toThrow()
@@ -495,7 +495,7 @@ describe('[AC3-runtime] apply(ctx) 三态：注册 / 降级 / 卸载', () => {
   }, 30_000)
 
   it('AC3c：卸载 skill-authorship 的 effect → 只移除它，task-authorship 保留（互不误伤）', () => {
-    useDataRoot(mkTmp('dsh-fin-t100444-mock-unload-'))
+    useFinanceHome(mkTmp('dsh-fin-t100444-mock-unload-'))
     const m = buildMockCtx('ok')
     srcPlugin.apply(m.ctx as never)
 
@@ -524,7 +524,7 @@ describe('[AC3-runtime] apply(ctx) 三态：注册 / 降级 / 卸载', () => {
  * ================================================================== */
 describe('[对抗性] 降级 / 幂等 / 首名先到先得', () => {
   it('AC-adv1：register 抛错 → apply 降级不抛，effect 仍存在且 disposer 安全', () => {
-    useDataRoot(mkTmp('dsh-fin-t100444-mock-throw-'))
+    useFinanceHome(mkTmp('dsh-fin-t100444-mock-throw-'))
     const m = buildMockCtx('throw')
 
     expect(() => srcPlugin.apply(m.ctx as never)).not.toThrow()
@@ -536,7 +536,7 @@ describe('[对抗性] 降级 / 幂等 / 首名先到先得', () => {
   }, 30_000)
 
   it('AC-adv2：卸载 disposer 幂等——两次调用不抛、只注销一次', () => {
-    useDataRoot(mkTmp('dsh-fin-t100444-idem-'))
+    useFinanceHome(mkTmp('dsh-fin-t100444-idem-'))
     const m = buildMockCtx('ok')
     srcPlugin.apply(m.ctx as never)
 
@@ -637,8 +637,8 @@ describe('[AC1+AC3-real] 真实装载：2 固件静态可见 + 5 可进化经 pr
   it(
     'AC-real1：skill-authorship 静态可见(source=runtime) + 5 可进化(custom) + TA 共存、名称唯一；卸载 fiber 后全消失',
     async () => {
-      const dataRoot = mkTmp('dsh-fin-t100444-real-')
-      useDataRoot(dataRoot)
+      const financeHome = mkTmp('dsh-fin-t100444-real-')
+      useFinanceHome(financeHome)
 
       const { app, toolsFiber, pluginFiber } = await bootRealPlugin()
       try {
