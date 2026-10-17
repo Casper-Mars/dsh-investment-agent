@@ -9,7 +9,8 @@
  *     策略版本链 / 阈值来源 / 复盘检讨判定均经**工具层**（ledger_init → strategy_set → …）。
  *
  * 覆盖 8 项验收（逐条给证据，禁止只做代码审查）：
- *   1. 策略版本链 E2E（v001→v002 / 落盘 / current 指针 / 版本不可变 / parent 冲突 / 未 init / 未设定）
+ *   1. 策略版本链 E2E（首版→二次提交 / assets/strategies 落盘 / git 短 SHA /
+ *      历史回读 / parent 冲突 / 未 init / 未设定）
  *   2. 阈值来源 E2E（front-matter → 旧 json → 默认；非法键回落且不抛）
  *   3. review_retrospect 端到端（调整策略阈值可翻转「触发检讨」结论）
  *   4. 运行时可见性（真实插件装载：工具 21 / SKILL 5 可进化 + 1 固有）
@@ -138,12 +139,17 @@ function strategyText(frontmatter: string, body = '自然语言策略正文'): s
 let dir: string
 let booted: Booted
 let tools: ToolBox
+let prevHome: string | undefined
 
 beforeEach(async () => {
   // ledger_trade 连续竞价时段硬闸门（bc448d1）：固定系统时间到竞价时段。
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-10-13T10:00:00'))
   dir = mkdtempSync(join(tmpdir(), 'dsh-fin-strat-'))
+  // 策略是资产：ToolContext 的策略注册表固定使用 resolveAssetsDir()。
+  // 以 DSH_IA_HOME 隔离整个资产层，绝不触碰真实 ~/.dsh-ia。
+  prevHome = process.env.DSH_IA_HOME
+  process.env.DSH_IA_HOME = dir
   booted = await bootRegistry(dir)
   tools = booted.tools
 })
@@ -151,6 +157,8 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.useRealTimers()
   await booted.dispose()
+  if (prevHome === undefined) delete process.env.DSH_IA_HOME
+  else process.env.DSH_IA_HOME = prevHome
   rmSync(dir, { recursive: true, force: true })
 })
 
@@ -160,8 +168,8 @@ afterEach(async () => {
 
 describe('1. 策略版本链 E2E（真实 registry + 工具层）', () => {
   const SYM = '588000'
-  const strategyDir = () => join(dir, 'strategy')
-  const versionsDir = () => join(dir, 'strategy_versions', SYM)
+  const SHA_RE = /^[0-9a-f]{12}$/
+  const strategyDir = () => join(dir, 'assets', 'strategies')
 
   async function initSymbol(): Promise<void> {
     const r = await call(tools, 'ledger_init', {
@@ -171,83 +179,89 @@ describe('1. 策略版本链 E2E（真实 registry + 工具层）', () => {
     expect(r.isError, textOf(r)).toBe(false)
   }
 
-  it('ledger_init → strategy_set(首版) → strategy_get → strategy_set(parent=首版) → strategy_get：版本 v001→v002', async () => {
+  it('ledger_init → strategy_set(首版) → strategy_get → 二次提交 → strategy_get', async () => {
     await initSymbol()
 
     const v1 = await call(tools, 'strategy_set', {
       symbol: SYM, text: '首版策略正文', rationale: '首版理由',
     })
     expect(v1.isError, textOf(v1)).toBe(false)
-    expect(valueOf(v1)).toEqual({ ok: true, version: 'v001' })
+    const sha1 = (valueOf(v1) as { version: string }).version
+    expect(sha1).toMatch(SHA_RE)
 
     const g1 = await call(tools, 'strategy_get', { symbol: SYM })
     expect(g1.isError, textOf(g1)).toBe(false)
-    expect(valueOf(g1)).toMatchObject({ symbol: SYM, version: 'v001', text: '首版策略正文' })
+    expect(valueOf(g1)).toMatchObject({ symbol: SYM, version: sha1, text: '首版策略正文' })
 
     const v2 = await call(tools, 'strategy_set', {
-      symbol: SYM, text: '二版策略正文', rationale: '二版理由', parent_version: 'v001',
+      symbol: SYM, text: '二版策略正文', rationale: '二版理由', parent_version: sha1,
     })
     expect(v2.isError, textOf(v2)).toBe(false)
-    expect(valueOf(v2)).toEqual({ ok: true, version: 'v002' })
+    const sha2 = (valueOf(v2) as { version: string }).version
+    expect(sha2).toMatch(SHA_RE)
+    expect(sha2).not.toBe(sha1)
 
     const g2 = await call(tools, 'strategy_get', { symbol: SYM })
     expect(g2.isError, textOf(g2)).toBe(false)
-    expect(valueOf(g2)).toMatchObject({ symbol: SYM, version: 'v002', text: '二版策略正文' })
+    expect(valueOf(g2)).toMatchObject({ symbol: SYM, version: sha2, text: '二版策略正文' })
 
-    console.log('[EVIDENCE 1a] strategy version chain v001 -> v002 via tool layer')
+    console.log(`[EVIDENCE 1a] strategy git chain ${sha1} -> ${sha2} via tool layer`)
   })
 
-  it('落盘：strategy/<symbol>.md 与 vNNN.md 内容正确；current 指针 = 最新版', async () => {
+  it('落盘：assets/strategies/<symbol>.md 为当前正文；无 strategy_versions/vNNN/current', async () => {
     await initSymbol()
-    await call(tools, 'strategy_set', { symbol: SYM, text: '首版策略正文', rationale: 'r1' })
+    const s1 = await call(tools, 'strategy_set', { symbol: SYM, text: '首版策略正文', rationale: 'r1' })
+    const sha1 = (valueOf(s1) as { version: string }).version
     await call(tools, 'strategy_set', {
-      symbol: SYM, text: '二版策略正文', rationale: 'r2', parent_version: 'v001',
+      symbol: SYM, text: '二版策略正文', rationale: 'r2', parent_version: sha1,
     })
 
-    expect(readFileSync(join(strategyDir(), `${SYM}.md`), 'utf8')).toBe('二版策略正文')
-    expect(readFileSync(join(versionsDir(), 'v001.md'), 'utf8')).toBe('首版策略正文')
-    expect(readFileSync(join(versionsDir(), 'v002.md'), 'utf8')).toBe('二版策略正文')
-    expect(readFileSync(join(versionsDir(), 'current'), 'utf8').trim()).toBe('v002')
+    const doc = join(strategyDir(), `${SYM}.md`)
+    expect(readFileSync(doc, 'utf8')).toBe('二版策略正文')
+    expect(readFileSync(doc, 'utf8').startsWith('---')).toBe(false)
+    expect(existsSync(join(dir, 'assets', 'strategy_versions'))).toBe(false)
+    expect(existsSync(join(dir, 'assets', 'strategy'))).toBe(false)
 
-    const meta2 = JSON.parse(readFileSync(join(versionsDir(), 'v002.meta.json'), 'utf8'))
-    expect(meta2.version).toBe('v002')
-    expect(meta2.parent).toBe('v001')
+    // 历史版本按短 SHA 回读；meta 由 git commit 派生。
+    const old = await call(tools, 'strategy_get', { symbol: SYM, version: sha1 })
+    expect(valueOf(old)).toMatchObject({ version: sha1, text: '首版策略正文' })
+    const cur = await call(tools, 'strategy_get', { symbol: SYM })
+    expect((valueOf(cur) as { version: string }).version).toMatch(SHA_RE)
+
+    const ctx = createToolContext({ dataRoot: dir })
+    const meta2 = ctx.strategy.get(SYM)!.meta
     expect(meta2.rationale).toBe('r2')
+    expect(meta2.parent).toBe(sha1)
 
-    console.log('[EVIDENCE 1b] disk layout correct: strategy/588000.md=v002 body, current pointer=v002, v002.meta.parent=v001')
+    console.log('[EVIDENCE 1b] disk layout correct: assets/strategies/588000.md=v2 body, git history holds v1/v2')
   })
 
-  it('版本不可变：v001.md / v001.meta.json 内容未被改写', async () => {
+  it('版本不可变：历史 commit 的正文按旧短 SHA 回读不变', async () => {
     await initSymbol()
-    await call(tools, 'strategy_set', { symbol: SYM, text: '首版策略正文', rationale: 'r1' })
+    const s1 = await call(tools, 'strategy_set', { symbol: SYM, text: '首版策略正文', rationale: 'r1' })
+    const sha1 = (valueOf(s1) as { version: string }).version
 
-    const v001mdBefore = readFileSync(join(versionsDir(), 'v001.md'), 'utf8')
-    const v001metaBefore = readFileSync(join(versionsDir(), 'v001.meta.json'), 'utf8')
-
+    const before = await call(tools, 'strategy_get', { symbol: SYM, version: sha1 })
     await call(tools, 'strategy_set', {
-      symbol: SYM, text: '二版策略正文', rationale: 'r2', parent_version: 'v001',
+      symbol: SYM, text: '二版策略正文', rationale: 'r2', parent_version: sha1,
     })
+    const after = await call(tools, 'strategy_get', { symbol: SYM, version: sha1 })
+    expect(valueOf(after)).toEqual(valueOf(before))
+    expect(valueOf(after)).toMatchObject({ version: sha1, text: '首版策略正文' })
 
-    expect(readFileSync(join(versionsDir(), 'v001.md'), 'utf8')).toBe(v001mdBefore)
-    expect(readFileSync(join(versionsDir(), 'v001.meta.json'), 'utf8')).toBe(v001metaBefore)
-
-    // 回读历史版本，内容与首版一致。
-    const g = await call(tools, 'strategy_get', { symbol: SYM, version: 'v001' })
-    expect(g.isError, textOf(g)).toBe(false)
-    expect(valueOf(g)).toMatchObject({ version: 'v001', text: '首版策略正文' })
-
-    console.log('[EVIDENCE 1c] v001.md / v001.meta.json immutable across v002 write')
+    console.log('[EVIDENCE 1c] historical commit immutable across new write')
   })
 
   it('parent_version 给错 → 抛冲突（isError）', async () => {
     await initSymbol()
-    await call(tools, 'strategy_set', { symbol: SYM, text: '首版', rationale: 'r1' })
+    const s1 = await call(tools, 'strategy_set', { symbol: SYM, text: '首版', rationale: 'r1' })
+    const sha1 = (valueOf(s1) as { version: string }).version
     await call(tools, 'strategy_set', {
-      symbol: SYM, text: '二版', rationale: 'r2', parent_version: 'v001',
+      symbol: SYM, text: '二版', rationale: 'r2', parent_version: sha1,
     })
 
     const bad = await call(tools, 'strategy_set', {
-      symbol: SYM, text: '三版', rationale: 'r3', parent_version: 'v001',
+      symbol: SYM, text: '三版', rationale: 'r3', parent_version: sha1,
     })
     expect(bad.isError).toBe(true)
     expect(textOf(bad)).toMatch(/不一致/)
@@ -342,7 +356,7 @@ describe('2. 阈值来源 E2E（front-matter → 旧 json → 默认）', () => 
       expect(got[field], `${fm} 应回落默认`).toBe(DEFAULT_THRESHOLDS[field])
     })
     console.log(`[EVIDENCE 2d] ${cases.length} illegal keys all fall back to default without throwing`)
-  })
+  }, 30000)
 })
 
 /* ================================================================== *

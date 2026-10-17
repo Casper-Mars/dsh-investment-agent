@@ -30,12 +30,19 @@ import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 let dir: string
 let ctx: ToolContext
 
+let prevHome: string | undefined
+
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'dsh-ia-task19-'))
+  // 策略是资产：ToolContext 的策略注册表固定使用 resolveAssetsDir()（跟随 DSH_IA_HOME）。
+  prevHome = process.env.DSH_IA_HOME
+  process.env.DSH_IA_HOME = dir
   ctx = createToolContext({ dataRoot: dir })
 })
 
 afterEach(() => {
+  if (prevHome === undefined) delete process.env.DSH_IA_HOME
+  else process.env.DSH_IA_HOME = prevHome
   rmSync(dir, { recursive: true, force: true })
 })
 
@@ -249,10 +256,10 @@ describe('strategy_set 不再写 thresholds.json', () => {
       makeExec(),
     )) as { ok: boolean; version: string }
     expect(res.ok).toBe(true)
-    expect(res.version).toBe('v001')
+    expect(res.version).toMatch(/^[0-9a-f]{12}$/)
 
     const legacyPath = join(dir, 'ledger', '588000', 'thresholds.json')
-    const strategyPath = join(dir, 'strategy', '588000.md')
+    const strategyPath = join(dir, 'assets', 'strategies', '588000.md')
     ev('thresholds.json 是否存在', existsSync(legacyPath))
     ev('strategy 当前版文件是否存在', existsSync(strategyPath))
     expect(existsSync(legacyPath)).toBe(false)

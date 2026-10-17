@@ -3,10 +3,10 @@
  *
  * execute 一律走 domain/strategy 的 {@link StrategyRegistry}（本地 CRUD，无 HTTP 层）。
  *
- * 语义（对齐详细设计 §10.8）：
+ * 语义（任务-3 迁移后）：
  *   策略是**你（agent）为该标的设定的**文本文档；首版凭经验生成，复盘后迭代。
- *   版本不可变：每次 strategy_set 都产生新版本（v001 → v002 → …），历史版本
- *   只读，current 指针始终指向最新版。
+ *   每次写入产生一次 git commit；version 为 git 短 SHA（12 位），历史 commit
+ *   只读，可通过 strategy_get 的 version 回读任意历史版本。
  *
  * 字段映射策略：domain 返回驼峰（meta.ts / meta.parent），§10.8 契约用下划线
  *   （updated_at / parent_version）。本工具层在 execute 内做**显式蛇形映射**，
@@ -41,11 +41,11 @@ export function createStrategyGetTool(ctx: ToolContext): ToolDefinition {
     name: 'strategy_get',
     description:
       '读取你（agent）为某标的设定的策略文档（Markdown）。默认返回当前版，可用 ' +
-      'version 指定历史版本。策略是**你为该标的设定的**文本文档：首版凭经验生成，' +
-      '复盘后迭代；版本不可变。只读操作。',
+      'version 指定历史版本（git 短 SHA）。策略是**你为该标的设定的**文本文档：' +
+      '首版凭经验生成，复盘后迭代；每次写入产生一次 git commit，历史版本只读。只读操作。',
     parameters: {
       symbol: { type: 'string', required: true, description: '标的代码' },
-      version: { type: 'string', description: '版本号（vNNN，可选；缺省取当前版）' },
+      version: { type: 'string', description: 'git 短 SHA（可选；缺省取当前版）' },
     },
     output: {
       schema: strategyGetResultSchema,
@@ -79,19 +79,19 @@ export function createStrategyGetTool(ctx: ToolContext): ToolDefinition {
   })
 }
 
-/** strategy_set：写入策略文档的新版本（首版 v001 / 迭代版本需带 parent_version）。 */
+/** strategy_set：写入策略文档的新版本（每次写入产生一次 git commit，返回短 SHA）。 */
 export function createStrategySetTool(ctx: ToolContext): ToolDefinition {
   return defineTool({
     name: 'strategy_set',
     description:
       '为某标的写入策略文档（Markdown）的新版本。策略是**你（agent）为该标的设定的**' +
-      '文本文档：首版凭经验生成（不带 parent_version），复盘后迭代（parent_version 必填 ' +
-      '且须等于当前版）；版本不可变（历史版本只读）。标的须已 ledger_init 注册。写操作。',
+      '文本文档：首版凭经验生成，复盘后迭代。每次写入产生一次 git commit；version ' +
+      '为 git 短 SHA，可回读任意历史提交。标的须已 ledger_init 注册。写操作。',
     parameters: {
       symbol: { type: 'string', required: true, description: '标的代码（须已台账注册）' },
       text: { type: 'string', required: true, description: '策略文档正文（Markdown）' },
       rationale: { type: 'string', required: true, description: '本版理由（为什么这么写 / 迭代原因）' },
-      parent_version: { type: 'string', description: '上一版本号（非首版必填；首版省略）' },
+      parent_version: { type: 'string', description: '上一版短 SHA（可选，乐观并发校验）' },
     },
     output: {
       schema: strategySetResultSchema,

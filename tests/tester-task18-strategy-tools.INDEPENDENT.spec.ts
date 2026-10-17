@@ -6,9 +6,10 @@
  *   - 改 src/tools/schemas.ts（+2 严格 schema）、src/tools/context.ts（ToolContext.strategy）、
  *     src/tools/index.ts（16→14）、src/tools/README.md、src/plugin.ts（仅注释）
  *
- * 本文件为 Tester 独立产出，**不改** src/ 与既有测试。
- * 一律用 mkdtemp 临时目录作为 dataRoot，直接构造真实 ToolContext + createAllTools，
- * 真实调用 ToolDefinition.execute(args, { signal })，不污染真实 dataRoot。
+ * 本文件为 Tester 独立产出。Task-3 迁移后：策略是资产，ToolContext 使用
+ * `resolveAssetsDir()`；测试以 DSH_IA_HOME 指向 mkdtemp 临时目录隔离资产层，
+ * dataRoot 同时指向该临时目录，绝不触碰真实 ~/.dsh-ia。
+ * 真实调用 ToolDefinition.execute(args, { signal })。
  *
  * 覆盖（对应任务卡 6 项必验点）：
  *   1. 注册与顺序（14 个；ledgers → strategy → predicts → reviews）
@@ -77,13 +78,19 @@ function expectMatchesOutputSchema(name: string, value: unknown): void {
   ).toEqual([])
 }
 
+let prevHome: string | undefined
+
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'dsh-ia-task18-'))
+  prevHome = process.env.DSH_IA_HOME
+  process.env.DSH_IA_HOME = dir
   ctx = createToolContext({ dataRoot: dir })
   tools = createAllTools(ctx)
 })
 
 afterEach(() => {
+  if (prevHome === undefined) delete process.env.DSH_IA_HOME
+  else process.env.DSH_IA_HOME = prevHome
   rmSync(dir, { recursive: true, force: true })
 })
 
@@ -151,14 +158,14 @@ describe('必验点 3：行为（真实 execute，临时目录 dataRoot）', () 
     ).rejects.toThrow(/ledger_init/)
   })
 
-  it('b. ledger_init 后首版 → {ok,version:v001}；strategy_get 往返字段与 text 一致', async () => {
+  it('b. ledger_init 后首版 → {ok,version:短SHA}；strategy_get 往返字段与 text 一致', async () => {
     await initSymbol()
     const s = await run('strategy_set', {
       symbol: '588000',
       text: '# 首版\n买入并持有',
       rationale: '初始策略',
     })
-    expect(s).toEqual({ ok: true, version: 'v001' })
+    expect(s).toEqual({ ok: true, version: expect.stringMatching(/^[0-9a-f]{12}$/) as unknown })
     expectMatchesOutputSchema('strategy_set', s)
 
     const g = await run('strategy_get', { symbol: '588000' })
@@ -166,7 +173,7 @@ describe('必验点 3：行为（真实 execute，临时目录 dataRoot）', () 
     expect(g).toEqual({
       symbol: '588000',
       text: '# 首版\n买入并持有',
-      version: 'v001',
+      version: (s as { version: string }).version,
       updated_at: expect.any(String) as unknown,
     })
     expect((g as { updated_at: string }).updated_at).not.toBe('')
@@ -180,25 +187,28 @@ describe('必验点 3：行为（真实 execute，临时目录 dataRoot）', () 
     await expect(run('strategy_get', { symbol: '588000' })).rejects.toThrow(/strategy_set/)
   })
 
-  it('d. parent_version=v001 → v002；parent_version 给错(v003) → 抛冲突错误', async () => {
+  it('d. parent_version=首版短SHA → 新提交；过期/虚构 parent_version → 抛冲突错误', async () => {
     await initSymbol()
-    await run('strategy_set', { symbol: '588000', text: 'v1', rationale: 'r1' })
+    const v1 = (await run('strategy_set', { symbol: '588000', text: 'v1', rationale: 'r1' })) as {
+      version: string
+    }
     const v2 = await run('strategy_set', {
       symbol: '588000',
       text: 'v2',
       rationale: 'r2',
-      parent_version: 'v001',
+      parent_version: v1.version,
     })
-    expect(v2).toEqual({ ok: true, version: 'v002' })
+    expect(v2).toEqual({ ok: true, version: expect.stringMatching(/^[0-9a-f]{12}$/) as unknown })
+    expect((v2 as { version: string }).version).not.toBe(v1.version)
     expectMatchesOutputSchema('strategy_set', v2)
 
-    // 当前 v002，声明 parent=v003（或过期的 v001）→ 冲突
+    // 当前已前进，声明过期的 v1 / 虚构 SHA → 冲突
     await expect(
       run('strategy_set', {
         symbol: '588000',
         text: 'v3',
         rationale: 'r3',
-        parent_version: 'v003',
+        parent_version: 'deadbeefdead',
       }),
     ).rejects.toThrow(/不一致/)
     await expect(
@@ -206,44 +216,49 @@ describe('必验点 3：行为（真实 execute，临时目录 dataRoot）', () 
         symbol: '588000',
         text: 'v3',
         rationale: 'r3',
-        parent_version: 'v001',
+        parent_version: v1.version,
       }),
     ).rejects.toThrow(/不一致/)
+
+    // 历史版本按短 SHA 回读。
+    const old = await run('strategy_get', { symbol: '588000', version: v1.version })
+    expect((old as { text: string }).text).toBe('v1')
+    expect((old as { version: string }).version).toBe(v1.version)
   })
 
-  it('e. 落盘真实存在（strategy/<symbol>.md、strategy_versions/<symbol>/v00N.md 等）', async () => {
+  it('e. 落盘真实存在（assets/strategies/<symbol>.md + git 历史），无自建版本链', async () => {
     await initSymbol()
-    await run('strategy_set', { symbol: '588000', text: '正文 A', rationale: 'r1' })
-    await run('strategy_set', {
+    const s1 = (await run('strategy_set', { symbol: '588000', text: '正文 A', rationale: 'r1' })) as {
+      version: string
+    }
+    const s2 = (await run('strategy_set', {
       symbol: '588000',
       text: '正文 B',
       rationale: 'r2',
-      parent_version: 'v001',
-    })
+      parent_version: s1.version,
+    })) as { version: string }
 
-    // 当前版文档
-    expect(existsSync(join(dir, 'strategy', '588000.md'))).toBe(true)
-    expect(readFileSync(join(dir, 'strategy', '588000.md'), 'utf8')).toBe('正文 B')
-    // 版本链正文
-    expect(readFileSync(join(dir, 'strategy_versions', '588000', 'v001.md'), 'utf8')).toBe('正文 A')
-    expect(readFileSync(join(dir, 'strategy_versions', '588000', 'v002.md'), 'utf8')).toBe('正文 B')
-    // 版本 meta
-    const meta1 = JSON.parse(
-      readFileSync(join(dir, 'strategy_versions', '588000', 'v001.meta.json'), 'utf8'),
-    )
-    expect(meta1.version).toBe('v001')
-    expect(meta1.rationale).toBe('r1')
-    expect(meta1.parent).toBeUndefined()
-    const meta2 = JSON.parse(
-      readFileSync(join(dir, 'strategy_versions', '588000', 'v002.meta.json'), 'utf8'),
-    )
-    expect(meta2.version).toBe('v002')
-    expect(meta2.rationale).toBe('r2')
-    expect(meta2.parent).toBe('v001')
-    // current 指针
-    expect(
-      readFileSync(join(dir, 'strategy_versions', '588000', 'current'), 'utf8').trim(),
-    ).toBe('v002')
+    const assetsDir = join(dir, 'assets')
+    const doc = join(assetsDir, 'strategies', '588000.md')
+    expect(existsSync(doc)).toBe(true)
+    expect(readFileSync(doc, 'utf8')).toBe('正文 B')
+    expect(readFileSync(doc, 'utf8').startsWith('---')).toBe(false)
+
+    // git 历史回读：版本 meta 由 commit 派生。
+    const meta1 = ctx.strategy.get('588000', s1.version)?.meta
+    expect(meta1?.version).toBe(s1.version)
+    expect(meta1?.rationale).toBe('r1')
+    expect(meta1?.parent).toBeUndefined()
+    const meta2 = ctx.strategy.get('588000', s2.version)?.meta
+    expect(meta2?.version).toBe(s2.version)
+    expect(meta2?.rationale).toBe('r2')
+    expect(meta2?.parent).toBe(s1.version)
+
+    // 自建版本链目录 / 文件一律不存在。
+    expect(existsSync(join(assetsDir, 'strategy_versions'))).toBe(false)
+    expect(existsSync(join(assetsDir, 'strategy'))).toBe(false)
+    expect(existsSync(join(assetsDir, 'strategies', 'v001.md'))).toBe(false)
+    expect(existsSync(join(assetsDir, 'strategies', 'current'))).toBe(false)
   })
 })
 
@@ -254,9 +269,9 @@ describe('必验点 4：中断语义（exec.signal aborted → 抛错且不落�
       run('strategy_set', { symbol: '588000', text: 'v1', rationale: 'r1' }, true),
     ).rejects.toThrow(/取消/)
 
-    // 不落盘：无 strategy/<symbol>.md，也无版本链目录
-    expect(existsSync(join(dir, 'strategy', '588000.md'))).toBe(false)
-    expect(existsSync(join(dir, 'strategy_versions', '588000'))).toBe(false)
+    // 不落盘：assets/strategies 与自建版本链目录均不存在
+    expect(existsSync(join(dir, 'assets', 'strategies'))).toBe(false)
+    expect(existsSync(join(dir, 'assets', 'strategy_versions'))).toBe(false)
 
     // 后续 strategy_get 仍报「未设定」引导
     await expect(run('strategy_get', { symbol: '588000' })).rejects.toThrow(/strategy_set/)
@@ -269,7 +284,7 @@ describe('必验点 5：schema 严格性（多余/缺失字段 → 校验失败�
     const valid = {
       symbol: '588000',
       text: 'x',
-      version: 'v001',
+      version: '0123456789ab',
       updated_at: new Date().toISOString(),
     }
     expect(validateJsonSchemaValue(schema, valid)).toEqual([])
@@ -283,7 +298,7 @@ describe('必验点 5：schema 严格性（多余/缺失字段 → 校验失败�
     const missingUpdatedAt = {
       symbol: '588000',
       text: 'x',
-      version: 'v001',
+      version: '0123456789ab',
       // 缺 updated_at
     }
     expect(validateJsonSchemaValue(schema, missingUpdatedAt).length).toBeGreaterThan(0)
@@ -291,9 +306,9 @@ describe('必验点 5：schema 严格性（多余/缺失字段 → 校验失败�
 
   it('strategy_set 返回对象塞入多余字段 → validateJsonSchemaValue 判失败', () => {
     const schema = tool('strategy_set').output.schema
-    expect(validateJsonSchemaValue(schema, { ok: true, version: 'v001' })).toEqual([])
+    expect(validateJsonSchemaValue(schema, { ok: true, version: '0123456789ab' })).toEqual([])
     expect(
-      validateJsonSchemaValue(schema, { ok: true, version: 'v001', symbol: 'x' }).length,
+      validateJsonSchemaValue(schema, { ok: true, version: '0123456789ab', symbol: 'x' }).length,
     ).toBeGreaterThan(0)
   })
 })

@@ -1,262 +1,348 @@
 /**
- * domain/strategy.ts —— per-symbol 策略文档注册表。
+ * domain/strategy.ts —— per-symbol 策略文档注册表（git 版本化）。
  *
- * 职责：维护 per-symbol 策略文档（Markdown 文本实体）的版本链，保证
- * 「版本不可变 + rationale 追溯 + current 指针」可回滚。
- * 详细设计 §10.4 / §10.6：策略是 per-symbol 的文本实体，首版即启用版本链；
- * §10.8 定义 strategy_get / strategy_set 的契约。
+ * 职责：维护 per-symbol 策略文档（Markdown 文本实体）。**版本交给 git**：
+ *   策略正文是资产，落在资产层 `<assetsDir>/strategies/<symbol>.md`，每次写入
+ *   由外层 assets git 仓库产生一次 commit；版本身份 = **git commit 短 SHA（12 位）**，
+ *   历史回读走 `git log` / `git show`。
  *
- * 接口（对齐任务卡片）：
+ * 已删除的历史设计（不再使用）：
+ *   `strategy_versions/<symbol>/vNNN.md`、`vNNN.meta.json`、`current` 指针，
+ *   以及 `nextVersion` / `readPointer` / `writePointer` / `readMeta`。
+ *
+ * 接口（与旧版同名，下游工具无需改动）：
  * ```
  * class StrategyRegistry {
- *   set(symbol, { text, rationale, parentVersion?, by? }): string   // 返回新版本号
+ *   set(symbol, { text, rationale, parentVersion?, by? }): string   // 返回短 SHA
  *   get(symbol, version?): { symbol, text, version, meta } | undefined
  *   list(symbol): StrategyVersionMeta[]
  *   current(symbol): string | undefined
  * }
  * ```
  *
- * 存储布局（§10.6）：
+ * 存储布局：
  * ```
- * data/
- *   strategy/<symbol>.md                    # 当前版内容
- *   strategy_versions/<symbol>/vNNN.md      # 各版全文
- *   strategy_versions/<symbol>/vNNN.meta.json  # { version, rationale, ts, parent?, by? }
- *   strategy_versions/<symbol>/current      # 指针文件（内容为版本号）
+ * <assetsDir>/
+ *   .git/                              # 外层 git 仓库（ensureAssetsRepo 幂等初始化）
+ *   strategies/<symbol>.md             # 当前版正文（纯正文，绝不写 front-matter）
  * ```
  *
- * 关键规则（验收点）：
- * - 版本号 v001 起，按现有最大版本 +1（三位零填充）。
- * - 版本不可变：目标版本目录若已存在 → 报错（不得覆盖）。
- * - 非首版必须带 parentVersion，且必须等于当前版；首版不带 parent。
+ * 关键规则：
+ * - `set` 的 `parentVersion` 语义为「期望的当前版本（短 SHA）」：提供且与 HEAD
+ *   中该文件的短 SHA 不一致 → 抛错（乐观并发校验）；文件尚不存在时提供亦抛错。
+ * - `set` 必须产生 commit（写策略是强语义操作），仅当正文与当前完全一致时允许
+ *   no-op 返回当前短 SHA；git 不可用 / 提交失败 → 抛清晰中文错误（不降级）。
+ * - 版本不可变由 git 保证：历史 commit 只读，`get(symbol, 旧SHA)` 回读原文。
+ * - 策略文档保持纯正文，**不**写入 frontmatter / 元数据块。
  *
- * 纯 TS + node:fs 实现，不接触 dsh/cordis API，亦不 import 任何
+ * 纯 TS + node:fs / node:child_process，不接触 dsh/cordis API，亦不 import 任何
  * `@deepseek-ai/*`。
  */
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  writeFileSync,
-} from 'node:fs'
-import { dirname, join } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type {
   StrategyFull,
   StrategyVersionInput,
   StrategyVersionMeta,
 } from './types.js'
 import { assertSafeSegment } from './path-guard.js'
+import { ensureAssetsRepo } from '../assets/repo.js'
+import { defaultGitRunner, type GitRunner } from '../assets/git.js'
 
-/** current 指针文件名。 */
-const CURRENT_POINTER = 'current'
+/** 策略文档子目录名（位于 assetsDir 下）。 */
+export const STRATEGIES_DIRNAME = 'strategies'
+
+/** 短 SHA 长度（版本身份展示口径）。 */
+export const SHORT_SHA_LENGTH = 12
+
+/** git 输出字段分隔符（commit 元数据解析用；正文中出现概率可忽略）。 */
+const FIELD_SEP = '\x1f'
+
+/** 把 git 异常归一为可读中文错误（不泄漏裸 stderr 全文）。 */
+function describeGitError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err)
+  const first = raw.split('\n').map((l) => l.trim()).find((l) => l !== '') ?? raw
+  return first.length > 240 ? `${first.slice(0, 240)}…` : first
+}
 
 /**
- * per-symbol 策略文档版本注册表。
+ * per-symbol 策略文档注册表（git 版本化）。
  *
- * @param baseDir 数据根目录。当前版文档落 `${baseDir}/strategy/<symbol>.md`，
- *  版本链落 `${baseDir}/strategy_versions/<symbol>/…`。
+ * @param assetsDir 资产层根目录。正文落 `${assetsDir}/strategies/<symbol>.md`，
+ *   git 命令的 cwd 为 `assetsDir`，仓库内路径为 `strategies/<symbol>.md`。
  */
 export class StrategyRegistry {
-  private readonly baseDir: string
+  private readonly assetsDir: string
+  private readonly git: GitRunner
 
-  constructor(baseDir: string) {
-    this.baseDir = baseDir
-    mkdirSync(this.baseDir, { recursive: true })
+  constructor(assetsDir: string, gitRunner: GitRunner = defaultGitRunner) {
+    this.assetsDir = assetsDir
+    this.git = gitRunner
+    mkdirSync(this.assetsDir, { recursive: true })
   }
 
-  /** 当前版文档目录。 */
-  private get currentRoot(): string {
-    return join(this.baseDir, 'strategy')
+  /** 策略文档目录。 */
+  private get docsDir(): string {
+    return join(this.assetsDir, STRATEGIES_DIRNAME)
   }
 
-  /** 版本链目录（按 symbol 隔离）。 */
-  private get versionsRoot(): string {
-    return join(this.baseDir, 'strategy_versions')
+  /** 仓库内相对路径（posix 分隔符；git 路径参数）。 */
+  private relPath(symbol: string): string {
+    return `${STRATEGIES_DIRNAME}/${assertSafeSegment(symbol, 'symbol')}.md`
   }
 
-  /** 某标的的版本链目录。symbol 为外部输入，先做路径段安全校验。 */
-  private symbolVersionsDir(symbol: string): string {
-    return join(this.versionsRoot, assertSafeSegment(symbol, 'symbol'))
+  /** 当前工作区正文文件绝对路径。 */
+  private docPath(symbol: string): string {
+    return join(this.assetsDir, this.relPath(symbol))
   }
 
-  /** 某标的的当前版文档路径。 */
-  private currentPath(symbol: string): string {
-    return join(this.currentRoot, `${assertSafeSegment(symbol, 'symbol')}.md`)
+  /** 仓库是否已初始化（只读判定，不触发 init）。 */
+  private hasRepo(): boolean {
+    return existsSync(join(this.assetsDir, '.git'))
   }
 
-  /** 某标的某版本的正文文件路径。version 为外部输入，先做路径段安全校验。 */
-  private versionFile(symbol: string, version: string): string {
-    return join(
-      this.symbolVersionsDir(symbol),
-      `${assertSafeSegment(version, 'version')}.md`,
-    )
-  }
-
-  /** 某标的某版本的 meta.json 路径。 */
-  private metaFile(symbol: string, version: string): string {
-    return join(
-      this.symbolVersionsDir(symbol),
-      `${assertSafeSegment(version, 'version')}.meta.json`,
-    )
-  }
-
-  /** 某标的的 current 指针文件路径。 */
-  private pointerPath(symbol: string): string {
-    return join(this.symbolVersionsDir(symbol), CURRENT_POINTER)
-  }
-
-  /** 读取某标的的 current 指针（无则返回 undefined）。 */
-  private readPointer(symbol: string): string | undefined {
+  /** 执行 git（写路径用；失败转换为清晰中文错误）。 */
+  private runGit(args: string[], op: string): string {
     try {
-      const v = readFileSync(this.pointerPath(symbol), 'utf8').trim()
-      return v || undefined
-    } catch {
-      return undefined
+      return this.git(args, this.assetsDir)
+    } catch (err) {
+      throw new Error(`[strategy-registry] git ${op} 失败：${describeGitError(err)}`)
     }
   }
 
-  /** 写入某标的的 current 指针。 */
-  private writePointer(symbol: string, version: string): void {
-    const p = this.pointerPath(symbol)
-    mkdirSync(dirname(p), { recursive: true })
-    writeFileSync(p, version, 'utf8')
-  }
-
-  /** 读取某标的某版本 meta.json（不存在返回 undefined）。 */
-  private readMeta(
-    symbol: string,
-    version: string,
-  ): StrategyVersionMeta | undefined {
-    try {
-      return JSON.parse(
-        readFileSync(this.metaFile(symbol, version), 'utf8'),
-      ) as StrategyVersionMeta
-    } catch {
-      return undefined
+  /** 确保外层 assets 仓库就绪；降级则抛错（写策略为强语义操作）。 */
+  private ensureRepo(): void {
+    const outcome = ensureAssetsRepo({ assetsDir: this.assetsDir, gitRunner: this.git })
+    if (outcome.degraded) {
+      throw new Error(
+        `[strategy-registry] 资产层 git 仓库不可用，无法写入策略：${outcome.reason}`,
+      )
     }
-  }
-
-  /** 下一个版本号（vNNN，按该标的下现有最大序号 +1）。 */
-  private nextVersion(symbol: string): string {
-    let max = 0
-    try {
-      for (const entry of readdirSync(this.symbolVersionsDir(symbol))) {
-        const m = /^v(\d{3,})(?:\.md|\.meta\.json)$/.exec(entry)
-        if (m) {
-          const n = Number.parseInt(m[1], 10)
-          if (n > max) max = n
-        }
-      }
-    } catch {
-      // 目录不存在或不可读，从 v001 开始。
-    }
-    return `v${String(max + 1).padStart(3, '0')}`
   }
 
   /**
-   * 写入策略文档的新版本，返回版本号。
-   * - 首版（无 parentVersion）：生成 v001，current 指向 v001。
-   * - 非首版：必须带 parentVersion，且必须等于当前版，否则报错。
-   * - 版本不可变：目标版本若已存在 → 报错。
+   * 某文件在 HEAD 中的提交短 SHA；未跟踪 / 无提交 → undefined。
+   * 历史提交已删除该文件时也视为「当前无版本」。
+   */
+  private headVersion(rel: string): string | undefined {
+    if (!this.hasRepo()) return undefined
+    try {
+      const tracked = this.git(['ls-tree', '-r', '--name-only', 'HEAD', '--', rel], this.assetsDir).trim()
+      if (!tracked) return undefined
+      const sha = this.git(['log', '-1', '--format=%H', '--', rel], this.assetsDir).trim()
+      return sha ? sha.slice(0, SHORT_SHA_LENGTH) : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  /** 读取某 commit 中文件正文；不存在 / git 失败 → undefined。 */
+  private textAt(rev: string, rel: string): string | undefined {
+    try {
+      // `rev:path` 的 rev 已经过调用方校验（短 SHA），path 已由 symbol 校验构造。
+      return this.git(['show', `${rev}:${rel}`], this.assetsDir)
+    } catch {
+      return undefined
+    }
+  }
+
+  /** 读取 worktree 正文；不存在 → undefined。 */
+  private textInWorktree(symbol: string): string | undefined {
+    try {
+      return readFileSync(this.docPath(symbol), 'utf8')
+    } catch {
+      return undefined
+    }
+  }
+
+  /** 解析某 commit 的元数据（不含 parent）。 */
+  private commitMeta(rev: string): StrategyVersionMeta | undefined {
+    let out: string
+    try {
+      out = this.git(
+        ['show', '-s', `--format=%H${FIELD_SEP}%B${FIELD_SEP}%aI${FIELD_SEP}%an`, rev],
+        this.assetsDir,
+      )
+    } catch {
+      return undefined
+    }
+    const [sha, body, ts, by] = out.split(FIELD_SEP)
+    if (!sha) return undefined
+    return {
+      version: sha.trim().slice(0, SHORT_SHA_LENGTH),
+      rationale: (body ?? '').trim(),
+      ts: (ts ?? '').trim(),
+      by: (by ?? '').trim() || undefined,
+    }
+  }
+
+  /** 该文件在 `rev` 之前的上一次提交短 SHA（无则 undefined）。 */
+  private parentOf(rev: string, rel: string): string | undefined {
+    try {
+      const sha = this.git(
+        ['log', '-1', '--format=%H', `${rev}^`, '--', rel],
+        this.assetsDir,
+      ).trim()
+      return sha ? sha.slice(0, SHORT_SHA_LENGTH) : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  /** 组装完整 meta（补 parent）。 */
+  private fullMeta(rev: string, rel: string): StrategyVersionMeta | undefined {
+    const meta = this.commitMeta(rev)
+    if (!meta) return undefined
+    return { ...meta, parent: this.parentOf(rev, rel) }
+  }
+
+  /**
+   * 写入策略文档的新版本，返回 **git 短 SHA（12 位）**。
+   *
+   * - `parentVersion`（可选）为期望的当前版本：与 HEAD 中该文件短 SHA 不一致 →
+   *   抛冲突错误；文件尚不存在时提供亦抛错；
+   * - 正文原样写入，不追加任何 frontmatter / 元数据；
+   * - 产生一次 commit（message = rationale 原文）；正文与当前完全一致时 no-op；
+   * - 提交失败（git 不可用 / 无改动 / 无权限）→ 抛错（不静默成功）。
    */
   set(symbol: string, input: StrategyVersionInput): string {
-    const cur = this.readPointer(symbol)
+    const rel = this.relPath(symbol)
+    this.ensureRepo()
 
-    if (input.parentVersion === undefined) {
-      // 首版：仅当尚无任何版本时允许不带 parent。
-      if (cur) {
+    const current = this.headVersion(rel)
+
+    if (input.parentVersion !== undefined) {
+      if (!current) {
         throw new Error(
-          `[strategy-registry] ${symbol} 已有当前版本 ${cur}，非首版必须带 parentVersion`,
+          `[strategy-registry] ${symbol} 尚无当前版本，不能声明 parentVersion`,
         )
       }
-    } else {
-      // 非首版：parentVersion 必须等于当前版。
-      if (input.parentVersion !== cur) {
+      if (current !== input.parentVersion) {
         throw new Error(
-          `[strategy-registry] ${symbol} parentVersion ${input.parentVersion} 与当前版 ${
-            cur ?? '(无)'
-          } 不一致`,
+          `[strategy-registry] ${symbol} parentVersion ${input.parentVersion} 与当前版 ${current} 不一致`,
         )
       }
     }
 
-    const version = this.nextVersion(symbol)
+    // 内容与 HEAD 完全一致 → no-op（避免空提交报错），但仍确保工作区与提交一致。
+    if (current && this.textAt('HEAD', rel) === input.text) {
+      const docPath = this.docPath(symbol)
+      mkdirSync(this.docsDir, { recursive: true })
+      writeFileSync(docPath, input.text, 'utf8')
+      return current
+    }
 
-    // 版本不可变：目标版本已存在则报错（正常情况下 nextVersion 保证不冲突）。
-    const vFile = this.versionFile(symbol, version)
-    if (existsSync(vFile)) {
+    const docPath = this.docPath(symbol)
+    mkdirSync(this.docsDir, { recursive: true })
+    writeFileSync(docPath, input.text, 'utf8')
+
+    this.runGit(['add', '--', rel], 'add')
+    // 首次提交顺带把外层仓库 .gitignore 纳入版本管理（避免永久 untracked）；
+    // 它记录「skills/ 是嵌套独立仓库」这一关键边界，见 src/assets/repo.ts。
+    const hasGitignore = existsSync(join(this.assetsDir, '.gitignore'))
+    if (hasGitignore) this.runGit(['add', '--', '.gitignore'], 'add')
+    const staged = this.runGit(
+      ['diff', '--cached', '--name-only', '--', rel],
+      'diff',
+    ).trim()
+    if (staged === '') {
+      if (current) return current
       throw new Error(
-        `[strategy-registry] ${symbol} 版本 ${version} 已存在，不可覆盖`,
+        `[strategy-registry] ${symbol} 策略正文无变更，无法生成 git 版本`,
       )
     }
 
-    const meta: StrategyVersionMeta = {
-      version,
-      rationale: input.rationale,
-      ts: new Date().toISOString(),
-      parent: input.parentVersion,
-      by: input.by,
-    }
-
-    mkdirSync(dirname(vFile), { recursive: true })
-    writeFileSync(vFile, input.text, 'utf8')
-    writeFileSync(
-      this.metaFile(symbol, version),
-      JSON.stringify(meta, null, 2),
-      'utf8',
+    this.runGit(
+      ['commit', '-m', input.rationale, '--', rel, ...(hasGitignore ? ['.gitignore'] : [])],
+      'commit',
     )
-
-    // 同步当前版内容与指针。
-    const curPath = this.currentPath(symbol)
-    mkdirSync(dirname(curPath), { recursive: true })
-    writeFileSync(curPath, input.text, 'utf8')
-    this.writePointer(symbol, version)
-
-    return version
+    const sha = this.runGit(['rev-parse', 'HEAD'], 'rev-parse').trim()
+    if (!sha) {
+      throw new Error(`[strategy-registry] ${symbol} 提交后无法解析 HEAD`)
+    }
+    return sha.slice(0, SHORT_SHA_LENGTH)
   }
 
   /**
-   * 读取某标的策略：默认当前版，可指定历史版本。
-   * 未设定（无 current 或 version 不存在）返回 undefined。
+   * 读取某标的策略：默认读工作区当前版，可指定历史 git 短 SHA。
+   * 未设定 / 版本不存在 → undefined。
    */
   get(symbol: string, version?: string): StrategyFull | undefined {
-    const v = version ?? this.readPointer(symbol)
-    if (!v) return undefined
-
-    const meta = this.readMeta(symbol, v)
-    if (!meta) return undefined
-
-    let text: string
+    // symbol 非法时读路径安全返回 undefined（写路径 set 仍抛 [path-guard]）。
+    let rel: string
     try {
-      text = readFileSync(this.versionFile(symbol, v), 'utf8')
+      rel = this.relPath(symbol)
     } catch {
       return undefined
     }
 
-    return { symbol, text, version: v, meta }
-  }
-
-  /** 某标的的版本演化链（按版本号排序）。 */
-  list(symbol: string): StrategyVersionMeta[] {
-    const metas: StrategyVersionMeta[] = []
-    try {
-      for (const entry of readdirSync(this.symbolVersionsDir(symbol))) {
-        const m = /^(v\d{3,})\.meta\.json$/.exec(entry)
-        if (m) {
-          const meta = this.readMeta(symbol, m[1])
-          if (meta) metas.push(meta)
-        }
+    if (version !== undefined) {
+      // version 来自工具输入：非法路径段视为「不存在」，不抛错、不越界。
+      let rev: string
+      try {
+        rev = assertSafeSegment(version, 'version')
+      } catch {
+        return undefined
       }
-    } catch {
-      // 目录不存在或不可读，返回空。
+      const text = this.textAt(rev, rel)
+      if (text === undefined) return undefined
+      const meta = this.fullMeta(rev, rel)
+      if (!meta) return undefined
+      return { symbol, text, version: meta.version, meta }
     }
-    return metas.sort((a, b) => a.version.localeCompare(b.version))
+
+    const text = this.textInWorktree(symbol)
+    if (text === undefined) return undefined
+    const current = this.headVersion(rel)
+    if (!current) return undefined
+    const meta = this.fullMeta(current, rel)
+    if (!meta) return undefined
+    return { symbol, text, version: current, meta }
   }
 
-  /** 某标的的当前版本号（无则 undefined）。 */
+  /** 某标的的版本链（按 commit 时间正序返回）。 */
+  list(symbol: string): StrategyVersionMeta[] {
+    let rel: string
+    try {
+      rel = this.relPath(symbol)
+    } catch {
+      return []
+    }
+    if (!this.hasRepo()) return []
+
+    let shas: string[]
+    try {
+      shas = this.git(
+        ['log', '--format=%H', '--', rel],
+        this.assetsDir,
+      )
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l !== '')
+    } catch {
+      return []
+    }
+    shas.reverse() // git log 新→旧；接口要求正序。
+
+    const metas: StrategyVersionMeta[] = []
+    for (const sha of shas) {
+      const meta = this.commitMeta(sha)
+      if (!meta) continue
+      metas.push({
+        ...meta,
+        parent: metas.length > 0 ? metas[metas.length - 1].version : undefined,
+      })
+    }
+    return metas
+  }
+
+  /** 某标的的当前版本短 SHA（文件未跟踪 / 无提交 → undefined）。 */
   current(symbol: string): string | undefined {
-    return this.readPointer(symbol)
+    try {
+      return this.headVersion(this.relPath(symbol))
+    } catch {
+      return undefined
+    }
   }
 }
 

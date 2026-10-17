@@ -4,8 +4,8 @@
  * 14 个工具需共享同一份数据根目录。本工厂在构造时：
  *   1. 解析 dataRoot（构造注入优先，缺省回退到环境变量
  *      `DSH_IA_DATA_DIR`，再回退到 `~/.dsh-ia/data`）；
- *   2. 用该 dataRoot 实例化四个 domain 类（Ledger / Predicts / Reviews /
- *      StrategyRegistry）各一次；
+ *   2. 用该 dataRoot 实例化 Ledger / Predicts / Reviews；StrategyRegistry 使用
+ *      资产层根目录 `resolveAssetsDir()`（策略是资产，版本由 assets git 仓库承担）；
  *   3. 工具闭包通过捕获这些实例共享同一数据源，保证「single dataRoot」。
  *
  * dataRoot 与 plugin 层衔接：plugin.ts 后续可经 `ctx.get('fs')` 解析插件
@@ -23,7 +23,7 @@ import { Reviews } from '../domain/reviews.js'
 import { parseStrategyDoc, StrategyRegistry } from '../domain/strategy.js'
 import { JsonStore } from '../domain/store.js'
 import type { Thresholds } from '../domain/types.js'
-import { resolveDataRoot } from '../paths.js'
+import { resolveAssetsDir, resolveDataRoot } from '../paths.js'
 import { createLogger } from '../log/logger.js'
 
 /** 策略阈值解析日志出口（统一门面；无 `ctx` 注入位，走降级实现）。 */
@@ -113,7 +113,7 @@ export function createToolContext(opts: ToolContextOptions = {}): ToolContext {
   const dataRoot = resolveDataRoot(opts.dataRoot)
   const store = new JsonStore(dataRoot)
   const ledger = new Ledger(dataRoot)
-  const strategy = new StrategyRegistry(dataRoot)
+  const strategy = new StrategyRegistry(resolveAssetsDir())
   return {
     dataRoot,
     ledger,

@@ -72,17 +72,16 @@ dsh plugin --profile <name> add .
 
 ```
 ~/.dsh-ia/
-├── assets/                            # 资产层（可共享、进 git）
+├── assets/                            # 资产层（可共享、进 git；本身是一个 git 仓库）
+│   ├── strategies/<symbol>.md         # 策略文档（纯正文；版本 = git 短 SHA）
 │   └── skills/                        # 可进化 SKILL（独立 git 仓库，main=当前版本）
 ├── data/                              # dataRoot（用户私有运行时数据）
 │   ├── ledger/<symbol>/…              # 台账（持仓 / 成本 / 流水）
-│   ├── strategy/<symbol>.md           # 策略文档（文本实体，当前版）
-│   ├── strategy_versions/<symbol>/…   # 策略版本链（+ rationale）
 │   └── tasks/                         # 定时任务清单
 └── logs/                              # 运行日志（JSONL）
 ```
 
-`assets/` 与 `data/` 及子目录均为**运行时动态创建**（非项目固有目录）；其中 `assets/skills/` 是一个独立 git 仓库，由插件冷启动幂等预置。
+`assets/` 与 `data/` 及子目录均为**运行时动态创建**（非项目固有目录）。`assets/` 是外层 git 仓库（策略等资产共用，`.gitignore` 排除 `skills/`）；其中 `assets/skills/` 是嵌套的独立 git 仓库，由插件冷启动幂等预置。
 
 ## 开发
 

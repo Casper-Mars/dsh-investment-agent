@@ -40,10 +40,16 @@
  *
  * 依赖：`src/paths.ts`（叶子模块）、`src/skills/{index,frontmatter}.js`。
  */
-import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { resolveAssetsDir } from '../paths.js'
+import {
+  defaultGitRunner,
+  initGitRepo,
+  GIT_IDENTITY_EMAIL,
+  GIT_IDENTITY_NAME,
+  type GitRunner,
+} from '../assets/git.js'
 import { loadSkillMarkdown, SKILL_NAMES, type SkillName } from './index.js'
 import { parseSkillFile } from './frontmatter.js'
 import { createLogFunction } from '../log/logger.js'
@@ -57,45 +63,12 @@ export const SKILL_FILENAME = 'SKILL.md'
 /** 首版 commit 的 message。 */
 export const INITIAL_COMMIT_MESSAGE = 'init: skill 资产首版'
 
-/** git 作者身份：显式提供，避免依赖宿主机全局 git config。 */
-export const GIT_IDENTITY_NAME = 'dsh-ia'
-export const GIT_IDENTITY_EMAIL = 'dsh-ia@localhost'
+// 作者身份与 git 执行器由 assets 层共享实现统一提供（单一实现，避免重复）。
+export { GIT_IDENTITY_EMAIL, GIT_IDENTITY_NAME }
+export type { GitRunner }
 
 /** 仓库内 `.gitignore` 内容：**不**忽略 skill 内容，仅忽略系统/临时文件。 */
 export const SKILLS_GITIGNORE = '# 仅忽略系统/临时文件；skill 内容一律纳入版本管理。\n.DS_Store\n*.tmp\n'
-
-/**
- * git 命令执行器：执行 `git <args>`（cwd 指定工作目录），成功返回 stdout 文本，
- * 失败（非零退出 / 可执行文件缺失）抛错。可注入以便单测模拟 git 不可用。
- */
-export type GitRunner = (args: string[], cwd: string) => string
-
-/** 默认 git 执行器：`execFileSync` 调 `git`，显式注入作者身份。 */
-function defaultGitRunner(args: string[], cwd: string): string {
-  return execFileSync(
-    'git',
-    [
-      '-c',
-      `user.name=${GIT_IDENTITY_NAME}`,
-      '-c',
-      `user.email=${GIT_IDENTITY_EMAIL}`,
-      ...args,
-    ],
-    {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      // 双保险：即便 `-c` 被上层覆盖，commit 仍带显式作者/提交者身份。
-      env: {
-        ...process.env,
-        GIT_AUTHOR_NAME: GIT_IDENTITY_NAME,
-        GIT_AUTHOR_EMAIL: GIT_IDENTITY_EMAIL,
-        GIT_COMMITTER_NAME: GIT_IDENTITY_NAME,
-        GIT_COMMITTER_EMAIL: GIT_IDENTITY_EMAIL,
-      },
-    },
-  )
-}
 
 /** 预置选项。 */
 export interface EnsureSkillAssetsOptions {
@@ -221,16 +194,6 @@ function inspectRepo(repoDir: string, run: GitRunner): RepoState {
   return { needsProvision: false, reason: 'skills 仓库已就绪' }
 }
 
-/** 初始化 git 仓库（默认分支 main）；`-b` 不被支持时回落到普通 `git init`。 */
-function initRepo(repoDir: string, run: GitRunner): void {
-  try {
-    run(['init', '-b', 'main'], repoDir)
-  } catch {
-    // 老版本 git 不支持 `-b`：回落普通 init（分支名用仓库默认）。
-    run(['init'], repoDir)
-  }
-}
-
 /** 幂等写入仓库内 `.gitignore`（不忽略 skill 内容）。 */
 function ensureGitignore(repoDir: string): void {
   const path = join(repoDir, '.gitignore')
@@ -246,7 +209,7 @@ function ensureGitignore(repoDir: string): void {
  */
 function provisionRepo(repoDir: string, seeds: SkillSeed[], run: GitRunner): void {
   mkdirSync(repoDir, { recursive: true })
-  if (!existsSync(join(repoDir, '.git'))) initRepo(repoDir, run)
+  if (!existsSync(join(repoDir, '.git'))) initGitRepo(repoDir, run)
   ensureGitignore(repoDir)
   for (const seed of seeds) {
     const dir = join(repoDir, seed.name)

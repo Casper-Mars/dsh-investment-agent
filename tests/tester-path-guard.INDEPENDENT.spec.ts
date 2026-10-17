@@ -10,11 +10,14 @@
  * 数据；测试结束清理诱饵文件与临时目录。
  *
  * 覆盖（对应任务卡 5 项验证）：
- *   ① 写路径被拒且零越界（9 种非法输入 × ledger_init / strategy_set）
+ *   ① 写路径被拒且零越界（10 种非法输入 × ledger_init / strategy_set）
  *   ② 读路径绝不越界读取（baseDir 之外放诱饵，越界 symbol/version 读不到）
- *   ③ 合法值回归 E2E（588000 / 000001 / v001；ledger_init→set v001→get→set v002）
+ *   ③ 合法值回归 E2E（588000 / 000001；ledger_init→strategy_set→get→下一次提交）
  *   ④ 入口覆盖审计（静态源码复核：所有 join() 外部输入均经守卫）
  *   ⑤ 契约复核（inject 三项 + cordis.patch.yml 不变）
+ *
+ * Task-3 迁移后：StrategyRegistry 的 baseDir = assetsDir，正文落
+ * `assets/strategies/<symbol>.md`，版本为 git 短 SHA（不再是 vNNN）。
  */
 import { describe, it, expect, afterEach } from 'vitest'
 import {
@@ -138,13 +141,13 @@ describe('① 写路径被拒且零越界', () => {
     })
   })
 
-  it('strategy_set 经 nextVersion 生成的版本号永远合法（无越界通道）', () => {
-    // set 的 version 由 nextVersion 内部生成（vNNN），不来自外部输入；
-    // 此处验证 set → get 正常，且 get 越界 version 被拒。
+  it('strategy_set 返回的版本号永远合法（git 短 SHA，无越界通道）', () => {
+    // set 的 version 由 git commit 派生（12 位 hex），不来自外部输入；
+    // 此处验证 set → get 正常，且 get 越界 version 读不到。
     const { sandbox, baseDir } = makeSandbox()
     const reg = new StrategyRegistry(baseDir)
     const v = reg.set('588000', { text: 'c1', rationale: 'r' })
-    expect(v).toBe('v001')
+    expect(v).toMatch(/^[0-9a-f]{12}$/)
     expect(reg.get('588000')?.text).toBe('c1')
     expect(reg.get('588000', '../../esc2')).toBeUndefined()
     expect(reg.get('588000', '../esc1')).toBeUndefined()
@@ -160,9 +163,8 @@ describe('② 读路径绝不越界读取', () => {
     const { sandbox, baseDir } = makeSandbox()
     const reg = new StrategyRegistry(baseDir)
 
-    // 诱饵落在 escape 解析后的目标：join(baseDir, 'strategy_versions', '../../esc2')
-    //   = sandbox/esc2/（baseDir 的父目录层）。若守卫缺失，get 会读到该目录的
-    //   current 指针（v001）→ v001.md 返回诱饵文本。
+    // 诱饵落在 escape 解析后的目标（sandbox/esc2/，即 baseDir 的父目录层）。
+    // 若守卫缺失，越界读可能命中诱饵文件；此处断言哨兵值绝不泄漏。
     const decoyDir = join(sandbox, 'esc2')
     mkdirSync(decoyDir, { recursive: true })
     writeFileSync(join(decoyDir, 'current'), 'v001', 'utf8')
@@ -183,13 +185,13 @@ describe('② 读路径绝不越界读取', () => {
     expect(reg.current('../../esc2')).toBeUndefined()
     expect(reg.list('../../esc2')).toEqual([])
 
-    // 显式越界 version（symbol 合法）也读不到：readMeta 内 path-guard 被吞，返回 undefined。
+    // 显式越界 version（symbol 合法）也读不到：path-guard 拦截后安全返回 undefined。
     reg.set('588000', { text: '首版', rationale: 'r' })
     expect(reg.get('588000', '../../esc2')).toBeUndefined()
     expect(reg.get('588000', '../esc1')).toBeUndefined()
 
     // 合法 symbol 读到的是自己的正文（首版），而非诱饵内容。
-    const curDoc = join(baseDir, 'strategy', '588000.md')
+    const curDoc = join(baseDir, 'strategies', '588000.md')
     expect(existsSync(curDoc)).toBe(true)
     expect(readFileSync(curDoc, 'utf8')).toBe('首版')
     expect(readFileSync(curDoc, 'utf8')).not.toContain(DECOY_SENTINEL)
@@ -249,7 +251,7 @@ describe('③ 合法值回归 E2E', () => {
     expect(assertSafeSegment('a'.repeat(64), 'symbol')).toBe('a'.repeat(64))
   })
 
-  it('完整流程 ledger_init → strategy_set(v001) → get → set(v002, parent=v001)', () => {
+  it('完整流程 ledger_init → strategy_set(首版) → get → 二次提交', () => {
     const { baseDir } = makeSandbox()
     const ledger = new Ledger(baseDir)
     const reg = new StrategyRegistry(baseDir)
@@ -257,42 +259,43 @@ describe('③ 合法值回归 E2E', () => {
     // ledger_init
     ledger.init('588000', { type: 'etf', qty: 1000, cost: 1.5, cash: 100000 })
 
-    // strategy_set 首版 → v001
-    expect(reg.set('588000', { text: 'v1 正文', rationale: 'r1' })).toBe('v001')
+    // strategy_set 首版 → 短 SHA
+    const v1 = reg.set('588000', { text: 'v1 正文', rationale: 'r1' })
+    expect(v1).toMatch(/^[0-9a-f]{12}$/)
 
     // strategy_get 当前版
     const cur = reg.get('588000')
-    expect(cur?.version).toBe('v001')
+    expect(cur?.version).toBe(v1)
     expect(cur?.text).toBe('v1 正文')
 
-    // strategy_set 迭代 → v002（parent=v001）
-    expect(
-      reg.set('588000', { text: 'v2 正文', rationale: 'r2', parentVersion: 'v001' }),
-    ).toBe('v002')
-    expect(reg.get('588000')?.version).toBe('v002')
+    // 二次提交（parent = v1）
+    const v2 = reg.set('588000', { text: 'v2 正文', rationale: 'r2', parentVersion: v1 })
+    expect(v2).toMatch(/^[0-9a-f]{12}$/)
+    expect(v2).not.toBe(v1)
+    expect(reg.get('588000')?.version).toBe(v2)
     expect(reg.get('588000')?.text).toBe('v2 正文')
-    expect(reg.get('588000', 'v001')?.text).toBe('v1 正文')
+    expect(reg.get('588000', v1)?.text).toBe('v1 正文')
 
     // 另一个合法 symbol
     ledger.init('000001', { type: 'stock', qty: 100, cost: 10, cash: 50000 })
-    expect(reg.set('000001', { text: 'z 正文', rationale: 'rz' })).toBe('v001')
+    expect(reg.set('000001', { text: 'z 正文', rationale: 'rz' })).toMatch(/^[0-9a-f]{12}$/)
 
-    // 落盘正常
-    expect(existsSync(join(baseDir, 'strategy', '588000.md'))).toBe(true)
-    expect(existsSync(join(baseDir, 'strategy_versions', '588000', 'v002.md'))).toBe(true)
+    // 落盘正常：资产层 strategies 文件名，无自建版本链。
+    expect(existsSync(join(baseDir, 'strategies', '588000.md'))).toBe(true)
+    expect(existsSync(join(baseDir, 'strategy_versions'))).toBe(false)
     expect(existsSync(join(baseDir, 'ledger', '588000', 'symbols.json'))).toBe(true)
   })
 
-  it('StrategyRegistry 合法版本 set → get → set v002 正常', () => {
+  it('StrategyRegistry 合法 set → get → 二次提交正常', () => {
     const { baseDir } = makeSandbox()
     const reg = new StrategyRegistry(baseDir)
     const v1 = reg.set('588000', { text: '正文 v1', rationale: 'r1' })
-    expect(v1).toBe('v001')
-    expect(reg.get('588000')?.version).toBe('v001')
+    expect(v1).toMatch(/^[0-9a-f]{12}$/)
+    expect(reg.get('588000')?.version).toBe(v1)
     expect(reg.get('588000')?.text).toBe('正文 v1')
-    const v2 = reg.set('588000', { text: '正文 v2', rationale: 'r2', parentVersion: 'v001' })
-    expect(v2).toBe('v002')
-    expect(reg.get('588000')?.version).toBe('v002')
+    const v2 = reg.set('588000', { text: '正文 v2', rationale: 'r2', parentVersion: v1 })
+    expect(v2).toMatch(/^[0-9a-f]{12}$/)
+    expect(reg.get('588000')?.version).toBe(v2)
   })
 })
 
@@ -303,15 +306,15 @@ describe('④ 入口覆盖审计', () => {
   const read = (rel: string): string =>
     readFileSync(join(__dirname, '..', 'src', rel), 'utf8')
 
-  it('path-guard 在 4 处调用点均被引用（store/strategy）', () => {
+  it('path-guard 在 store / strategy 调用点均被引用', () => {
     const store = read('domain/store.ts')
     const strategy = read('domain/strategy.ts')
 
-    // store.ts:96 symbolDir
+    // store.ts symbolDir
     expect(store).toContain('assertSafeSegment(symbol, \'symbol\')')
-    // strategy.ts:80 symbolVersionsDir、:85 currentPath（symbol）、:92 versionFile、:100 metaFile（version）
-    expect(strategy.match(/assertSafeSegment\(symbol, 'symbol'\)/g)?.length).toBeGreaterThanOrEqual(2)
-    expect(strategy.match(/assertSafeSegment\(version, 'version'\)/g)?.length).toBeGreaterThanOrEqual(2)
+    // strategy.ts: relPath（symbol，写/读路径统一入口）+ get（version）
+    expect(strategy.match(/assertSafeSegment\(symbol, 'symbol'\)/g)?.length).toBeGreaterThanOrEqual(1)
+    expect(strategy.match(/assertSafeSegment\(version, 'version'\)/g)?.length).toBeGreaterThanOrEqual(1)
 
     // 均 import 自 path-guard.js
     expect(store).toContain("import { assertSafeSegment } from './path-guard.js'")

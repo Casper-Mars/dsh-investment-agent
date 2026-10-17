@@ -5,6 +5,7 @@
  *  前导 `/` / 含 `/` / 含空白 / 超 64 长度）抛错。
  * AC2：端到端越界用例被拒——symbol 为 `../../esc2` 时，JsonStore.symbolDir /
  *  Ledger.init / StrategyRegistry.set 均抛错，且 baseDir 之外不产生任何文件。
+ *  StrategyRegistry 的读路径（get）对非法 symbol / version 安全返回 undefined。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, rmSync, existsSync } from 'node:fs'
@@ -100,8 +101,7 @@ describe('端到端越界 version 被拒', () => {
   it('StrategyRegistry.get 越界 version 抛错（显式 version 来自工具输入）', () => {
     const reg = new StrategyRegistry(dir)
     reg.set('588000', { text: '首版', rationale: 'r' })
-    // 显式传入越界 version：读取路径被守卫拦截（metaFile/versionFile 内部抛错，
-    // 由 readMeta 吞掉后返回 undefined），但绝不越界读文件。
+    // 显式传入越界 version：读取路径被守卫拦截并安全返回 undefined，绝不越界读文件。
     expect(() => reg.get('588000', '../../esc2')).not.toThrow()
     expect(reg.get('588000', '../../esc2')).toBeUndefined()
   })

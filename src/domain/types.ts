@@ -81,8 +81,8 @@ export interface Thresholds {
 }
 
 // ---------------------------------------------------------------------------
-// 策略域（per-symbol 策略文档 + 版本链）类型，对应详细设计 §10.4 / §10.6。
-// 策略是 per-symbol 的文本实体（Markdown），首版即启用版本链，每版带 rationale。
+// 策略域（per-symbol 策略文档，版本交给 git）类型。
+// 策略是 per-symbol 的文本实体（Markdown），每次写入产生一次 git commit。
 // ---------------------------------------------------------------------------
 
 /** 策略版本提交输入（对应 strategy_set 工具参数，§10.8）。 */
@@ -91,13 +91,13 @@ export interface StrategyVersionInput {
   text: string
   /** 本次版本的理由（agent 为什么这么写 / 为什么改）。 */
   rationale: string
-  /** 上一版版本号；非首版必填，首版省略。 */
+  /** 期望的当前版本（git 短 SHA，可选；用于乐观并发校验）。 */
   parentVersion?: string
   /** 生成者。 */
   by?: string
 }
 
-/** 策略版本元数据（meta.json 去序列化形态）。 */
+/** 策略版本元数据（由 git commit 派生）。 */
 export interface StrategyVersionMeta {
   version: string
   rationale: string

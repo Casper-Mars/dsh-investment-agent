@@ -184,6 +184,7 @@ function expectSchemaOk(tools: ToolBox, name: string, value: unknown): void {
 let dir: string
 let booted: Booted
 let tools: ToolBox
+let prevHome: string | undefined
 
 beforeEach(async () => {
   // ledger_trade 连续竞价时段硬闸门（bc448d1）：固定系统时间到竞价时段，
@@ -191,6 +192,9 @@ beforeEach(async () => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-10-13T10:00:00'))
   dir = mkdtempSync(join(tmpdir(), 'dsh-fin-t4-'))
+  // 策略是资产：ToolContext 的策略注册表使用 resolveAssetsDir()（跟随 DSH_IA_HOME）。
+  prevHome = process.env.DSH_IA_HOME
+  process.env.DSH_IA_HOME = dir
   booted = await bootRegistry(dir)
   tools = booted.tools
 })
@@ -198,6 +202,8 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.useRealTimers()
   await booted.dispose()
+  if (prevHome === undefined) delete process.env.DSH_IA_HOME
+  else process.env.DSH_IA_HOME = prevHome
   rmSync(dir, { recursive: true, force: true })
 })
 

@@ -13,7 +13,7 @@
  * validateJsonSchemaValue）验证 execute 返回与 schema 逐字段对齐。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
@@ -57,16 +57,24 @@ function expectMatchesOutputSchema(name: string, value: unknown): void {
   ).toEqual([])
 }
 
+let prevHome: string | undefined
+
 beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-10-13T10:00:00'))
   dir = mkdtempSync(join(tmpdir(), 'dsh-ia-tools-'))
+  // 策略是资产，ToolContext 固定使用 resolveAssetsDir()（跟随 DSH_IA_HOME）。
+  // 测试必须把资产层隔离到临时目录，绝不触碰真实 ~/.dsh-ia。
+  prevHome = process.env.DSH_IA_HOME
+  process.env.DSH_IA_HOME = dir
   ctx = createToolContext({ dataRoot: dir })
   tools = createAllTools(ctx)
 })
 
 afterEach(() => {
   vi.useRealTimers()
+  if (prevHome === undefined) delete process.env.DSH_IA_HOME
+  else process.env.DSH_IA_HOME = prevHome
   rmSync(dir, { recursive: true, force: true })
 })
 
@@ -186,43 +194,54 @@ describe('验收点 2+3：ledger 域 —— 返回形态 + schema 对齐', () =>
 })
 
 describe('验收点 2+3：strategy 域（strategy_get / strategy_set）', () => {
-  it('strategy_set 首版返回 {ok,version=v001}；strategy_get 往返返回 {symbol,text,version,updated_at}', async () => {
+  const SHA_RE = /^[0-9a-f]{12}$/
+
+  it('strategy_set 首版返回 {ok,version=短SHA}；strategy_get 往返字段一致', async () => {
     await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 1.95, init_cash: 100000 })
     const s = await run('strategy_set', { symbol: '588000', text: '# 首版\n买入并持有', rationale: '初始策略' })
-    expect(s).toEqual({ ok: true, version: 'v001' })
+    expect(s.ok).toBe(true)
+    expect(s.version).toMatch(SHA_RE)
     expectMatchesOutputSchema('strategy_set', s)
 
     const g = await run('strategy_get', { symbol: '588000' })
     expect(g).not.toHaveProperty('ok')
     expect(g.symbol).toBe('588000')
     expect(g.text).toBe('# 首版\n买入并持有')
-    expect(g.version).toBe('v001')
+    expect(g.version).toBe(s.version)
     expect(typeof g.updated_at).toBe('string')
     expect(g.updated_at).not.toBe('')
     expectMatchesOutputSchema('strategy_get', g)
+
+    // 资产层布局：assets/strategies/<symbol>.md，纯正文、无任何版本链目录。
+    const doc = join(dir, 'assets', 'strategies', '588000.md')
+    expect(readFileSync(doc, 'utf8')).toBe('# 首版\n买入并持有')
+    expect(existsSync(join(dir, 'assets', 'strategy_versions'))).toBe(false)
+    expect(existsSync(join(dir, 'assets', 'strategy'))).toBe(false)
   })
 
-  it('strategy_set 带 parent_version 版本递增 v001→v002', async () => {
+  it('strategy_set 带 parent_version 产生新提交，历史短 SHA 可回读', async () => {
     await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 1.95, init_cash: 100000 })
-    await run('strategy_set', { symbol: '588000', text: 'v1', rationale: 'r1' })
-    const v2 = await run('strategy_set', { symbol: '588000', text: 'v2', rationale: 'r2', parent_version: 'v001' })
-    expect(v2).toEqual({ ok: true, version: 'v002' })
+    const v1 = (await run('strategy_set', { symbol: '588000', text: 'v1', rationale: 'r1' })).version
+    const v2 = await run('strategy_set', { symbol: '588000', text: 'v2', rationale: 'r2', parent_version: v1 })
+    expect(v2.ok).toBe(true)
+    expect(v2.version).toMatch(SHA_RE)
+    expect(v2.version).not.toBe(v1)
     expectMatchesOutputSchema('strategy_set', v2)
 
-    // 历史版本仍可读（不可变）。
-    const old = await run('strategy_get', { symbol: '588000', version: 'v001' })
+    // 历史版本仍可读（不可变，由 git 保证）。
+    const old = await run('strategy_get', { symbol: '588000', version: v1 })
     expect(old.text).toBe('v1')
-    expect(old.version).toBe('v001')
+    expect(old.version).toBe(v1)
     expectMatchesOutputSchema('strategy_get', old)
   })
 
   it('strategy_set parent_version 与当前版不一致报错（防并发覆盖，不吞错）', async () => {
     await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 1.95, init_cash: 100000 })
-    await run('strategy_set', { symbol: '588000', text: 'v1', rationale: 'r1' })
-    await run('strategy_set', { symbol: '588000', text: 'v2', rationale: 'r2', parent_version: 'v001' })
-    // 当前已是 v002，却声明 parent=v001
+    const v1 = (await run('strategy_set', { symbol: '588000', text: 'v1', rationale: 'r1' })).version
+    await run('strategy_set', { symbol: '588000', text: 'v2', rationale: 'r2', parent_version: v1 })
+    // 当前已前进，却仍声明 parent=v1（过期版本）
     await expect(
-      run('strategy_set', { symbol: '588000', text: 'v3', rationale: 'r3', parent_version: 'v001' }),
+      run('strategy_set', { symbol: '588000', text: 'v3', rationale: 'r3', parent_version: v1 }),
     ).rejects.toThrow(/不一致/)
   })
 

@@ -20,12 +20,19 @@ import { createToolContext, DEFAULT_THRESHOLDS, type ToolContext } from '../src/
 let dir: string
 let ctx: ToolContext
 
+let prevHome: string | undefined
+
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'dsh-ia-thresholds-'))
+  // 策略是资产：ToolContext 的策略注册表使用 resolveAssetsDir()（跟随 DSH_IA_HOME）。
+  prevHome = process.env.DSH_IA_HOME
+  process.env.DSH_IA_HOME = dir
   ctx = createToolContext({ dataRoot: dir })
 })
 
 afterEach(() => {
+  if (prevHome === undefined) delete process.env.DSH_IA_HOME
+  else process.env.DSH_IA_HOME = prevHome
   rmSync(dir, { recursive: true, force: true })
 })
 
