@@ -4,6 +4,8 @@
  * 存储选型：JSON 文件优先（本地轻量、无原生依赖、易归档迁移）。
  * 按 `symbol` 隔离：每个标的落一个目录，目录下每个「表」各一个 JSON 文件。
  *
+ * `data/` 为**用户私有运行时数据层**（含盈亏/成本/流水，不可分享、不进 git）；资产层在 `assets/`。
+ *
  * 目录结构（示例，标 `588000` / `000001`）：
  * ```
  * data/
@@ -26,6 +28,7 @@
  * 注意：本模块只依赖 `node:fs` / `node:path`，不接触 dsh/cordis API。
  */
 import {
+  chmodSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -33,7 +36,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type {
   AssetType,
@@ -91,6 +94,25 @@ export class JsonStore {
     return join(this.dataRoot, 'ledger')
   }
 
+  /**
+   * 确保台账根目录存在并返回其路径。
+   *
+   * `mkdirSync(dir, { recursive: true, mode: 0o700 })` 幂等创建；因 `mode` 会受进程
+   * umask 影响，创建后再显式 `chmodSync(dir, 0o700)` 兜底，保证权限严格为 `0o700`
+   * （仅属主可访问）。chmod 失败不致命（umask / 平台差异），与 `paths.ts` 的
+   * `ensureFinanceLogDir` 口径一致。
+   */
+  private ensureLedgerRoot(): string {
+    const dir = this.ledgerRoot
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    try {
+      chmodSync(dir, 0o700)
+    } catch {
+      /* umask / 平台差异兜底：chmod 失败不致命（mkdir mode 已尽量收紧）。 */
+    }
+    return dir
+  }
+
   /** 某标的的目录。symbol 为外部输入，先做路径段安全校验。 */
   symbolDir(symbol: string): string {
     return join(this.ledgerRoot, assertSafeSegment(symbol, 'symbol'))
@@ -101,10 +123,16 @@ export class JsonStore {
     return join(this.symbolDir(symbol), `${table}.json`)
   }
 
-  /** 确保某标的目录存在，返回目录路径。 */
+  /** 确保某标的目录存在（权限严格 `0o700`），返回目录路径。 */
   ensureSymbolDir(symbol: string): string {
     const dir = this.symbolDir(symbol)
-    mkdirSync(dir, { recursive: true })
+    this.ensureLedgerRoot()
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    try {
+      chmodSync(dir, 0o700)
+    } catch {
+      /* 同上：chmod 失败不致命。 */
+    }
     return dir
   }
 
@@ -121,8 +149,8 @@ export class JsonStore {
 
   /** 写某标的某张表（自动建目录，ensure 序列化）。 */
   writeTable<T>(symbol: string, table: LedgerTable, value: T): void {
+    this.ensureSymbolDir(symbol)
     const path = this.tablePath(symbol, table)
-    mkdirSync(dirname(path), { recursive: true })
     writeFileSync(path, JSON.stringify(value, null, 2), 'utf8')
   }
 

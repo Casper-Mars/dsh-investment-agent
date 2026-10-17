@@ -81,6 +81,8 @@ dsh plugin --profile <name> add .
 └── logs/                              # 运行日志（JSONL）
 ```
 
+`data/` 为**用户私有运行时数据**（含盈亏 / 成本 / 流水，不可分享、不进 git）；`data/ledger` 目录权限 `0o700`（仅属主可访问），与 `logs/` 口径一致。
+
 `assets/` 与 `data/` 及子目录均为**运行时动态创建**（非项目固有目录）。`assets/` 是外层 git 仓库（策略等资产共用，`.gitignore` 排除 `skills/`）；其中 `assets/skills/` 是嵌套的独立 git 仓库，由插件冷启动幂等预置。
 
 ## 开发
