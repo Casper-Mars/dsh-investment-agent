@@ -14,7 +14,7 @@
  *   ① 落盘完整性  ② 内容一致性  ③ 版本不可变  ④ 读取语义  ⑤ 未设定
  *   ⑥ 错误路径(3) ⑦ 目录隔离    ⑧ 路径安全    ⑨ AC2 无 @deepseek-ai import
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import {
   mkdtempSync,
@@ -27,6 +27,9 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { StrategyRegistry } from '../src/domain/strategy.js'
+
+// git 子进程在并行测试下较慢：放宽单测超时，避免时序抖动。
+vi.setConfig({ testTimeout: 30000 })
 
 const SHA_RE = /^[0-9a-f]{12}$/
 

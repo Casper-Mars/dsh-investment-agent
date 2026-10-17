@@ -19,7 +19,7 @@
  * Task-3 迁移后：StrategyRegistry 的 baseDir = assetsDir，正文落
  * `assets/strategies/<symbol>.md`，版本为 git 短 SHA（不再是 vNNN）。
  */
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import {
   mkdtempSync,
   mkdirSync,
@@ -35,6 +35,9 @@ import { assertSafeSegment } from '../src/domain/path-guard.js'
 import { JsonStore } from '../src/domain/store.js'
 import { Ledger } from '../src/domain/ledger.js'
 import { StrategyRegistry } from '../src/domain/strategy.js'
+
+// git 子进程在并行测试下较慢：放宽单测超时，避免时序抖动。
+vi.setConfig({ testTimeout: 30000 })
 
 /** 诱饵哨兵值：若发生越界读取，该值会出现在返回/错误中，用于断言「读不到」。 */
 const DECOY_SENTINEL = '__DECOY_LEAKED_PATHGUARD__'

@@ -19,7 +19,7 @@
  *   5. schema 严格性（多余字段 / 缺失字段 → validateJsonSchemaValue 判失败）
  *   6. 契约未变（顶层 inject 三项 / cordis.patch.yml 无 diff / README 工具表 14）
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
   mkdtempSync,
   rmSync,
@@ -32,6 +32,9 @@ import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { validateJsonSchemaValue } from '@deepseek-ai/dsh-tools'
 import { createToolContext, type ToolContext } from '../src/tools/context.js'
 import { createAllTools } from '../src/tools/index.js'
+
+// git 子进程在并行测试下较慢：放宽单测超时，避免时序抖动。
+vi.setConfig({ testTimeout: 30000 })
 
 let dir: string
 let ctx: ToolContext

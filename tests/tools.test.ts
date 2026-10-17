@@ -21,6 +21,9 @@ import { validateJsonSchemaValue } from '@deepseek-ai/dsh-tools'
 import { createToolContext, type ToolContext } from '../src/tools/context.js'
 import { createAllTools } from '../src/tools/index.js'
 
+// git 子进程在并行测试下较慢：放宽单测超时，避免时序抖动。
+vi.setConfig({ testTimeout: 30000 })
+
 let dir: string
 let ctx: ToolContext
 let tools: ToolDefinition[]

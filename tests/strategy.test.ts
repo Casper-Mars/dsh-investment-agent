@@ -10,7 +10,7 @@
  *   - parentVersion 乐观并发校验（可选）；
  *   - 回滚场景：checkout 旧版 + commit 后 current 前进、正文回到旧版。
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import {
   existsSync,
@@ -23,6 +23,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { StrategyRegistry } from '../src/domain/strategy.js'
 import { ensureAssetsRepo } from '../src/assets/repo.js'
+
+// git 子进程在并行测试下较慢：放宽单测超时，避免时序抖动。
+vi.setConfig({ testTimeout: 30000 })
 
 const SHA_RE = /^[0-9a-f]{12}$/
 

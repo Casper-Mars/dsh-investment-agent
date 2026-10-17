@@ -17,6 +17,9 @@ import { parseStrategyDoc } from '../src/domain/strategy.js'
 import { JsonStore } from '../src/domain/store.js'
 import { createToolContext, DEFAULT_THRESHOLDS, type ToolContext } from '../src/tools/context.js'
 
+// git 子进程在并行测试下较慢：放宽单测超时，避免时序抖动。
+vi.setConfig({ testTimeout: 30000 })
+
 let dir: string
 let ctx: ToolContext
 

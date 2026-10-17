@@ -42,6 +42,9 @@ import { SKILL_NAMES } from '../src/skills/index.js'
 import { parseSkillFile } from '../src/skills/frontmatter.js'
 import { apply, inject as topLevelInject, name as pluginName } from '../src/plugin.js'
 
+// git 子进程在并行测试下较慢：放宽单测超时，避免时序抖动。
+vi.setConfig({ testTimeout: 30000 })
+
 /* ================================================================== *
  * 真实 registry 引导（复用 tester-tools-runtime 的 ToolRuntime 范式）
  * ================================================================== */

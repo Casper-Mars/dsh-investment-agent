@@ -25,6 +25,9 @@ import ToolRuntime, {
 import { createToolContext, type ToolContext } from '../src/tools/context.js'
 import { createAllTools, registerAllTools } from '../src/tools/index.js'
 
+// git 子进程在并行测试下较慢：放宽单测超时，避免时序抖动。
+vi.setConfig({ testTimeout: 30000 })
+
 /* ================================================================== *
  * 真实 registry 引导
  * ================================================================== */

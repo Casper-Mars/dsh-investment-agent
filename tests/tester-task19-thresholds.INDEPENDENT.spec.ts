@@ -16,7 +16,7 @@
  *
  * 只新增本测试文件，不改动 src/** 或任何既有测试。
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -26,6 +26,9 @@ import { Ledger } from '../src/domain/ledger.js'
 import { createToolContext, DEFAULT_THRESHOLDS, type ToolContext } from '../src/tools/context.js'
 import { createAllTools } from '../src/tools/index.js'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
+
+// git 子进程在并行测试下较慢：放宽单测超时，避免时序抖动。
+vi.setConfig({ testTimeout: 30000 })
 
 let dir: string
 let ctx: ToolContext
