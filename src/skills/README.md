@@ -1,6 +1,6 @@
 # skills
 
-技术面 SKILL 层（Task 5 落地；5 个「可进化 SKILL」+ 2 个「固有 SKILL」）。
+技术面 SKILL 层（Task 5 落地；5 个「可进化 SKILL」+ 3 个「固有 SKILL」）。
 
 ## 内容
 
@@ -17,12 +17,13 @@
 | `strategy-authorship/` | strategy-authorship | 生成 / 迭代某标的策略文档的方法论 |
 | `analysis-decision/` | analysis-decision | 对某标的做分析与决策的上层方法论（统筹 trend/grid/stop，可随复盘进化） |
 
-### 固有 SKILL（2 个，`TASK_AUTHORSHIP_SKILL_NAME` / `SKILL_AUTHORSHIP_SKILL_NAME`）
+### 固有 SKILL（3 个，`TASK_AUTHORSHIP_SKILL_NAME` / `SKILL_AUTHORSHIP_SKILL_NAME` / `FINANCE_EVOLUTION_SKILL_NAME`）
 
 | 目录 | name | 作用 |
 |------|------|------|
 | `task-authorship/` | task-authorship | 编写 / 修改定时任务任务程序的方法论 |
 | `skill-authorship/` | skill-authorship | 编写 / 修改可进化 SKILL.md 的合规规范（frontmatter 三字段 / whenToUse 写法 / 硬性红线 / 自检清单） |
+| `finance-evolution/` | finance-evolution | 资产进化的执行流程（Ralph loop：改 → 自检 → 不过继续改 → 提交 → 下次出结果时复核）；引擎自身不可进化 |
 
 > 「固有 SKILL」定义**固件约束**（任务程序的结构契约 / 写 skill 的合规规范），属方法论层，
 > **不进入** git 进化链与热更新时间线：它们**不落** `<dataRoot>/skills`，由 `src/plugin.ts` 经
@@ -39,7 +40,7 @@
 | 文件 | 说明 |
 |------|------|
 | `frontmatter.ts` | SKILL.md frontmatter 轻量解析器（无第三方 YAML 依赖） |
-| `index.ts` | 5 个可进化 SKILL 的随包种子读取 / 解析出口（`SKILL_NAMES` / `loadSkillMarkdown` / `parseSkill`）+ 2 个固有 SKILL 读取 / 注册入口（`TASK_AUTHORSHIP_SKILL_NAME` / `SKILL_AUTHORSHIP_SKILL_NAME` / `loadTaskAuthorshipMarkdown` / `loadSkillAuthorshipMarkdown` / `createIntrinsicSkillRegistration` / `createSkillAuthorshipRegistration`） |
+| `index.ts` | 5 个可进化 SKILL 的随包种子读取 / 解析出口（`SKILL_NAMES` / `loadSkillMarkdown` / `parseSkill`）+ 3 个固有 SKILL 读取 / 注册入口（`TASK_AUTHORSHIP_SKILL_NAME` / `SKILL_AUTHORSHIP_SKILL_NAME` / `FINANCE_EVOLUTION_SKILL_NAME` / `loadTaskAuthorshipMarkdown` / `loadSkillAuthorshipMarkdown` / `loadFinanceEvolutionMarkdown` / `createIntrinsicSkillRegistration` / `createSkillAuthorshipRegistration` / `createFinanceEvolutionRegistration`） |
 | `repo.ts` | 运行时数据目录 `<dataRoot>/skills` 的独立 git 仓库：冷启动幂等预置（5 个可进化 SKILL 种子落盘 + 首版 commit） |
 | `provider.ts` | 挂载 dsh 原生 `skill-filesystem` provider（指向 `<dataRoot>/skills`，开启 watch 热更新，发现 5 个可进化 SKILL） |
 

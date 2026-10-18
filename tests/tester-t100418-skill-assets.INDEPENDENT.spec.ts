@@ -37,7 +37,7 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { SKILL_NAMES, TASK_AUTHORSHIP_SKILL_NAME, SKILL_AUTHORSHIP_SKILL_NAME } from '../src/skills/index.js'
+import { SKILL_NAMES, TASK_AUTHORSHIP_SKILL_NAME, SKILL_AUTHORSHIP_SKILL_NAME, FINANCE_EVOLUTION_SKILL_NAME } from '../src/skills/index.js'
 import { parseSkillFile, SKILL_NAME_PATTERN } from '../src/skills/frontmatter.js'
 import {
   ensureSkillAssetsRepo,
@@ -379,14 +379,14 @@ describe('④ 三者一致 + SKILL_NAMES 对齐', () => {
     }
   })
 
-  it('源码目录集合 === 5 个可进化 SKILL + 固有 SKILL，且每个目录含 SKILL.md', () => {
+  it('源码目录集合 === 5 个可进化 SKILL + 3 个固有 SKILL，且每个目录含 SKILL.md', () => {
     const srcSkillsDir = join(REPO_ROOT, 'src', 'skills')
     const dirs = readdirSync(srcSkillsDir).filter((n) =>
       existsSync(join(srcSkillsDir, n, SKILL_FILENAME)),
     )
-    // 随包源目录 = 5 个可进化（SKILL_NAMES）+ 2 个固有（task-authorship / skill-authorship）。
+    // 随包源目录 = 5 个可进化（SKILL_NAMES）+ 3 个固有（task-authorship / skill-authorship / finance-evolution）。
     expect([...dirs].sort()).toEqual(
-      [...SKILL_NAMES, TASK_AUTHORSHIP_SKILL_NAME, SKILL_AUTHORSHIP_SKILL_NAME].sort(),
+      [...SKILL_NAMES, TASK_AUTHORSHIP_SKILL_NAME, SKILL_AUTHORSHIP_SKILL_NAME, FINANCE_EVOLUTION_SKILL_NAME].sort(),
     )
   })
 

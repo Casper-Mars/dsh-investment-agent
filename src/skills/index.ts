@@ -7,11 +7,13 @@
  *     随 `src/skills/repo.ts` 冷启动种子落盘到 `<assetsDir>/skills` 独立 git 仓库，
  *     并由 `src/skills/provider.ts` 挂载的 dsh 原生 `skill-filesystem` provider 发现
  *     且开启 watch 热更新（改 `SKILL.md` → 无需重启生效）。
- *   - **2 个「固有 SKILL」**（类型 {@link IntrinsicSkillName}）：
+ *   - **3 个「固有 SKILL」**（类型 {@link IntrinsicSkillName}）：
  *       - `task-authorship`（{@link TASK_AUTHORSHIP_SKILL_NAME}）：任务程序创作，定义
  *         任务程序的结构 / 返回值契约 / 自测纪律；
  *       - `skill-authorship`（{@link SKILL_AUTHORSHIP_SKILL_NAME}）：编写合规 skill 的规范
- *         （frontmatter 三字段 / whenToUse 写法 / 硬性红线 / 自检清单）。
+ *         （frontmatter 三字段 / whenToUse 写法 / 硬性红线 / 自检清单）；
+ *       - `finance-evolution`（{@link FINANCE_EVOLUTION_SKILL_NAME}）：资产进化的执行流程
+ *         （Ralph loop：改 → 自检 → 不过继续改 → 提交 → 下次出结果时复核），引擎自身不可进化。
  *     两者皆**不进入 git 进化链与热更新时间线**；原文经各自 load 函数读取，由
  *     `src/plugin.ts` 单独**静态注册**（各自的 create 注册对象装配函数）。
  *
@@ -20,7 +22,8 @@
  *   2. 从 `src/skills/<name>/SKILL.md` 读取 Markdown（随构建产物发布到
  *      `dist-server/skills/<name>/SKILL.md`）；
  *   3. 解析 frontmatter（轻量解析器见 `./frontmatter.js`），暴露 {`parseSkill`}；
- *   4. 提供 2 个固有 SKILL（task-authorship / skill-authorship）的静态读取 / 注册对象装配入口。
+ *   4. 提供 3 个固有 SKILL（task-authorship / skill-authorship / finance-evolution）的
+ *      静态读取 / 注册对象装配入口。
  *
  * 运行时注册：5 个可进化 SKILL 由 `src/skills/provider.ts` 挂载 dsh 原生
  *   `skill-filesystem` provider 发现（指向 `<assetsDir>/skills`，watch 热更新，
@@ -72,10 +75,20 @@ export const TASK_AUTHORSHIP_SKILL_NAME = 'task-authorship' as const
  */
 export const SKILL_AUTHORSHIP_SKILL_NAME = 'skill-authorship' as const
 
-/** 固有 SKILL 名联合类型（2 个固有 SKILL）。 */
+/**
+ * 固有 SKILL 名（资产进化引擎，kebab-case）。
+ *
+ * 同为固件：它是「进化引擎的具体实现」，只由人类修改并随新版插件发布，
+ * 因此不进 {@link SKILL_NAMES}、不落数据目录，由 `src/plugin.ts` 静态注册。
+ * 注意：它描述的是「怎么进化资产」，本身不是可被进化的资产。
+ */
+export const FINANCE_EVOLUTION_SKILL_NAME = 'finance-evolution' as const
+
+/** 固有 SKILL 名联合类型（3 个固有 SKILL）。 */
 export type IntrinsicSkillName =
   | typeof TASK_AUTHORSHIP_SKILL_NAME
   | typeof SKILL_AUTHORSHIP_SKILL_NAME
+  | typeof FINANCE_EVOLUTION_SKILL_NAME
 
 /** 读取某**可进化** SKILL 的 Markdown 原文（含 frontmatter）。 */
 export function loadSkillMarkdown(name: SkillName): string {
@@ -103,6 +116,18 @@ export function loadTaskAuthorshipMarkdown(): string {
 export function loadSkillAuthorshipMarkdown(): string {
   return readFileSync(
     new URL(`./${SKILL_AUTHORSHIP_SKILL_NAME}/SKILL.md`, import.meta.url),
+    'utf8',
+  )
+}
+
+/**
+ * 读取**固有 SKILL**（{@link FINANCE_EVOLUTION_SKILL_NAME}）的 Markdown 原文（含 frontmatter）。
+ *
+ * 与另两个固有 SKILL 同路径策略：源码态与编译态皆可解析。
+ */
+export function loadFinanceEvolutionMarkdown(): string {
+  return readFileSync(
+    new URL(`./${FINANCE_EVOLUTION_SKILL_NAME}/SKILL.md`, import.meta.url),
     'utf8',
   )
 }
@@ -138,6 +163,15 @@ export function createIntrinsicSkillRegistration(): SkillRegistration {
  */
 export function createSkillAuthorshipRegistration(): SkillRegistration {
   return buildIntrinsicSkillRegistration(loadSkillAuthorshipMarkdown())
+}
+
+/**
+ * 组装**固有 SKILL**（{@link FINANCE_EVOLUTION_SKILL_NAME}）的运行时注册对象（无副作用）。
+ *
+ * 与另两个固有 SKILL 同机制：`source=runtime`、`invocation` 双开、静态注册。
+ */
+export function createFinanceEvolutionRegistration(): SkillRegistration {
+  return buildIntrinsicSkillRegistration(loadFinanceEvolutionMarkdown())
 }
 
 /**

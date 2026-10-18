@@ -17,8 +17,8 @@
  *          指向资产层目录 `<assetsDir>/skills`（即 `~/.dsh-ia/assets/skills`）并开启 watch 热更新，
  *          发现 5 个「可进化 SKILL」
  *          （trend-analysis / grid-strategy / stop-rule / strategy-authorship / analysis-decision）；
- *          另将 2 个「固有 SKILL」（task-authorship / skill-authorship）经 `ctx.skills.register`
- *          **静态注册**（不进化）。provider 注册在插件自身 ctx（global 层），对固定会话与
+ *          另将 3 个「固有 SKILL」（task-authorship / skill-authorship / finance-evolution）经
+ *          `ctx.skills.register` **静态注册**（不进化）。provider 注册在插件自身 ctx（global 层），对固定会话与
  *          workspace 会话均可见；
  *       3. 经 `ctx.inject(['systemPrompt'], cb)` **动态注入** advisor.md 人设
  *          （详见 `src/prompts/index.ts`）。
@@ -34,6 +34,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import {
+  createFinanceEvolutionRegistration,
   createIntrinsicSkillRegistration,
   createSkillAuthorshipRegistration,
 } from './skills/index.js'
@@ -107,9 +108,9 @@ export const inject: string[] = ['tools', 'skills', 'fs']
  *      （`mountSkillFilesystemProvider`）。provider 注册进插件自身 ctx（global 层），
  *      对固定会话与 workspace 会话均可见；注销器绑定 effect，插件 fiber 卸载时自动
  *      注销并关闭 watch。预置与挂载均 try/catch 降级，失败不中断插件装载。
- *   2b. 固有 SKILL `task-authorship`（任务程序方法论，不进化）与 `skill-authorship`（编写合规
- *      skill 的规范，不进化）经 `ctx.skills.register` 静态注册到插件自身 ctx（global 层）。
- *      注册失败 try/catch 降级，不中断装载。
+ *   2b. 固有 SKILL `task-authorship`（任务程序方法论）、`skill-authorship`（编写合规
+ *      skill 的规范）、`finance-evolution`（资产进化引擎）均不进化，经 `ctx.skills.register`
+ *      静态注册到插件自身 ctx（global 层）。注册失败 try/catch 降级，不中断装载。
  *   3. 经 `applyAdvisorPrompt(ctx)` 动态注入 advisor.md 人设到 system-prompt。
  *
  * @param ctx 插件上下文（已注入上述三项服务）。
@@ -244,6 +245,31 @@ export function apply(ctx: Context): void {
       }
     }
   }, 'dsh-ia skill-authorship skill')
+
+  // ---- 固有 SKILL（finance-evolution）静态注册（固件：资产进化引擎，不进化） ----
+  // 它是「进化引擎的具体实现」，只由人类修改并随新版插件发布；若把它当资产，
+  // 就会出现「引擎自己改自己」的递归，因此与另两个固件同机制：不进 assets 种子、
+  // 不落 <assetsDir>/skills，直接 `ctx.skills.register` 静态挂到插件 ctx（global 层）。
+  ctx.effect(() => {
+    const skills = typeof ctx.get === 'function' ? ctx.get('skills') : undefined
+    if (!skills) {
+      logSkills.warn('[dsh-ia] skills 服务不可用，跳过 finance-evolution 静态注册')
+      return () => {}
+    }
+    let dispose: (() => void) | undefined
+    try {
+      dispose = skills.register(createFinanceEvolutionRegistration())
+    } catch (err: unknown) {
+      logSkills.error('[dsh-ia] finance-evolution 静态注册失败（降级）', { error: err })
+    }
+    return () => {
+      try {
+        dispose?.()
+      } catch {
+        /* ignore */
+      }
+    }
+  }, 'dsh-ia finance-evolution skill')
 
   // ---- 固定会话确保（Task-10：检查 → 恢复 → 新建，§9.5） ----
   try {

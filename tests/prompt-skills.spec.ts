@@ -22,6 +22,7 @@ import {
   SKILL_NAMES,
   TASK_AUTHORSHIP_SKILL_NAME,
   SKILL_AUTHORSHIP_SKILL_NAME,
+  FINANCE_EVOLUTION_SKILL_NAME,
   loadSkillMarkdown,
   loadTaskAuthorshipMarkdown,
   loadSkillAuthorshipMarkdown,
@@ -369,7 +370,7 @@ describe('插件 apply 接入', () => {
     return { ctx, registeredSkills, injectedSections }
   }
 
-  it('apply 仅静态注册 2 个固有 SKILL（task-authorship / skill-authorship），5 个可进化 SKILL 改由 provider 承担；注入 1 个 prompt section，且不抛异常', () => {
+  it('apply 仅静态注册 3 个固有 SKILL（task-authorship / skill-authorship / finance-evolution），5 个可进化 SKILL 改由 provider 承担；注入 1 个 prompt section，且不抛异常', () => {
     // 防止 ensureSkillAssetsRepo 回落到默认 `~/.dsh-ia`（污染 home）：DSH_IA_HOME 指向临时 home。
     const { home } = makeSeededFinanceHome()
     const prev = process.env.DSH_IA_HOME
@@ -378,10 +379,10 @@ describe('插件 apply 接入', () => {
       const { ctx, registeredSkills, injectedSections } = makeMockCtx()
       expect(() => apply(ctx)).not.toThrow()
 
-      // 5 个可进化 SKILL 不再静态注册（改由 provider 发现）；仅 2 个固有 SKILL 静态注册。
-      expect(registeredSkills).toHaveLength(2)
+      // 5 个可进化 SKILL 不再静态注册（改由 provider 发现）；仅 3 个固有 SKILL 静态注册。
+      expect(registeredSkills).toHaveLength(3)
       expect(registeredSkills.map((s) => s.name).sort()).toEqual(
-        [TASK_AUTHORSHIP_SKILL_NAME, SKILL_AUTHORSHIP_SKILL_NAME].sort(),
+        [TASK_AUTHORSHIP_SKILL_NAME, SKILL_AUTHORSHIP_SKILL_NAME, FINANCE_EVOLUTION_SKILL_NAME].sort(),
       )
 
       // advisor section 注入保持不变。
