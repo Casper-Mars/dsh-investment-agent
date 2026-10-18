@@ -52,8 +52,8 @@ whenToUse: 任一环节觉察到指标异常、同一失败第二次出现、能
 
 ## 修改记录＝git
 
-- **载体**：git 提交历史，不另建记录文件。审计入口是 `git log`。没提交＝没发生。
-- **两个仓**：`assets/skills` 是独立仓；`assets` 是外层仓（strategies / programs / tasks）。提交必须落在被改资产所属的仓。
+- **载体**：git 提交历史，不另建记录文件。审计入口是 `git -C ~/.dsh-ia/assets log`。没提交＝没发生。
+- **一个仓**：`assets` 一个仓库统管全部资产（skills / strategies / programs / tasks）。skill 也是资产，它的改动同样落在这个仓，不单独建仓。
 - **append-only**：只追加。禁止 amend、rebase、force-push。
 - **提交身份**：固定 `dsh-ia <dsh-ia@localhost>`，`core.autocrlf=false`，不依赖宿主机 git 配置。
 - **只记操作，不判结果**：写清改了什么、为什么改（场景 + 教训/经验），不写「效果良好」这类结论。
