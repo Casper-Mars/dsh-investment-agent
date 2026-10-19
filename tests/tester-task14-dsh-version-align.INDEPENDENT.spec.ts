@@ -1,20 +1,24 @@
 /**
  * tester-task14-dsh-version-align.INDEPENDENT.spec.ts
  * ==================================================================
- * Tester 独立复验（Task-14）：依赖版本对齐 0.1.6-alpha.1 → 0.2.0-rc.2
+ * Tester 独立复验（Task-14）：依赖版本对齐 0.2.0-rc.2 → 0.2.1-rc.2（区间化）
  *
- * 被测交付物：dsh-ia（main @ 8ab4571 + 未提交 package.json / pnpm-lock.yaml）
- * 变更内容：@deepseek-ai/dsh-skill / @deepseek-ai/dsh-tools 由 0.1.6-alpha.1
- *   → 0.2.0-rc.2（peerDependencies + devDependencies 共 4 处）。
+ * 被测交付物：dsh-ia（main @ 98acaad + 未提交 package.json / pnpm-lock.yaml）
+ * 变更内容：
+ *   1) 新增 `engines.dsh = ^0.2.0-rc.2` —— dsh 兼容性校验的唯一真源；
+ *      存在 engines.dsh 时 dsh 不再比对 peerDependencies。
+ *   2) 四个 @deepseek-ai/dsh-* peer 由精确 `0.2.0-rc.2` 改为 `^0.2.0-rc.2`；
+ *   3) cordis 由 `>=4.0.0` 提升为 `^4.0.5`（0.2.1-rc.2 所有包要求 ~4.0.5）；
+ *   4) devDependencies 钉在 0.2.1-rc.2，开发/测试对着最新版跑。
  *
  * 独立性声明（与 Developer 及 tester-task13 均不同）：
  *   1) 装载**真实构建产物 dist-server/**（而非 src/** 源码态）——`import * as
  *      pluginNs from '../dist-server/index.js'`，走 `package.json` exports
  *      `["."].default = ./dist-server/index.js` 的产物入口，与本仓库对外发布
  *      形态一致。
- *   2) 运行在**真实 @deepseek-ai/dsh-tools@0.2.0-rc.2**（node_modules 已解析
- *      0.2.0-rc.2）+ 真实 @deepseek-ai/cordis 4.0.4 的 Context 之上，并在测试
- *      内**运行时读取** node_modules 版本号作为「确实以 0.2.0-rc.2 运行」的证据。
+ *   2) 运行在**真实 @deepseek-ai/dsh-tools@0.2.1-rc.2**（node_modules 已解析
+ *      0.2.1-rc.2）+ 真实 @deepseek-ai/cordis 4.0.5 的 Context 之上，并在测试
+ *      内**运行时读取** node_modules 版本号作为「确实以 0.2.1-rc.2 运行」的证据。
  *   3) skills 与 systemPrompt 服务以**捕获式桩**提供，逐项核对 5 个可进化 SKILL（provider）
  *      与 1 个固有 SKILL（task-authorship，静态注册）与人设 section 的注册结果
  *      人设 section 的注册结果（非空桩）。
@@ -157,7 +161,7 @@ afterEach(() => {
 
 /**
  * 装载**真实构建产物 dist-server**：真实 cordis Context + 真实
- * @deepseek-ai/dsh-tools ToolRuntime（0.2.0-rc.2）提供 `ctx.tools`；
+ * @deepseek-ai/dsh-tools ToolRuntime（0.2.1-rc.2）提供 `ctx.tools`；
  * skills / systemPrompt 以捕获式桩满足注入并记录注册结果。
  */
 async function bootDistPlugin(dataRoot: string) {
@@ -192,59 +196,83 @@ async function bootDistPlugin(dataRoot: string) {
   }
 }
 
-describe('Task-14 复验 A：版本声明与解析一致（4 处 0.2.0-rc.2）', () => {
-  it('A1·package.json：peerDeps + devDeps 四处 dsh-skill/dsh-tools 均为 0.2.0-rc.2，cordis >=4.0.0', () => {
+describe('Task-14 复验 A：版本声明与解析一致（engines.dsh 区间化）', () => {
+  it('A1·package.json：engines.dsh 为 ^0.2.0-rc.2，四个 dsh-* peer 同区间，cordis ^4.0.5', () => {
     const pkg = readJson('package.json') as {
+      engines: Record<string, string>
       peerDependencies: Record<string, string>
       devDependencies: Record<string, string>
     }
-    expect(pkg.peerDependencies['@deepseek-ai/dsh-skill']).toBe('0.2.0-rc.2')
-    expect(pkg.peerDependencies['@deepseek-ai/dsh-tools']).toBe('0.2.0-rc.2')
-    expect(pkg.devDependencies['@deepseek-ai/dsh-skill']).toBe('0.2.0-rc.2')
-    expect(pkg.devDependencies['@deepseek-ai/dsh-tools']).toBe('0.2.0-rc.2')
-    expect(pkg.peerDependencies['@deepseek-ai/cordis']).toBe('>=4.0.0')
-    expect(pkg.devDependencies['@deepseek-ai/cordis']).toBe('>=4.0.0')
+    expect(pkg.engines.dsh).toBe('^0.2.0-rc.2')
+    for (const name of [
+      '@deepseek-ai/dsh-llm',
+      '@deepseek-ai/dsh-skill',
+      '@deepseek-ai/dsh-skill-filesystem',
+      '@deepseek-ai/dsh-tools',
+    ]) {
+      expect(pkg.peerDependencies[name]).toBe('^0.2.0-rc.2')
+    }
+    expect(pkg.peerDependencies['@deepseek-ai/cordis']).toBe('^4.0.5')
+    expect(pkg.devDependencies['@deepseek-ai/cordis']).toBe('^4.0.5')
     console.log(
-      '[EVIDENCE A1] pkg peer/dev 四处 dsh-skill/dsh-tools = 0.2.0-rc.2；cordis = >=4.0.0',
+      '[EVIDENCE A1] engines.dsh=^0.2.0-rc.2；四个 dsh-* peer 同区间；cordis=^4.0.5',
     )
   })
 
-  it('A2·node_modules 实际解析版本：dsh-skill / dsh-tools = 0.2.0-rc.2，cordis = 4.0.4', () => {
-    const skill = readJson('node_modules/@deepseek-ai/dsh-skill/package.json')
-      .version as string
-    const tools = readJson('node_modules/@deepseek-ai/dsh-tools/package.json')
-      .version as string
+  it('A2·node_modules 实际解析版本：dsh-* = 0.2.1-rc.2，cordis = 4.0.5', () => {
+    const versions = [
+      '@deepseek-ai/dsh-llm',
+      '@deepseek-ai/dsh-skill',
+      '@deepseek-ai/dsh-skill-filesystem',
+      '@deepseek-ai/dsh-tools',
+    ].map((name) => readJson(`node_modules/${name}/package.json`).version as string)
     const cordis = readJson('node_modules/@deepseek-ai/cordis/package.json')
       .version as string
-    expect(skill).toBe('0.2.0-rc.2')
-    expect(tools).toBe('0.2.0-rc.2')
-    expect(cordis.startsWith('4.0.')).toBe(true)
+    for (const v of versions) expect(v).toBe('0.2.1-rc.2')
+    expect(cordis).toBe('4.0.5')
     console.log(
-      `[EVIDENCE A2] resolved: dsh-skill=${skill} dsh-tools=${tools} cordis=${cordis}`,
+      `[EVIDENCE A2] resolved: dsh-*=${versions.join(',')} cordis=${cordis}`,
     )
   })
 
-  it('A3·pnpm-lock.yaml：无 0.1.6-alpha.1 残留；dsh-skill/dsh-tools 解析为 0.2.0-rc.2', () => {
+  it('A3·pnpm-lock.yaml：无 0.1.6-alpha.1 残留；dsh-skill/dsh-tools 解析为 0.2.1-rc.2', () => {
     const lock = readFileSync(join(PROJECT_ROOT, 'pnpm-lock.yaml'), 'utf8')
     expect(lock).not.toContain('0.1.6-alpha.1')
-    expect(lock).toContain('@deepseek-ai/dsh-skill@0.2.0-rc.2')
-    expect(lock).toContain('@deepseek-ai/dsh-tools@0.2.0-rc.2')
+    expect(lock).toContain('@deepseek-ai/dsh-skill@0.2.1-rc.2')
+    expect(lock).toContain('@deepseek-ai/dsh-tools@0.2.1-rc.2')
     console.log(
-      '[EVIDENCE A3] lock: 无 0.1.6-alpha.1 残留；dsh-skill/dsh-tools 锁 0.2.0-rc.2',
+      '[EVIDENCE A3] lock: 无 0.1.6-alpha.1 残留；dsh-skill/dsh-tools 锁 0.2.1-rc.2',
     )
   })
 
-  it('A4·（回归证据）本测试实际以 0.2.0-rc.2 依赖运行', () => {
+  it('A4·（回归证据）本测试实际以 0.2.1-rc.2 依赖运行', () => {
     // ToolRuntime 即从 node_modules 解析的 @deepseek-ai/dsh-tools 默认导出装载，
-    // 此处显式声明其运行时来源版本，作为「以 0.2.0-rc.2 运行」的直接证据。
+    // 此处显式声明其运行时来源版本，作为「以 0.2.1-rc.2 运行」的直接证据。
     const tools = readJson('node_modules/@deepseek-ai/dsh-tools/package.json')
       .version as string
     const cordis = readJson('node_modules/@deepseek-ai/cordis/package.json')
       .version as string
-    expect(tools).toBe('0.2.0-rc.2')
+    expect(tools).toBe('0.2.1-rc.2')
     console.log(
       `[EVIDENCE A4] ToolRuntime 来自 @deepseek-ai/dsh-tools@${tools} + cordis@${cordis}`,
     )
+  })
+
+  it('A5·防漂移：四个 dsh-* peer 区间与 engines.dsh 完全一致', () => {
+    const pkg = readJson('package.json') as {
+      engines: Record<string, string>
+      peerDependencies: Record<string, string>
+    }
+    const range = pkg.engines.dsh
+    for (const name of [
+      '@deepseek-ai/dsh-llm',
+      '@deepseek-ai/dsh-skill',
+      '@deepseek-ai/dsh-skill-filesystem',
+      '@deepseek-ai/dsh-tools',
+    ]) {
+      expect(pkg.peerDependencies[name]).toBe(range)
+    }
+    console.log(`[EVIDENCE A5] peer 区间与 engines.dsh 一致：${range}`)
   })
 })
 

@@ -16,6 +16,12 @@
 
 ### Changed
 
+- **dsh 兼容性改为区间声明（修复 dsh 0.2.1-rc.2 启动时 profile bundle 被 skip）**：
+  新增 `engines.dsh: ^0.2.0-rc.2` 作为 dsh 兼容性的唯一真源（dsh 存在该字段时不再比对
+  peerDependencies）；四个 `@deepseek-ai/dsh-*` peer 由精确 `0.2.0-rc.2` 改为 `^0.2.0-rc.2`；
+  `@deepseek-ai/cordis` 由 `>=4.0.0` 提升为 `^4.0.5`（0.2.1-rc.2 各包要求 `~4.0.5`）；
+  devDependencies 升至 `0.2.1-rc.2`。**代码零改动**，仅版本声明变更。
+
 - **`cum_return` 收益口径修正（BREAKING：历史值不可比）**：累计收益率口径由
   「期末市值 + 累计 realized」修正为「**期末现金 + 期末市值** − 期初资金」/ 期初资金
   （即期末总资产 vs 期初总资产）。旧口径分子漏掉**期末现金**，对已清仓账户会严重

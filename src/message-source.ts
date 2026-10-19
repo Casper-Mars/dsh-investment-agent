@@ -13,8 +13,8 @@
  *   2. 经 `declare module '@deepseek-ai/dsh-llm'` 增补 `MessageSourceMap`；
  *   3. 用官方 `createUserMessage(...)` 构造消息（冻结 + 稳定 id）。
  *
- * `@deepseek-ai/dsh-llm` 是 harness 核心包（版本 `0.2.0-rc.2`，与 dsh-skill /
- * dsh-tools 同法声明为 peerDependency + devDependency）。
+ * `@deepseek-ai/dsh-llm` 是 harness 核心包（peer/dev 声明为 `^0.2.0-rc.2`，与 dsh-skill /
+ * dsh-tools 同法声明）；dsh 运行时版本要求由 `engines.dsh` 单独承担。
  */
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContextFormed, UserMessage } from '@deepseek-ai/dsh-llm'

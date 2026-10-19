@@ -1,6 +1,6 @@
 {
   "name": "dsh-ia",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "金融投资专家 Agent 插件（dsh）：投资建议、持仓记账、行情/交易日历与市场感知",
   "keywords": [
@@ -26,7 +26,8 @@
   "packageManager": "pnpm@11.7.0",
   "engines": {
     "node": ">=22.19.0",
-    "pnpm": ">=11.7.0"
+    "pnpm": ">=11.7.0",
+    "dsh": "^0.2.0-rc.2"
   },
   "main": "dist-server/index.js",
   "exports": {
@@ -62,11 +63,11 @@
     "clean": "rm -rf dist dist-server"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": ">=4.0.0",
-    "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-skill": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-skill-filesystem": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-tools": "0.2.0-rc.2"
+    "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/dsh-llm": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-skill": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-skill-filesystem": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools": "^0.2.0-rc.2"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-skill": {
@@ -80,11 +81,11 @@
     }
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": ">=4.0.0",
-    "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-skill": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-skill-filesystem": "0.2.0-rc.2",
-    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-skill": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-skill-filesystem": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
     "@types/node": "^22.13.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"

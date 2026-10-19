@@ -120,7 +120,8 @@ scripts/copy-assets.mjs # 构建期 .md 资源搬运
 
 ## 依赖
 
-- **运行时 peer**：`@deepseek-ai/cordis`（>=4.0.0）、`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-tools`、`@deepseek-ai/dsh-skill`、`@deepseek-ai/dsh-skill-filesystem`（均 `0.2.0-rc.2`，后三者为可选 peer）。
+- **运行时 peer**：`@deepseek-ai/cordis`（^4.0.5）、`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-tools`、`@deepseek-ai/dsh-skill`、`@deepseek-ai/dsh-skill-filesystem`（均 `^0.2.0-rc.2`，后三者为可选 peer）。
+- **dsh 运行时**：由 `engines.dsh`（`^0.2.0-rc.2`）单独声明，覆盖 `0.2.0-rc.2` 起的全部 `0.2.x`（含 rc），排除 `0.3.0`。dsh 存在 `engines.dsh` 时不再比对 peerDependencies。
 - **开发**：TypeScript ^5.7、Vitest ^3.0。
 
 ## 合规声明
