@@ -2,7 +2,7 @@
  * Task 5 验收测试：Prompt 注入（advisor.md）+ 技术面 SKILL。
  *
  * 覆盖验收标准：
- *   1. advisor.md 含角色/原则/工作流/合规四块，末尾明确「本内容不构成投资建议」。
+ *   1. advisor.md 含角色/思维与能动性/自我进化/能力/工作流/合规六大板块，并保留核心合规约束。
  *   2. 5 个可进化 SKILL.md 均含 frontmatter 的 name/description/whenToUse，name 为 kebab-case。
  *   3. prompt 与 skill 全文不出现写死的标的价格/阈值（数值用「从配置读取」占位）。
  *   4. apply(ctx) 后 5 个可进化 skill 可被 ctx.skills 经 provider 发现、固有 SKILL
@@ -73,18 +73,20 @@ afterEach(() => {
 })
 
 /* ------------------------------------------------------------------ *
- * 验收 1：advisor.md 四块结构 + 合规声明
+ * 验收 1：advisor.md 六大板块结构 + 合规约束
  * ------------------------------------------------------------------ */
 
-describe('验收 1：advisor.md 人设内容', () => {
+describe('验收 1：advisor.md 六大板块与合规约束', () => {
   const md = loadAdvisorMd()
 
-  it('包含角色 / 思维与能动性 / 工作流 / 合规四大板块', () => {
+  it('包含角色 / 思维与能动性 / 自我进化 / 能力 / 工作流 / 合规六大板块', () => {
     expect(md.trim().length).toBeGreaterThan(300)
-    expect(md).toMatch(/#\s*角色/)
-    expect(md).toMatch(/#\s*思维与能动性/)
-    expect(md).toMatch(/#\s*工作流/)
-    expect(md).toMatch(/#\s*合规/)
+    expect(md).toMatch(/^#\s*角色\s*$/m)
+    expect(md).toMatch(/^#\s*思维与能动性\s*$/m)
+    expect(md).toMatch(/^#\s*自我进化\s*$/m)
+    expect(md).toMatch(/^#\s*能力\s*$/m)
+    expect(md).toMatch(/^#\s*工作流\s*$/m)
+    expect(md).toMatch(/^#\s*合规\s*$/m)
   })
 
   it('合规板块以风险提示收尾，且不含已废弃的「本内容不构成投资建议」', () => {
@@ -98,8 +100,9 @@ describe('验收 1：advisor.md 人设内容', () => {
     expect(md).not.toContain('本内容不构成投资建议')
   })
 
-  it('体现「不执行真实交易」「攻守依实际情势」「只做分析与建议」等核心约束', () => {
+  it('体现「不执行真实交易」「不夸大收益」「攻守依实际情势」「只做分析、建议与推演」等核心约束', () => {
     expect(md).toMatch(/不执行真实交易/)
+    expect(md).toMatch(/不夸大收益/)
     expect(md).toMatch(/攻守依实际情势/)
     expect(md).toMatch(/只做分析、建议与推演/)
   })
