@@ -13,8 +13,8 @@
  *         任务程序的结构 / 返回值契约 / 自测纪律；
  *       - `skill-authorship`（{@link SKILL_AUTHORSHIP_SKILL_NAME}）：编写合规 skill 的规范
  *         （frontmatter 三字段 / whenToUse 写法 / 硬性红线 / 自检清单）；
- *       - `finance-evolution`（{@link FINANCE_EVOLUTION_SKILL_NAME}）：资产进化的执行流程
- *         （Ralph loop：改 → 自检 → 不过继续改 → 提交 → 下次出结果时复核），引擎自身不可进化。
+ *       - `finance-evolution`（{@link FINANCE_EVOLUTION_SKILL_NAME}）：资产进化的唯一权威实现
+ *         （定义 / 触发 / 流程 / 自检 / 修改记录规范见该 skill），引擎自身不可进化。
  *     两者皆**不进入 git 进化链与热更新时间线**；原文经各自 load 函数读取，由
  *     `src/plugin.ts` 单独**静态注册**（各自的 create 注册对象装配函数）。
  *

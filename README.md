@@ -10,7 +10,7 @@
 
 ## 核心特性
 
-- **投资专家人设**：以 `advisor.md` 注入 system-prompt，定义角色、原则、工作流、自我进化与合规边界。
+- **投资专家人设**：以 `advisor.md` 注入 system-prompt，定义角色、原则、工作流、自我进化（流程见 `finance-evolution` skill）与合规边界。
 - **15 个金融工具**：台账（4）+ 策略（2）+ 预判（3）+ 复盘（5）+ 资产提交（1），经 `defineTool` 注册。
 - **7 个定时任务工具**：`task_create` / `task_list` / `task_get` / `task_update` / `task_delete` / `task_enable` / `task_disable`。
 - **7 个 SKILL**：5 个「可进化 SKILL」（方法论，随复盘迭代）+ 2 个「固有 SKILL」（固件约束，不进化）。

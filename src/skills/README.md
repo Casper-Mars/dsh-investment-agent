@@ -24,7 +24,7 @@
 |------|------|------|
 | `task-authorship/` | task-authorship | 编写 / 修改定时任务任务程序的方法论 |
 | `skill-authorship/` | skill-authorship | 编写 / 修改可进化 SKILL.md 的合规规范（frontmatter 三字段 / whenToUse 写法 / 硬性红线 / 自检清单） |
-| `finance-evolution/` | finance-evolution | 资产进化的执行流程（Ralph loop：改 → 自检 → 不过继续改 → 提交 → 下次出结果时复核）；引擎自身不可进化 |
+| `finance-evolution/` | finance-evolution | 资产进化的唯一权威实现（定义 / 触发 / 流程 / 自检 / 修改记录规范见该 skill）；引擎自身不可进化 |
 
 > 「固有 SKILL」定义**固件约束**（任务程序的结构契约 / 写 skill 的合规规范），属方法论层，
 > **不进入** git 进化链与热更新时间线：它们**不落** `<assetsDir>/skills`，由 `src/plugin.ts` 经
