@@ -2,7 +2,7 @@
  * 工具层单元测试：覆盖 t100353 六条验收点。
  *
  * 验收点映射：
- *   1. 14 个工具全部经 defineTool 注册（createAllTools 长度 + 名称 + output.schema 合法性）
+ *   1. 15 个工具全部经 defineTool 注册（createAllTools 长度 + 名称 + output.schema 合法性）
  *   2. execute 走 domain、返回 lossless JSON 且符合 output schema
  *   3. 写类返回 {ok,...}，读类返回无 ok 字段
  *   4. 写操作按 symbol 隔离
@@ -81,18 +81,19 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-describe('验收点 1：14 个工具注册 + 名称 + schema 合法', () => {
+describe('验收点 1：15 个工具注册 + 名称 + schema 合法', () => {
   const expected = [
     'ledger_init', 'ledger_list', 'ledger_query', 'ledger_trade',
     'strategy_get', 'strategy_set',
     'predict_make', 'predict_verify', 'predict_get',
     'review_check', 'review_report', 'review_get', 'review_metrics', 'review_retrospect',
+    'asset_commit',
   ]
-  it('createAllTools 返回 14 个工具，名称齐全无重复', () => {
-    // §4 契约表 12 个 + §10.8 策略域 2 个 = 14 个。
-    expect(tools.length).toBe(14)
+  it('createAllTools 返回 15 个工具，名称齐全无重复', () => {
+    // §4 契约表 12 个 + §10.8 策略域 2 个 + assets 1 个 = 15 个。
+    expect(tools.length).toBe(15)
     const names = tools.map((t) => t.name)
-    expect(new Set(names).size).toBe(14)
+    expect(new Set(names).size).toBe(15)
     for (const n of expected) expect(names).toContain(n)
   })
 

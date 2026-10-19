@@ -12,7 +12,7 @@
  * 真实调用 ToolDefinition.execute(args, { signal })。
  *
  * 覆盖（对应任务卡 6 项必验点）：
- *   1. 注册与顺序（14 个；ledgers → strategy → predicts → reviews）
+ *   1. 注册与顺序（15 个；ledgers → strategy → predicts → reviews → assets）
  *   2. 参数契约（strategy_get / strategy_set 的 required/optional）
  *   3. 行为（未初始化报错 / 首版 / 未设定读报错 / 版本递增与冲突 / 落盘）
  *   4. 中断语义（exec.signal aborted → 抛错且不落盘）
@@ -103,16 +103,17 @@ describe('必验点 1：注册与顺序', () => {
     'strategy_get', 'strategy_set',
     'predict_make', 'predict_verify', 'predict_get',
     'review_check', 'review_report', 'review_get', 'review_metrics', 'review_retrospect',
+    'asset_commit',
   ]
 
-  it('createAllTools 长度为 14，名称齐全且无重复', () => {
-    expect(tools.length).toBe(14)
+  it('createAllTools 长度为 15，名称齐全且无重复', () => {
+    expect(tools.length).toBe(15)
     const names = tools.map((t) => t.name)
-    expect(new Set(names).size).toBe(14)
+    expect(new Set(names).size).toBe(15)
     for (const n of expectedOrder) expect(names).toContain(n)
   })
 
-  it('顺序严格为 ledgers → strategy → predicts → reviews', () => {
+  it('顺序严格为 ledgers → strategy → predicts → reviews → assets', () => {
     const names = tools.map((t) => t.name)
     expect(names).toEqual(expectedOrder)
   })
@@ -326,8 +327,8 @@ describe('必验点 6：契约未变', () => {
     expect(patchSrc).toMatch(/inject: \['tools', 'skills', 'fs'\]/)
 
     const readme = readFileSync(join(__dirname, '..', 'src', 'tools', 'README.md'), 'utf8')
-    // 工具表为 14（标题声明 14 个）
-    expect(readme).toMatch(/14 个/)
+    // 工具表为 15（标题声明 15 个）
+    expect(readme).toMatch(/15 个/)
     const allNames = [
       'ledger_init', 'ledger_list', 'ledger_query', 'ledger_trade',
       'strategy_get', 'strategy_set',

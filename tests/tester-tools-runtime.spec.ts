@@ -82,7 +82,7 @@ async function bootRegistry(dataRoot: string): Promise<Booted> {
   const tools = (app as unknown as { tools: ToolBox }).tools
   await vi.waitFor(
     () => {
-      expect(tools.schemas()).toHaveLength(14)
+      expect(tools.schemas()).toHaveLength(15)
     },
     { timeout: 5000, interval: 10 },
   )
@@ -220,18 +220,19 @@ describe('验收点 1：工具注册数量/名称 + schema 合法性 + ctx.tools
     'strategy_get', 'strategy_set',
     'predict_make', 'predict_verify', 'predict_get',
     'review_check', 'review_report', 'review_get', 'review_metrics', 'review_retrospect',
+    'asset_commit',
   ]
 
-  it('真实 registry 恰好暴露 14 个工具，名称/顺序与 §4 契约表一致', () => {
+  it('真实 registry 恰好暴露 15 个工具，名称/顺序与 §4 契约表一致', () => {
     const names = tools.schemas().map((s) => s.name)
-    expect(names.length).toBe(14)
+    expect(names.length).toBe(15)
     expect(names).toEqual(EXPECTED)
     // 无重复
-    expect(new Set(names).size).toBe(14)
+    expect(new Set(names).size).toBe(15)
     console.log(`[EVIDENCE AC1] registered count=${names.length} names=${names.join(',')}`)
   })
 
-  it('【核报】工具数量实为 14（§4 契约 12 + §10.8 策略域 2）', () => {
+  it('【核报】工具数量实为 15（§4 契约 12 + §10.8 策略域 2 + assets 1）', () => {
     const groups: Record<string, string[]> = {}
     for (const n of EXPECTED) {
       const g = n.startsWith('ledger')
@@ -240,17 +241,20 @@ describe('验收点 1：工具注册数量/名称 + schema 合法性 + ctx.tools
           ? 'strategy'
           : n.startsWith('predict')
             ? 'predicts'
-            : 'reviews'
+            : n.startsWith('asset_')
+              ? 'assets'
+              : 'reviews'
       ;(groups[g] ??= []).push(n)
     }
     expect(groups.ledgers).toHaveLength(4)
     expect(groups.strategy).toHaveLength(2)
     expect(groups.predicts).toHaveLength(3)
     expect(groups.reviews).toHaveLength(5)
-    expect(tools.schemas().length).toBe(14)
+    expect(groups.assets).toHaveLength(1)
+    expect(tools.schemas().length).toBe(15)
     console.log(
       `[EVIDENCE AC1] groups ledgers=${groups.ledgers.length} strategy=${groups.strategy.length} predicts=${groups.predicts.length} ` +
-        `reviews=${groups.reviews.length} TOTAL=14`,
+        `reviews=${groups.reviews.length} assets=${groups.assets.length} TOTAL=15`,
     )
   })
 
@@ -287,7 +291,7 @@ describe('验收点 1：工具注册数量/名称 + schema 合法性 + ctx.tools
   })
 
   it('卸载：dispose 插件后 ctx.tools 不再暴露这些工具', async () => {
-    expect(tools.schemas()).toHaveLength(14)
+    expect(tools.schemas()).toHaveLength(15)
     await booted.dispose()
     await vi.waitFor(() => expect(tools.schemas()).toHaveLength(0), { timeout: 2000, interval: 10 })
     // 重新引导，供 afterEach 正常清理。
@@ -313,6 +317,7 @@ describe('验收点 1：工具注册数量/名称 + schema 合法性 + ctx.tools
       'strategy_get', 'strategy_set',
       'predict_make', 'predict_verify', 'predict_get',
       'review_check', 'review_report', 'review_get', 'review_metrics', 'review_retrospect',
+      'asset_commit',
     ])
     dispose()
     expect(unregistered).toEqual([...registered].reverse())
@@ -325,7 +330,7 @@ describe('验收点 1：工具注册数量/名称 + schema 合法性 + ctx.tools
  * ================================================================== */
 
 describe('验收点 2：lossless JSON + output.schema 严格校验', () => {
-  it('14 个工具真实执行成功值均通过 validateJsonSchemaValue（0 violation）', async () => {
+  it('15 个工具真实执行成功值均通过 validateJsonSchemaValue（0 violation）', async () => {
     // 铺垫数据，使所有读工具都返回成功值。
     await call(tools, 'ledger_init', {
       symbol: '588000', type: 'etf', name: '科创50ETF',

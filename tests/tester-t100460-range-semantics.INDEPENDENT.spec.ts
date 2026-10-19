@@ -237,7 +237,7 @@ describe('AC4 判定语义未变：high/low 不参与判定；历史边界回归
       .toEqual({ hitDir: true, hitRange: true, deviation: 0 })
   })
 
-  it('契约改动未增删工具：仍为 14 个', () => {
-    expect(tools.length).toBe(14)
+  it('契约改动未增删既有工具：现为 15 个（含 asset_commit）', () => {
+    expect(tools.length).toBe(15)
   })
 })

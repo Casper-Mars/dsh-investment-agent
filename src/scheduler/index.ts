@@ -5,7 +5,8 @@
  *   1. 解析任务定义目录 `~/.dsh-ia/assets/tasks`（经 {@link resolveAssetsTasksDir}，
  *      继承 `DSH_IA_HOME` 覆盖语义，**不依赖 `process.cwd()`**）；
  *      任务定义属可分享资产，统一落在资产层（不再使用旧数据目录）；
- *   2. `createTaskStore(tasksDir)` 建任务清单 store；
+ *   2. `createTaskStore(tasksDir, { assetsDir })` 建任务清单 store（save/remove 落盘后
+ *      自动提交任务资产，写入即 commit；git 失败仅告警降级）；
  *   3. 组装「编排 runner」（本层真正难点）：满足 `TaskRunnerLike`（`run(taskId, taskPath)`），
  *      在 `run()` 内完成设计文档 §4.3 完整链路——
  *      `任务程序可读性校验 → loader 依赖就绪 → runner 独立进程执行 →
@@ -22,7 +23,7 @@
 import { accessSync, constants, statSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { resolveAssetsTasksDir, resolveFinanceHomeDir } from '../paths.js'
+import { resolveAssetsDir, resolveAssetsTasksDir, resolveFinanceHomeDir } from '../paths.js'
 import { createTaskStore, type TaskStore } from './store.js'
 import { createTaskLoader, LoaderError, type TaskLoader } from './loader.js'
 import { createTaskRunner, type TaskRunner } from './runner.js'
@@ -38,7 +39,13 @@ import { getPinnedSessionId } from '../flags.js'
 import type { AgentRegistryLike, TaskRunOutcome } from './types.js'
 
 export * from './types.js'
-export { createTaskStore, TaskStore, defaultTasksDir, type TaskListResult } from './store.js'
+export {
+  createTaskStore,
+  TaskStore,
+  defaultTasksDir,
+  type TaskListResult,
+  type TaskStoreOptions,
+} from './store.js'
 export {
   createTaskLoader,
   TaskLoader,
@@ -113,7 +120,12 @@ export function applyScheduler(ctx: Context, options: SchedulerApplyOptions = {}
   const tasksDir = resolveAssetsTasksDir()
 
   // ---- 2) 任务清单 store ----
-  const store: TaskStore = createTaskStore(tasksDir)
+  // 显式传 assetsDir：任务定义是资产，save/remove 落盘后由 store 自动提交到
+  // `<assetsDir>` 仓库（写入即 commit）。提交失败只走 warn 降级，不阻断业务。
+  const store: TaskStore = createTaskStore(tasksDir, {
+    assetsDir: resolveAssetsDir(),
+    logger: (message) => log('warn', message),
+  })
 
   // ---- 3) 编排 runner：loader → runner → waker 的完整 §4.3 链路 ----
   // scheduler.ts 的 Scheduler 注入 TaskRunnerLike（`run(taskId, taskPath)`，taskId 由

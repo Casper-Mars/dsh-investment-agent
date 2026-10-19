@@ -1,8 +1,12 @@
 /**
- * Agent 工具层入口：装配并注册 14 个工具（4 ledger + 2 strategy + 3 predicts + 5 reviews）。
+ * Agent 工具层入口：装配并注册 15 个工具
+ * （4 ledger + 2 strategy + 3 predicts + 5 reviews + 1 assets）。
  *
  * 数据访问：全部经 {@link ToolContext} 走 domain 层（本地 JSON CRUD），无 HTTP 层。
  *   domain 层仅依赖 node:fs；工具层唯一外部包依赖是 `@deepseek-ai/dsh-tools`（defineTool）。
+ *
+ * 资产写入语义：`asset_commit` 是 agent 写完 skill / 任务程序等资产后的统一提交入口，
+ *   **写入即 commit**：只提交（不写文件），git 失败降级返回，路径非法才抛错。
  *
  * 注册形态：`ctx.tools.register(defineTool({...}))`。
  *
@@ -18,19 +22,27 @@ import { createLedgerTools } from './ledgers.js'
 import { createStrategyTools } from './strategy.js'
 import { createPredictTools } from './predicts.js'
 import { createReviewTools } from './reviews.js'
+import { createAssetTools, type AssetToolsOptions } from './assets.js'
 
 /**
- * 构造 14 个工具定义（顺序即向模型暴露的顺序）：
- *   ledgers(4) → strategy(2) → predicts(3) → reviews(5)。
+ * 构造 15 个工具定义（顺序即向模型暴露的顺序）：
+ *   ledgers(4) → strategy(2) → predicts(3) → reviews(5) → assets(1)。
  *
  * 所有工具共享同一个 {@link ToolContext}（shared dataRoot）。
+ *
+ * @param ctx 共享工具上下文。
+ * @param assetOptions assets 域可选注入（资产目录 / git 执行器 / 日志；测试用）。
  */
-export function createAllTools(ctx: ToolContext): ToolDefinition[] {
+export function createAllTools(
+  ctx: ToolContext,
+  assetOptions: AssetToolsOptions = {},
+): ToolDefinition[] {
   return [
     ...createLedgerTools(ctx),
     ...createStrategyTools(ctx),
     ...createPredictTools(ctx),
     ...createReviewTools(ctx),
+    ...createAssetTools(assetOptions),
   ]
 }
 
@@ -43,16 +55,18 @@ function registerTools(ctx: Context, tools: ToolDefinition[]): () => void {
 }
 
 /**
- * 在当前上下文注册全部 14 个工具，返回注销器。
+ * 在当前上下文注册全部 15 个工具，返回注销器。
  *
  * @param ctx 插件上下文（已 `inject = ['tools', ...]`，`ctx.tools` 就绪）。
  * @param opts 数据根目录配置；默认 `createToolContext()`（dataRoot 取环境变量 / 默认值）。
+ * @param assetOptions assets 域可选注入（资产目录 / git 执行器 / 日志）。
  * @returns 注销器：按注册逆序注销全部工具（由调用方绑定到 `ctx.effect`）。
  */
 export function registerAllTools(
   ctx: Context,
   opts: ToolContextOptions = {},
+  assetOptions: AssetToolsOptions = {},
 ): () => void {
   const toolCtx = createToolContext(opts)
-  return registerTools(ctx, createAllTools(toolCtx))
+  return registerTools(ctx, createAllTools(toolCtx, assetOptions))
 }

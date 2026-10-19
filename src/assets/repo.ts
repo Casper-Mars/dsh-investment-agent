@@ -25,6 +25,10 @@
  *   - 降级不抛：git 不可用 / 无写权限等失败 → 返回 `degraded`，由调用方决定
  *     （策略写入是强语义操作，调用方会据此抛错；本模块自身不中断插件装载）；
  *   - 作者身份经 `src/assets/git.ts` 显式注入，不依赖宿主机 git config。
+ *
+ * 与 {@link commitAssets} 的分工：本模块只负责「仓库就绪 / 首次快照」；
+ *   日常资产写入（skills / tasks / programs / strategies）的统一提交入口在
+ *   `src/assets/commit.ts`（写入即 commit、路径白名单、无空 commit、失败降级）。
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -230,3 +234,18 @@ export function commitAssetsChanges(
     return { dir, committed: false, degraded: true, reason }
   }
 }
+
+
+// 统一写后提交入口（详见 ./commit.ts）：对外暴露资产层 API，避免调用方跨文件猜测。
+export {
+  commitAssets,
+  normalizeAssetPath,
+  normalizeAssetPaths,
+  AssetPathError,
+  ASSET_PATH_PREFIXES,
+  type AssetAction,
+  type AssetFileChange,
+  type AssetsCommitLogger,
+  type CommitAssetsOptions,
+  type CommitAssetsOutcome,
+} from './commit.js'

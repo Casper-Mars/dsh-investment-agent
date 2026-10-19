@@ -12,7 +12,7 @@
  *          `import('./tools/index.js')` **惰性加载**后注册（参照 dsh-tasks）；
  *          注销器绑定 `ctx.effect`，fiber 卸载（含 HMR 重载）时自动注销；
  *          另经 `applyScheduler` 注册 7 个 `task_*` 定时任务工具（详见
- *          `src/scheduler/tools.ts`），合计本插件注册 21 个工具；
+ *          `src/scheduler/tools.ts`），合计本插件注册 22 个工具；
  *       2. 挂载 dsh 原生 `skill-filesystem` provider（`src/skills/provider.ts`），
  *          指向资产层目录 `<assetsDir>/skills`（即 `~/.dsh-ia/assets/skills`）并开启 watch 热更新，
  *          发现 5 个「可进化 SKILL」
@@ -96,7 +96,7 @@ export const inject: string[] = ['tools', 'skills', 'fs']
  *   `@deepseek-ai/dsh-tools` 依赖，模块图较重）在 `apply` 内**惰性加载**，而非
  *   静态 import —— 静态引入会拖慢插件 fiber 的激活时序。惰性加载让插件本体
  *   立刻就绪、14 个模型工具随后注册；调度器另注册 7 个 `task_*` 工具，合计
- *   21 个工具。工具与 SKILL 的注销器均绑定 `ctx.effect`，fiber 卸载（含 HMR
+ *   22 个工具。工具与 SKILL 的注销器均绑定 `ctx.effect`，fiber 卸载（含 HMR
  *   重载）时逆序自动注销。
  *
  * 步骤：

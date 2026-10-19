@@ -18,6 +18,10 @@
  *   不中断整体加载、不抛异常。返回「损坏文件名」列表以示区分（静默跳过亦可）。
  * - **save 落盘 + 重启恢复**：save 后磁盘立即可读（同步落盘）；同一 tasksDir 重新
  *   new 一个 store 能读到已保存数据（跨实例恢复）。
+ * - **写入即 commit**：任务定义是资产，`save()` / `remove()` 落盘后必须经
+ *   {@link commitAssets} 提交到 `<assetsDir>` 仓库（作者身份 `dsh-ia`）；
+ *   内容未变时 no-op（不产生空 commit）。git 失败只告警降级，绝不让
+ *   `save` / `remove` 抛错（磁盘写入成功即业务成功）。
  *
  * 纯 TS，仅依赖 `node:fs` / `node:path` / `node:process`，不 import dsh/cordis API。
  */
@@ -29,10 +33,12 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 import type { TaskDef } from './types.js'
 import { assertSafeSegment } from '../domain/path-guard.js'
 import { resolveAssetsTasksDir } from '../paths.js'
+import { commitAssets, type AssetsCommitLogger } from '../assets/commit.js'
+import type { GitRunner } from '../assets/git.js'
 
 /** `list()` 的返回结构：有效任务 + 损坏（无法解析为 TaskDef）的文件名清单。 */
 export interface TaskListResult {
@@ -40,6 +46,19 @@ export interface TaskListResult {
   readonly tasks: TaskDef[]
   /** 解析失败 / 结构非法的文件名（不含扩展名），供上层诊断，不抛异常。 */
   readonly corrupted: string[]
+}
+
+/** {@link TaskStore} 构造选项（全部可选，保持 `new TaskStore(tasksDir)` 兼容）。 */
+export interface TaskStoreOptions {
+  /**
+   * 资产仓库根目录（`<assetsDir>`）。省略时取 `tasksDir` 的父目录
+   * （`.../assets/tasks` → `.../assets`）。显式传入用于 tasksDir 不在标准布局时。
+   */
+  assetsDir?: string
+  /** 自定义 git 执行器（仅测试注入）。 */
+  gitRunner?: GitRunner
+  /** 提交日志出口（默认统一日志门面 warn 级）。 */
+  logger?: AssetsCommitLogger
 }
 
 /** 任务清单文件扩展名（不含点）。 */
@@ -83,18 +102,78 @@ function isTaskDef(value: unknown): value is TaskDef {
  *
  * 通过工厂函数 {@link createTaskStore} 创建（对齐 types.ts 的 Clock/Timer 可注入风格），
  * 亦可用 `new TaskStore(tasksDir)` 直接构造。dataDir 注入，不写死路径。
+ *
+ * 写入即 commit：`save` / `remove` 在磁盘操作后提交 `tasks/<id>.json`。
  */
 export class TaskStore {
   /** 任务清单目录（绝对路径，构造时注入）。 */
   private readonly tasksDir: string
+  /** 资产仓库根目录（save/remove 后自动提交到此仓库）。 */
+  private readonly assetsDir: string
+  /** 可注入 git 执行器 / 日志（测试降级路径用）。 */
+  private readonly gitRunner: GitRunner | undefined
+  private readonly logger: AssetsCommitLogger | undefined
 
-  constructor(tasksDir: string) {
+  constructor(tasksDir: string, options: TaskStoreOptions = {}) {
     this.tasksDir = tasksDir
+    this.assetsDir = options.assetsDir ?? dirname(tasksDir)
+    this.gitRunner = options.gitRunner
+    this.logger = options.logger
   }
 
   /** 某任务清单文件的绝对路径。id 为外部输入，先做路径段安全校验。 */
   private filePath(id: string): string {
     return join(this.tasksDir, `${safeId(id)}${TASK_FILE_EXT}`)
+  }
+
+  /**
+   * 任务文件相对资产根的路径（如 `tasks/market-pulse.json`）。
+   * tasksDir 不在 assetsDir 之下时返回 undefined（跳过提交，不影响落盘）。
+   */
+  private assetRelPath(id: string): string | undefined {
+    const rel = relative(this.assetsDir, this.filePath(id))
+    if (rel === '' || isAbsolute(rel) || rel === '..' || rel.startsWith(`..${sep}`)) {
+      return undefined
+    }
+    return rel.split(sep).join('/')
+  }
+
+  /**
+   * 写入/删除后提交对应任务文件。git 失败（含路径非法等意外）一律吞掉并告警，
+   * 保证 save / remove 的契约「磁盘成功即成功」不被破坏。
+   */
+  private commitTask(id: string): void {
+    const path = this.assetRelPath(id)
+    if (!path) {
+      this.warn(`[dsh-ia/store] 任务 ${id} 不在资产目录内，跳过 assets 提交：${this.tasksDir}`)
+      return
+    }
+    try {
+      const outcome = commitAssets({
+        assetsDir: this.assetsDir,
+        paths: [path],
+        gitRunner: this.gitRunner,
+        logger: this.logger,
+      })
+      if (outcome.degraded) {
+        this.warn(`[dsh-ia/store] 任务 ${id} 提交降级（文件已落盘）：${outcome.reason}`)
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err)
+      this.warn(`[dsh-ia/store] 任务 ${id} 提交异常（已忽略）：${reason}`)
+    }
+  }
+
+  /** 统一告警出口（logger 支持门面对象或回调函数）。 */
+  private warn(message: string): void {
+    const logger = this.logger
+    if (!logger) return
+    try {
+      if (typeof logger === 'function') logger(message)
+      else logger.warn(message)
+    } catch {
+      // 日志本身失败不得影响业务。
+    }
   }
 
   /** 列出所有已持久化任务（稳定顺序：按 id 升序），并归集损坏文件名。 */
@@ -152,21 +231,26 @@ export class TaskStore {
     }
   }
 
-  /** 写入 / 覆盖单个任务（TaskDef），同步落盘到 `assets/tasks/<id>.json`。 */
+  /**
+   * 写入 / 覆盖单个任务（TaskDef），同步落盘到 `assets/tasks/<id>.json`，
+   * 随后自动提交该文件（写入即 commit）。内容未变 → no-op；提交失败仅告警。
+   */
   save(task: TaskDef): void {
     const path = this.filePath(task.id)
     mkdirSync(join(this.tasksDir), { recursive: true })
     writeFileSync(path, JSON.stringify(task, null, 2), 'utf8')
+    this.commitTask(task.id)
   }
 
   /**
-   * 删除单个任务文件。
+   * 删除单个任务文件，随后自动提交删除（action=delete）。
    * @returns 是否删除成功；文件不存在返回 `false`（不抛错）。
    */
   remove(id: string): boolean {
     const path = this.filePath(id)
     if (!existsSync(path)) return false
     rmSync(path, { force: true })
+    this.commitTask(id)
     return true
   }
 }
@@ -175,10 +259,14 @@ export class TaskStore {
  * 创建任务清单 store 的工厂函数（无副作用工厂，对齐可注入设计）。
  *
  * @param tasksDir 任务清单目录；省略时使用 {@link defaultTasksDir}。
+ * @param options 资产目录 / git 执行器 / 日志注入（可选）。
  * @returns 就绪的 {@link TaskStore} 实例（目录在首次 save 时惰性创建，无需预建）。
  */
-export function createTaskStore(tasksDir?: string): TaskStore {
-  return new TaskStore(tasksDir ?? defaultTasksDir())
+export function createTaskStore(
+  tasksDir?: string,
+  options: TaskStoreOptions = {},
+): TaskStore {
+  return new TaskStore(tasksDir ?? defaultTasksDir(), options)
 }
 
 export type { TaskDef }

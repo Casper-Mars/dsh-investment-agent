@@ -1,6 +1,6 @@
 # tools
 
-模型工具层（已完成，t100353）：以 `@deepseek-ai/dsh-tools` 的 `defineTool` 定义 14 个金融工具，
+模型工具层（已完成，t100353）：以 `@deepseek-ai/dsh-tools` 的 `defineTool` 定义 15 个金融工具（含资产写后提交），
 经 `ctx.tools.register` 注册。
 
 ## 目录结构
@@ -18,7 +18,7 @@ src/tools/
 └── index.ts            # createAllTools / registerAllTools 统一入口
 ```
 
-## 工具清单（14 个，§4 契约表 + §10.8 策略域）
+## 工具清单（15 个，§4 契约表 + §10.8 策略域 + assets）
 
 | 组 | 工具 | 类别 |
 |----|------|------|
@@ -26,14 +26,15 @@ src/tools/
 | strategy | strategy_get / strategy_set | 1 写 + 1 读 |
 | predicts | predict_make / predict_verify / predict_get | 1 写 + 2 读 |
 | reviews | review_check / review_report / review_get / review_metrics / review_retrospect | 1 写 + 4 读 |
+| assets | asset_commit | 1 写（只提交，不写文件） |
 
 > 注：任务标题写「15 个」，但 §4 契约表实为 4+3+5 = 12 个（以契约表为准）；
-> 后续并入策略域 strategy_get / strategy_set（§10.8），现为 14 个。
+> 后续并入策略域 strategy_get / strategy_set（§10.8），现为 15 个（另含 assets 域 asset_commit）。
 
 ## 关键设计
 
 - **dataRoot 统一注入**：`createToolContext({ dataRoot })` 构造时实例化 Ledger / Predicts /
-  Reviews / StrategyRegistry 各一次，14 个工具闭包共享同一数据源。dataRoot 缺省取
+  Reviews / StrategyRegistry 各一次，15 个工具闭包共享同一数据源。dataRoot 缺省取
   `DSH_IA_DATA_DIR` 环境变量，再回退 `.dsh-ia/data`。
 - **字段映射**：domain 返回驼峰，output.schema 用蛇形（§4 契约），execute 内做显式蛇形映射，
   二者逐字段对齐（lossless JSON）。

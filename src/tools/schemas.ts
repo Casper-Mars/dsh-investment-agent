@@ -291,3 +291,45 @@ export const reviewRetrospectResultSchema = {
     improvements: { type: 'array', items: { type: 'string' }, required: true, description: '改进建议列表' },
   },
 } as const
+/* -------------------------------------------------------------------------- *
+ * assets 域（跨资产写后提交）
+ * -------------------------------------------------------------------------- */
+
+/** 单个资产变更项：相对路径 + 动作。 */
+export const assetFileChangeSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    path: { type: 'string', required: true, description: '相对 assets 根的路径' },
+    action: {
+      type: 'string',
+      enum: ['create', 'update', 'delete'],
+      required: true,
+      description: '变更动作',
+    },
+  },
+} as const
+
+/**
+ * asset_commit 成功返回：
+ * `{ dir, committed, degraded, commit?, reason, files }`。
+ *
+ * 注意：`commit` 仅在成功提交时存在（no-op / 降级时省略）。
+ */
+export const assetCommitResultSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    dir: { type: 'string', required: true, description: '资产仓库根目录' },
+    committed: { type: 'boolean', required: true, description: '是否产生了新提交' },
+    degraded: { type: 'boolean', required: true, description: '是否因 git 失败降级' },
+    commit: { type: 'string', description: '本次提交的 git 短 SHA（12 位）' },
+    reason: { type: 'string', required: true, description: '判据 / 降级原因' },
+    files: {
+      type: 'array',
+      items: assetFileChangeSchema,
+      required: true,
+      description: '本次实际变更的资产（no-op 时为空数组）',
+    },
+  },
+} as const

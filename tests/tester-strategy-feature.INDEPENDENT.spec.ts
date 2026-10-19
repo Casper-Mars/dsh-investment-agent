@@ -13,7 +13,7 @@
  *      历史回读 / parent 冲突 / 未 init / 未设定）
  *   2. 阈值来源 E2E（front-matter → 旧 json → 默认；非法键回落且不抛）
  *   3. review_retrospect 端到端（调整策略阈值可翻转「触发检讨」结论）
- *   4. 运行时可见性（真实插件装载：工具 21 / SKILL 5 可进化 + 1 固有）
+ *   4. 运行时可见性（真实插件装载：工具 22 / SKILL 5 可进化 + 1 固有）
  *   5. 旧功能全量回归（ledger_* / predict_* / review_*）
  *   6. Prompt/Skill 文本（advisor 6 步 + 措辞；3 skill 无残留；strategy-authorship 注册且 frontmatter 合法）
  *   7. 契约未变（顶层 inject 三项；cordis.patch.yml 无 diff；无新依赖）
@@ -97,7 +97,7 @@ async function bootRegistry(dataRoot: string): Promise<Booted> {
   const tools = (app as unknown as { tools: ToolBox }).tools
   await vi.waitFor(
     () => {
-      expect(tools.schemas()).toHaveLength(14)
+      expect(tools.schemas()).toHaveLength(15)
     },
     { timeout: 5000, interval: 10 },
   )
@@ -417,11 +417,11 @@ describe('3. review_retrospect 端到端：触发检讨由策略文档阈值决�
 })
 
 /* ================================================================== *
- * 4. 运行时可见性（真实插件装载：工具 21 / SKILL 5 可进化 + 1 固有）
+ * 4. 运行时可见性（真实插件装载：工具 22 / SKILL 5 可进化 + 1 固有）
  * ================================================================== */
 
 describe('4. 运行时可见性：真实插件装载路径', () => {
-  it('顶层 inject 契约 + 真实装载后工具 21 / SKILL 5 可进化（+ 1 固有，skill-filesystem provider）', async () => {
+  it('顶层 inject 契约 + 真实装载后工具 22 / SKILL 5 可进化（+ 1 固有，skill-filesystem provider）', async () => {
     expect(topLevelInject).toEqual(['tools', 'skills', 'fs'])
 
     process.env.DSH_IA_DATA_DIR = dir
@@ -444,7 +444,7 @@ describe('4. 运行时可见性：真实插件装载路径', () => {
     const toolsBox = (app as unknown as { tools: ToolBox }).tools
     await vi.waitFor(
       () => {
-        expect(toolsBox.schemas()).toHaveLength(21)
+        expect(toolsBox.schemas()).toHaveLength(22)
       },
       { timeout: 8000, interval: 10 },
     )

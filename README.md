@@ -11,7 +11,7 @@
 ## 核心特性
 
 - **投资专家人设**：以 `advisor.md` 注入 system-prompt，定义角色、原则、工作流、自我进化与合规边界。
-- **14 个金融工具**：台账（4）+ 策略（2）+ 预判（3）+ 复盘（5），经 `defineTool` 注册。
+- **15 个金融工具**：台账（4）+ 策略（2）+ 预判（3）+ 复盘（5）+ 资产提交（1），经 `defineTool` 注册。
 - **7 个定时任务工具**：`task_create` / `task_list` / `task_get` / `task_update` / `task_delete` / `task_enable` / `task_disable`。
 - **7 个 SKILL**：5 个「可进化 SKILL」（方法论，随复盘迭代）+ 2 个「固有 SKILL」（固件约束，不进化）。
 - **定时任务（感知）层**：独立的 loader → runner（独立 Node 进程）→ waker（定点唤醒投递）编排，支持 agent 动态注册任意 cron。
@@ -108,7 +108,7 @@ src/
 ├── session-ensure.ts   # 固定会话确保（检查 → 恢复 → 新建）
 ├── opening-notice.ts   # 开场 notice 投递
 ├── message-source.ts   # 消息构造（producer 自有 source kind）
-├── tools/              # 14 个金融工具
+├── tools/              # 15 个金融工具
 ├── scheduler/          # 定时任务层（load → run → wake + 7 工具）
 ├── skills/             # SKILL 种子 + provider + 固件 skill 注册 + git 仓库
 ├── prompts/            # advisor.md 人设 + systemPrompt 注入

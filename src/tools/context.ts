@@ -1,7 +1,7 @@
 /**
  * Agent 工具层：ToolContext 工厂 —— dataRoot 统一注入点。
  *
- * 14 个工具需共享同一份数据根目录。本工厂在构造时：
+ * 15 个工具需共享同一份数据根目录。本工厂在构造时：
  *   1. 解析 dataRoot（构造注入优先，缺省回退到环境变量
  *      `DSH_IA_DATA_DIR`，再回退到 `~/.dsh-ia/data`）；
  *   2. 用该 dataRoot 实例化 Ledger / Predicts / Reviews；StrategyRegistry 使用
@@ -76,7 +76,7 @@ function thresholdsFromFrontmatter(fm: unknown): Thresholds | undefined {
   return result
 }
 
-/** 领域类实例容器：14 个工具闭包共享。 */
+/** 领域类实例容器：15 个工具闭包共享。 */
 export interface ToolContext {
   /** 数据根目录（绝对路径）。 */
   readonly dataRoot: string

@@ -153,11 +153,11 @@ async function bootRegistry(dataRoot: string): Promise<{ tools: ToolBox; dispose
   } as never) as unknown as { dispose: () => Promise<void> }
   const tools = (app as unknown as { tools: ToolBox }).tools
   let tries = 0
-  while (tools.schemas().length !== 14 && tries < 500) {
+  while (tools.schemas().length !== 15 && tries < 500) {
     await new Promise((r) => setTimeout(r, 10))
     tries += 1
   }
-  expect(tools.schemas()).toHaveLength(14)
+  expect(tools.schemas()).toHaveLength(15)
   return {
     tools,
     async dispose() {
