@@ -49,6 +49,7 @@ import {
 } from '../src/skills/index.js'
 import { parseSkillFile } from '../src/skills/frontmatter.js'
 import { ensureSkillAssetsRepo } from '../src/skills/repo.js'
+import { commitAssetsChanges, ensureAssetsRepo } from '../src/assets/repo.js'
 import * as srcPlugin from '../src/plugin.js'
 
 const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -275,8 +276,8 @@ describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载',
 
     expect(() => srcPlugin.apply(m.ctx as never)).not.toThrow()
 
-    // 恰注册 2 个固有 SKILL。
-    expect(m.registered).toHaveLength(2)
+    // 恰注册 3 个固有 SKILL（task-authorship + skill-authorship + finance-evolution）。
+    expect(m.registered).toHaveLength(3)
     const reg = m.registered.find((r) => r.name === TA)!
     expect(reg.name).toBe(TA)
     expect(reg.source).toBe('runtime')
@@ -322,7 +323,7 @@ describe('[AC3] plugin 装载：task-authorship 静态注册 / 降级 / 卸载',
     const m = buildMockCtx('ok')
 
     srcPlugin.apply(m.ctx as never)
-    expect(m.registered).toHaveLength(2)
+    expect(m.registered).toHaveLength(3)
     expect(m.removed).toHaveLength(0)
 
     const intrinsic = m.effects.find((e) => e.label === 'dsh-ia task-authorship skill')
@@ -444,25 +445,29 @@ describe('[AC4] ensureSkillAssetsRepo 预置恰 5 个可进化目录，不含 ta
     }
   }, 30_000)
 
-  it('AC4b：真实 git 仓库——含 .git、首版恰 1 个 commit、被追踪 SKILL.md 恰 5 个且无 task-authorship', () => {
+  it('AC4b：单仓真实 git——外层仓库含 .git、首版恰 1 个 commit、被跟踪 SKILL.md 恰 5 个且无 task-authorship', () => {
     const assetsDir = mkTmp('dsh-fin-ta-assets-git-')
+    ensureAssetsRepo({ assetsDir, logger: () => {} })
     ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
+    commitAssetsChanges({ dir: assetsDir, logger: () => {} })
     const repoDir = join(assetsDir, 'skills')
 
-    expect(existsSync(join(repoDir, '.git'))).toBe(true)
+    // 唯一仓库在外层；skills 下无嵌套 .git。
+    expect(existsSync(join(assetsDir, '.git'))).toBe(true)
+    expect(existsSync(join(repoDir, '.git'))).toBe(false)
 
-    const log = execFileSync('git', ['-C', repoDir, 'log', '--oneline'], { encoding: 'utf8' })
+    const log = execFileSync('git', ['-C', assetsDir, 'log', '--oneline'], { encoding: 'utf8' })
     const commits = log.trim().split('\n').filter(Boolean)
     expect(commits).toHaveLength(1)
 
-    const tracked = execFileSync('git', ['-C', repoDir, 'ls-files'], { encoding: 'utf8' })
+    const tracked = execFileSync('git', ['-C', assetsDir, 'ls-files'], { encoding: 'utf8' })
       .trim()
       .split('\n')
       .filter(Boolean)
     expect(tracked.filter((f) => f.endsWith('/SKILL.md'))).toHaveLength(5)
     expect(tracked.some((f) => f.startsWith(`${TA}/`))).toBe(false)
     // 工作区干净（无未提交变更）。
-    const status = execFileSync('git', ['-C', repoDir, 'status', '--porcelain'], {
+    const status = execFileSync('git', ['-C', assetsDir, 'status', '--porcelain'], {
       encoding: 'utf8',
     })
     expect(status.trim()).toBe('')
@@ -470,15 +475,17 @@ describe('[AC4] ensureSkillAssetsRepo 预置恰 5 个可进化目录，不含 ta
 
   it('AC4c：幂等——二次预置为 no-op，不产生第二个 commit', () => {
     const assetsDir = mkTmp('dsh-fin-ta-assets-idem-')
+    ensureAssetsRepo({ assetsDir, logger: () => {} })
     const first = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
     expect(first.provisioned).toBe(true)
+    expect(commitAssetsChanges({ dir: assetsDir, logger: () => {} }).committed).toBe(true)
 
     const second = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
     expect(second.provisioned).toBe(false)
     expect(second.degraded).toBe(false)
+    expect(commitAssetsChanges({ dir: assetsDir, logger: () => {} }).committed).toBe(false)
 
-    const repoDir = join(assetsDir, 'skills')
-    const commits = execFileSync('git', ['-C', repoDir, 'log', '--oneline'], {
+    const commits = execFileSync('git', ['-C', assetsDir, 'log', '--oneline'], {
       encoding: 'utf8',
     })
       .trim()

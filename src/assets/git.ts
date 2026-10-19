@@ -1,10 +1,8 @@
 /**
  * assets 层共享 git 基础设施。
  *
- * 背景：资产层存在两类 git 仓库 ——
- *   1. `<assetsDir>/skills`：独立 git 仓库（skill 自有进化历史）；
- *   2. `<assetsDir>`：外层 git 仓库（strategies / programs / tasks 等资产共用，
- *      `.gitignore` 中排除 `skills/`，避免形成 gitlink / 嵌入式仓库语义）。
+ * 背景：资产层只有一个 git 仓库 —— `<assetsDir>`（strategies / skills / programs /
+ *   tasks 共用同一条历史）。`<assetsDir>/skills` 只是普通目录，**不是**嵌套仓库。
  *
  * 两个模块都需要「以 `node:child_process` 调 git + 显式注入作者身份」这一层，
  * 故抽到本叶子模块，保持**单一实现**，避免 skills / assets 相互反向导入。

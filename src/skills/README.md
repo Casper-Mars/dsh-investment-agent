@@ -6,8 +6,9 @@
 
 ### 可进化 SKILL（5 个，`SKILL_NAMES`）
 
-随 `repo.ts` 冷启动种子落盘到 `<dataRoot>/skills`（独立 git 仓库），由 `provider.ts` 挂载的
-`skill-filesystem` provider 发现，改 `SKILL.md` 经 watch 热更新（无需重启）。
+随 `repo.ts` 冷启动种子落盘到 `<assetsDir>/skills`（单仓普通目录，与 strategies 等共用
+`<assetsDir>/.git`），由 `provider.ts` 挂载的 `skill-filesystem` provider 发现，改 `SKILL.md`
+经 watch 热更新（无需重启）。
 
 | 目录 | name | 作用 |
 |------|------|------|
@@ -26,7 +27,7 @@
 | `finance-evolution/` | finance-evolution | 资产进化的执行流程（Ralph loop：改 → 自检 → 不过继续改 → 提交 → 下次出结果时复核）；引擎自身不可进化 |
 
 > 「固有 SKILL」定义**固件约束**（任务程序的结构契约 / 写 skill 的合规规范），属方法论层，
-> **不进入** git 进化链与热更新时间线：它们**不落** `<dataRoot>/skills`，由 `src/plugin.ts` 经
+> **不进入** git 进化链与热更新时间线：它们**不落** `<assetsDir>/skills`，由 `src/plugin.ts` 经
 > `ctx.skills.register` **静态注册**（`index.ts` 的 `createIntrinsicSkillRegistration` /
 > `createSkillAuthorshipRegistration`）。
 
@@ -41,11 +42,11 @@
 |------|------|
 | `frontmatter.ts` | SKILL.md frontmatter 轻量解析器（无第三方 YAML 依赖） |
 | `index.ts` | 5 个可进化 SKILL 的随包种子读取 / 解析出口（`SKILL_NAMES` / `loadSkillMarkdown` / `parseSkill`）+ 3 个固有 SKILL 读取 / 注册入口（`TASK_AUTHORSHIP_SKILL_NAME` / `SKILL_AUTHORSHIP_SKILL_NAME` / `FINANCE_EVOLUTION_SKILL_NAME` / `loadTaskAuthorshipMarkdown` / `loadSkillAuthorshipMarkdown` / `loadFinanceEvolutionMarkdown` / `createIntrinsicSkillRegistration` / `createSkillAuthorshipRegistration` / `createFinanceEvolutionRegistration`） |
-| `repo.ts` | 运行时数据目录 `<dataRoot>/skills` 的独立 git 仓库：冷启动幂等预置（5 个可进化 SKILL 种子落盘 + 首版 commit） |
-| `provider.ts` | 挂载 dsh 原生 `skill-filesystem` provider（指向 `<dataRoot>/skills`，开启 watch 热更新，发现 5 个可进化 SKILL） |
+| `repo.ts` | 运行时目录 `<assetsDir>/skills` 的种子落盘：幂等补齐 5 个可进化 SKILL（不覆盖已有内容；不做 git 操作，仓库由 `assets/repo.ts` 统一管理） |
+| `provider.ts` | 挂载 dsh 原生 `skill-filesystem` provider（指向 `<assetsDir>/skills`，开启 watch 热更新，发现 5 个可进化 SKILL） |
 
 > 运行时注册：5 个可进化 SKILL 不在本模块静态注册，而由 `provider.ts` 挂载的
-> `skill-filesystem` provider 从 `<dataRoot>/skills` 发现；改 `SKILL.md` 经 chokidar
+> `skill-filesystem` provider 从 `<assetsDir>/skills` 发现；改 `SKILL.md` 经 chokidar
 > watch → invalidate → 下次组装 prompt 生效（无需重启）。`index.ts` 的静态读取仅用于
 > `repo.ts` 的冷启动种子预置。固有 SKILL `task-authorship` / `skill-authorship` 则由
 > `plugin.ts` 静态注册。
@@ -55,7 +56,7 @@
 - 路径：`src/skills/<name>/SKILL.md`（目录 bundle），目录名 = frontmatter `name`（kebab-case）。
 - YAML frontmatter：**必填** `name` / `description`，**可选** `whenToUse`。
 - 注册：
-  - 可进化 SKILL —— 由 `skill-filesystem` provider 从运行时数据目录 `<dataRoot>/skills` 发现（目录 bundle，`source='custom'`，`invocation` 双开）；
+  - 可进化 SKILL —— 由 `skill-filesystem` provider 从资产层目录 `<assetsDir>/skills` 发现（目录 bundle，`source='custom'`，`invocation` 双开）；
   - 固有 SKILL（task-authorship / skill-authorship）—— 由 `plugin.ts` 静态注册（`source='runtime'`，`invocation` 双开）。
 
 ## 内容红线

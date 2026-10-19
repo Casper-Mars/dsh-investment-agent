@@ -5,8 +5,8 @@
  *   历史上 skill（5 个可进化 + 1 个固有）由 `src/skills/index.ts` 以「读文件 + `ctx.skills.register`」
  *   静态注册到运行时层。该路径无法热更新（改 SKILL.md 需重启），且把「资产发现」
  *   与「资产内容」耦合在本插件里。本模块改为挂载 dsh 原生 filesystem provider，
- *   指向资产层目录 `<assetsDir>/skills`（`src/skills/repo.ts` 的独立 git 仓库，
- *   即 `~/.dsh-ia/assets/skills`），并开启 `watch` 热更新。
+ *   指向资产层目录 `<assetsDir>/skills`（`src/skills/repo.ts` 落盘的普通目录，
+ *   与 strategies / programs / tasks 共用 `<assetsDir>/.git` 单仓），并开启 `watch` 热更新。
  *
  * 范围：本 provider 发现的是 **5 个「可进化 SKILL」**（= `SKILL_NAMES`）。固有 SKILL
  *   `task-authorship` 不落资产目录、不参与本 provider 发现，改由 `src/plugin.ts` 静态注册。

@@ -33,11 +33,16 @@ import SkillRegistry from '@deepseek-ai/dsh-skill'
 import {
   ensureSkillAssetsRepo,
   resolveSkillsRepoDir,
-  INITIAL_COMMIT_MESSAGE,
   SKILL_FILENAME,
   type SkillAssetsRepoOutcome,
-  type GitRunner,
 } from '../src/skills/repo.js'
+import {
+  commitAssetsChanges,
+  ensureAssetsRepo,
+  INITIAL_COMMIT_MESSAGE,
+  type AssetsCommitOutcome,
+} from '../src/assets/repo.js'
+import type { GitRunner } from '../src/assets/git.js'
 import {
   mountSkillFilesystemProviderAsync,
   SKILL_PROVIDER_NAME,
@@ -82,6 +87,14 @@ function commitCount(repoDir: string): number {
   } catch {
     return 0
   }
+}
+
+/** 单仓冷启动：外层仓库就绪 → 种子落盘 → 首次提交。 */
+function seed(assetsDir: string): ReturnType<typeof ensureSkillAssetsRepo> {
+  ensureAssetsRepo({ assetsDir, logger: noop })
+  const out = ensureSkillAssetsRepo({ assetsDir, logger: noop })
+  commitAssetsChanges({ dir: assetsDir, logger: noop })
+  return out
 }
 
 /**
@@ -204,21 +217,22 @@ describe('[AC1] 冷启动预置 + provider 扫描 + watch 热更新', () => {
  * 验收 2：独立 git 仓库 + 显式作者身份
  * ================================================================== */
 
-describe('[AC2] 独立 git 仓库 + 首版 commit + 显式作者身份', () => {
-  it('assets/skills 是独立 git 仓库（toplevel 即自身），首版恰 1 个 commit', () => {
+describe('[AC2] assets 单仓 + 首版 commit + 显式作者身份', () => {
+  it('assets 是唯一仓库（toplevel 即 assetsDir），skills 不是独立仓，首版恰 1 个 commit', () => {
     const assetsDir = mkTmp('t100464-ac2-repo-')
-    const out = ensureSkillAssetsRepo({ assetsDir, logger: noop })
+    const out = seed(assetsDir)
     expect(out.provisioned).toBe(true)
-    expect(existsSync(join(out.dir, '.git'))).toBe(true)
+    expect(existsSync(join(assetsDir, '.git'))).toBe(true)
+    expect(existsSync(join(out.dir, '.git'))).toBe(false)
 
     const topLevel = git(['rev-parse', '--show-toplevel'], out.dir).trim()
-    expect(realpathSync(topLevel)).toBe(realpathSync(out.dir))
+    expect(realpathSync(topLevel)).toBe(realpathSync(assetsDir))
     // 不在被测主仓库内（独立版本线）。
-    expect(realpathSync(out.dir).startsWith(realpathSync(REPO_ROOT) + '/')).toBe(false)
+    expect(realpathSync(assetsDir).startsWith(realpathSync(REPO_ROOT) + '/')).toBe(false)
 
-    expect(commitCount(out.dir)).toBe(1)
-    expect(git(['log', '-1', '--pretty=%s'], out.dir).trim()).toBe(INITIAL_COMMIT_MESSAGE)
-    expect(git(['status', '--porcelain'], out.dir).trim()).toBe('')
+    expect(commitCount(assetsDir)).toBe(1)
+    expect(git(['log', '-1', '--pretty=%s'], assetsDir).trim()).toBe(INITIAL_COMMIT_MESSAGE)
+    expect(git(['status', '--porcelain'], assetsDir).trim()).toBe('')
   })
 
   it('作者/提交者显式为 dsh-ia <dsh-ia@localhost>，且 GIT_CONFIG_GLOBAL=/dev/null、GIT_CONFIG_SYSTEM=/dev/null 下仍成立', () => {
@@ -229,11 +243,11 @@ describe('[AC2] 独立 git 仓库 + 首版 commit + 显式作者身份', () => {
         GIT_CONFIG_GLOBAL: '/dev/null',
         GIT_CONFIG_SYSTEM: '/dev/null',
       },
-      () => ensureSkillAssetsRepo({ assetsDir, logger: noop }),
+      () => seed(assetsDir),
     )
     expect(out.provisioned).toBe(true)
     expect(out.degraded).toBe(false)
-    expect(git(['log', '-1', '--format=%an <%ae>|%cn <%ce>'], out.dir).trim()).toBe(
+    expect(git(['log', '-1', '--format=%an <%ae>|%cn <%ce>'], assetsDir).trim()).toBe(
       'dsh-ia <dsh-ia@localhost>|dsh-ia <dsh-ia@localhost>',
     )
   })
@@ -255,13 +269,13 @@ describe('[AC2] 独立 git 仓库 + 首版 commit + 显式作者身份', () => {
         HOME: fakeHome,
         XDG_CONFIG_HOME: join(fakeHome, '.config'),
       },
-      () => ensureSkillAssetsRepo({ assetsDir, logger: noop }),
+      () => seed(assetsDir),
     )
     expect(out.provisioned).toBe(true)
-    expect(git(['log', '-1', '--format=%an <%ae>'], out.dir).trim()).toBe(
+    expect(git(['log', '-1', '--format=%an <%ae>'], assetsDir).trim()).toBe(
       'dsh-ia <dsh-ia@localhost>',
     )
-    expect(git(['log', '-1', '--format=%cn <%ce>'], out.dir).trim()).toBe(
+    expect(git(['log', '-1', '--format=%cn <%ce>'], assetsDir).trim()).toBe(
       'dsh-ia <dsh-ia@localhost>',
     )
   })
@@ -310,10 +324,12 @@ describe('[AC5] DSH_IA_HOME 决定 skills 路径；DSH_IA_DATA_DIR 不再影响'
       const resolved = resolveAssetsDir()
       expect(resolved).toBe(join(home, 'assets'))
       expect(resolveSkillsRepoDir(resolved)).toBe(join(home, 'assets', 'skills'))
+      ensureAssetsRepo({ logger: noop })
       return ensureSkillAssetsRepo({ logger: noop })
     })
     expect(out.dir).toBe(join(home, 'assets', 'skills'))
-    expect(existsSync(join(home, 'assets', 'skills', '.git'))).toBe(true)
+    expect(existsSync(join(home, 'assets', '.git'))).toBe(true)
+    expect(existsSync(join(home, 'assets', 'skills', '.git'))).toBe(false)
   })
 
   it('设置 DSH_IA_DATA_DIR（含预置的旧 skills 仓库）不会改变 skills 落点', () => {
@@ -370,9 +386,9 @@ describe('[AC6] 源码无 compat 别名 dataRoot', () => {
 describe('[AC7] 幂等', () => {
   it('连续两次 ensure：第二次 provisioned=false，commit 数不变，内容不变', () => {
     const assetsDir = mkTmp('t100464-ac7-')
-    const first = ensureSkillAssetsRepo({ assetsDir, logger: noop })
+    const first = seed(assetsDir)
     expect(first.provisioned).toBe(true)
-    expect(commitCount(first.dir)).toBe(1)
+    expect(commitCount(assetsDir)).toBe(1)
 
     const before = SKILL_NAMES.map((n) =>
       readFileSync(join(first.dir, n, SKILL_FILENAME), 'utf8'),
@@ -382,13 +398,14 @@ describe('[AC7] 幂等', () => {
     expect(second.provisioned).toBe(false)
     expect(second.degraded).toBe(false)
     expect(second.dir).toBe(first.dir)
-    expect(commitCount(first.dir)).toBe(1)
+    expect(commitAssetsChanges({ dir: assetsDir, logger: noop }).committed).toBe(false)
+    expect(commitCount(assetsDir)).toBe(1)
 
     const after = SKILL_NAMES.map((n) =>
       readFileSync(join(first.dir, n, SKILL_FILENAME), 'utf8'),
     )
     expect(after).toEqual(before)
-    expect(git(['status', '--porcelain'], first.dir).trim()).toBe('')
+    expect(git(['status', '--porcelain'], assetsDir).trim()).toBe('')
   })
 })
 
@@ -397,43 +414,46 @@ describe('[AC7] 幂等', () => {
  * ================================================================== */
 
 describe('[AC8] 降级语义不被破坏', () => {
-  it('gitRunner 全程抛错 → degraded:true、provisioned:false、不抛异常', () => {
+  it('git 不可用 → 资产仓库降级，但 skill 种子仍可落盘（内容可读）', () => {
     const assetsDir = mkTmp('t100464-ac8-fail-')
     const failing: GitRunner = () => {
       throw new Error('spawn git ENOENT')
     }
     const logs: string[] = []
 
-    let out!: SkillAssetsRepoOutcome
-    expect(() => {
-      out = ensureSkillAssetsRepo({
-        assetsDir,
-        gitRunner: failing,
-        logger: (message) => logs.push(message),
-      })
-    }).not.toThrow()
-
-    expect(out.degraded).toBe(true)
-    expect(out.provisioned).toBe(false)
-    expect(out.dir).toBe(resolveSkillsRepoDir(assetsDir))
+    const assets = ensureAssetsRepo({
+      assetsDir,
+      gitRunner: failing,
+      logger: (message) => logs.push(message),
+    })
+    expect(assets.degraded).toBe(true)
     expect(logs.join('\n')).toMatch(/降级/)
-    expect(existsSync(join(out.dir, '.git'))).toBe(false)
+    expect(existsSync(join(assetsDir, '.git'))).toBe(false)
+
+    // 降级不阻断种子落盘：内容仍可被 provider 读取。
+    const out = ensureSkillAssetsRepo({ assetsDir, logger: noop })
+    expect(out.degraded).toBe(false)
+    expect(out.provisioned).toBe(true)
+    expect(out.dir).toBe(resolveSkillsRepoDir(assetsDir))
+    expect(existsSync(join(out.dir, SKILL_NAMES[0], SKILL_FILENAME))).toBe(true)
   })
 
   it('仅 commit 阶段失败（git 命令非零退出）→ degraded:true、不抛异常', () => {
     const assetsDir = mkTmp('t100464-ac8-commit-')
+    ensureAssetsRepo({ assetsDir, logger: noop })
+    ensureSkillAssetsRepo({ assetsDir, logger: noop })
     const partial: GitRunner = (args, cwd) => {
       if (args[0] === 'commit') throw new Error('commit failed: exit status 1')
       return git(args, cwd)
     }
 
-    let out!: SkillAssetsRepoOutcome
+    let out!: AssetsCommitOutcome
     expect(() => {
-      out = ensureSkillAssetsRepo({ assetsDir, gitRunner: partial, logger: noop })
+      out = commitAssetsChanges({ dir: assetsDir, gitRunner: partial, logger: noop })
     }).not.toThrow()
 
     expect(out.degraded).toBe(true)
-    expect(out.provisioned).toBe(false)
-    expect(commitCount(out.dir)).toBe(0)
+    expect(out.committed).toBe(false)
+    expect(commitCount(assetsDir)).toBe(0)
   })
 })

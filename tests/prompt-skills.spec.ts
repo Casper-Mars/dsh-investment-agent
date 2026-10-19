@@ -79,10 +79,10 @@ afterEach(() => {
 describe('验收 1：advisor.md 人设内容', () => {
   const md = loadAdvisorMd()
 
-  it('包含角色 / 原则 / 工作流 / 合规四大板块', () => {
+  it('包含角色 / 思维与能动性 / 工作流 / 合规四大板块', () => {
     expect(md.trim().length).toBeGreaterThan(300)
     expect(md).toMatch(/#\s*角色/)
-    expect(md).toMatch(/#\s*原则/)
+    expect(md).toMatch(/#\s*思维与能动性/)
     expect(md).toMatch(/#\s*工作流/)
     expect(md).toMatch(/#\s*合规/)
   })
@@ -98,10 +98,10 @@ describe('验收 1：advisor.md 人设内容', () => {
     expect(md).not.toContain('本内容不构成投资建议')
   })
 
-  it('体现「不执行真实交易」「趋势跟随」「防守优先」等核心约束', () => {
+  it('体现「不执行真实交易」「攻守依实际情势」「只做分析与建议」等核心约束', () => {
     expect(md).toMatch(/不执行真实交易/)
-    expect(md).toMatch(/趋势跟随/)
-    expect(md).toMatch(/防守优先/)
+    expect(md).toMatch(/攻守依实际情势/)
+    expect(md).toMatch(/只做分析、建议与推演/)
   })
 })
 

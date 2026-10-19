@@ -343,9 +343,9 @@ describe('[5] 顶层 inject 契约', () => {
 describe('[0] advisor.md 人设结构', () => {
   const md = loadAdvisorMd()
 
-  it('含 角色 / 原则 / 工作流 / 合规 四大板块', () => {
+  it('含 角色 / 思维与能动性 / 工作流 / 合规 四大板块', () => {
     expect(md).toMatch(/#+\s*角色/)
-    expect(md).toMatch(/#+\s*原则/)
+    expect(md).toMatch(/#+\s*思维与能动性/)
     expect(md).toMatch(/#+\s*工作流/)
     expect(md).toMatch(/#+\s*合规/)
   })

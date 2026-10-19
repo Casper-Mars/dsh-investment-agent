@@ -40,6 +40,8 @@ import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { validateJsonSchemaValue } from '@deepseek-ai/dsh-tools'
 import { StrategyRegistry } from '../src/domain/strategy.js'
 import { ensureAssetsRepo, ASSETS_GITIGNORE } from '../src/assets/repo.js'
+import { commitAssetsChanges } from '../src/assets/repo.js'
+import { ensureSkillAssetsRepo } from '../src/skills/repo.js'
 import { createToolContext } from '../src/tools/context.js'
 import { createAllTools } from '../src/tools/index.js'
 
@@ -325,49 +327,39 @@ describe('额外 6：DSH_IA_HOME 隔离，无旧路径写入，真实 ~/.dsh-ia 
 })
 
 // ---------------------------------------------------------------------------
-// 额外 7：外层仓库结构 + 嵌套 skills 仓库
+// 额外 7：外层仓库结构（单仓：skills 与策略同仓、同索引）
 // ---------------------------------------------------------------------------
-describe('额外 7：assets 外层仓库结构，skills 不进入外层索引', () => {
-  it('.git 存在、.gitignore 含 skills/、ls-files 无 skills、无 160000 gitlink、skills 历史不变', () => {
-    // 1) 先建好嵌套独立 skills 仓库（模拟已存在的 skill 资产历史）。
-    const skillsDir = join(assetsDir, 'skills')
-    mkdirSync(skillsDir, { recursive: true })
-    git(skillsDir, ['init', '-b', 'main'])
-    writeFileSync(join(skillsDir, 'SKILL.md'), '# skill v1\n', 'utf8')
-    git(skillsDir, ['add', '-A'])
-    git(skillsDir, ['commit', '-m', 'skill v1'])
-    const skillsHeadBefore = git(skillsDir, ['rev-parse', 'HEAD']).trim()
-    const skillsCountBefore = commitCount(skillsDir)
-
-    // 2) 外层仓库初始化 + 策略写入。
+describe('额外 7：assets 单仓结构，skills 以普通文件进入外层索引', () => {
+  it('.git 唯一、.gitignore 不排除 skills、ls-files 含 skills、无 160000 gitlink', () => {
     const outcome = ensureAssetsRepo({ assetsDir, logger: () => {} })
     expect(outcome.degraded).toBe(false)
     expect(existsSync(join(assetsDir, '.git'))).toBe(true)
-    expect(readFileSync(join(assetsDir, '.gitignore'), 'utf8')).toContain('skills/')
-    expect(ASSETS_GITIGNORE).toContain('skills/')
+    expect(readFileSync(join(assetsDir, '.gitignore'), 'utf8')).not.toContain('skills/')
+    expect(ASSETS_GITIGNORE).not.toContain('skills/')
+
+    // 放入 5 个 skill 种子（skill 层职责）。
+    const seeded = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
+    expect(seeded.provisioned).toBe(true)
+    commitAssetsChanges({ dir: assetsDir, logger: () => {} })
 
     reg.set('588000', { text: '策略', rationale: 'init' })
     reg.set('588000', { text: '策略2', rationale: 'update' })
 
-    // 3) 外层索引不含 skills 条目，也不含 gitlink。
+    // 外层索引包含 skills 下的普通文件与策略文件，且无 gitlink。
+    expect(existsSync(join(assetsDir, 'skills', '.git'))).toBe(false)
     const lsFiles = git(assetsDir, ['ls-files']).split('\n').filter((l) => l !== '')
-    expect(lsFiles.some((f) => f.startsWith('skills/'))).toBe(false)
+    expect(lsFiles.some((f) => f.startsWith('skills/') && f.endsWith('/SKILL.md'))).toBe(true)
     expect(lsFiles.includes('strategies/588000.md')).toBe(true)
     expect(lsFiles.includes('.gitignore')).toBe(true)
 
     const lsTree = git(assetsDir, ['ls-tree', '-r', 'HEAD']).split('\n').filter((l) => l !== '')
     expect(lsTree.some((l) => l.startsWith('160000'))).toBe(false)
-    expect(lsTree.some((l) => /\tskills\//.test(l))).toBe(false)
+    // skills 条目为普通文件（100644）。
+    expect(lsTree.some((l) => /^100644 .*\tskills\//.test(l))).toBe(true)
 
-    // 工作区状态：skills 被忽略，不产生 untracked 噪声。
+    // 工作区干净：skills 不被忽略，也不产生 untracked 噪声。
     const porcelain = git(assetsDir, ['status', '--porcelain'])
     expect(porcelain.trim()).toBe('')
-    expect(porcelain).not.toContain('skills')
-
-    // 4) skills 仓库仍独立、历史不受影响。
-    expect(existsSync(join(skillsDir, '.git'))).toBe(true)
-    expect(git(skillsDir, ['rev-parse', 'HEAD']).trim()).toBe(skillsHeadBefore)
-    expect(commitCount(skillsDir)).toBe(skillsCountBefore)
   })
 })
 

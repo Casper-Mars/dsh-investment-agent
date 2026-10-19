@@ -205,11 +205,11 @@ describe('t100363 插件装配：21 个工具经 apply 注册', () => {
 
       expect(() => apply(ctx)).not.toThrow()
       // 5 个可进化 SKILL 不再静态注册（provider 挂载需 `ctx.plugin`，本最小 mock
-      // 无之 → 惰性加载降级，由 provider 测试覆盖）；仅 2 个固有 SKILL
-      // （task-authorship / skill-authorship）经内置静态注册入口挂上。
-      expect(registered).toHaveLength(2)
+      // 无之 → 惰性加载降级，由 provider 测试覆盖）；3 个固有 SKILL
+      // （task-authorship / skill-authorship / finance-evolution）经内置静态注册入口挂上。
+      expect(registered).toHaveLength(3)
       expect(registered.map((r) => r.name).sort()).toEqual(
-        ['task-authorship', 'skill-authorship'].sort(),
+        ['task-authorship', 'skill-authorship', 'finance-evolution'].sort(),
       )
     } finally {
       if (prev === undefined) delete process.env.DSH_IA_HOME

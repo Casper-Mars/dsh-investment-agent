@@ -39,6 +39,7 @@ import {
   createSkillAuthorshipRegistration,
 } from './skills/index.js'
 import { ensureSkillAssetsRepo } from './skills/repo.js'
+import { commitAssetsChanges, ensureAssetsRepo } from './assets/repo.js'
 import { mountSkillFilesystemProvider } from './skills/provider.js'
 import { applyAdvisorPrompt } from './prompts/index.js'
 import { applyScheduler } from './scheduler/index.js'
@@ -103,11 +104,16 @@ export const inject: string[] = ['tools', 'skills', 'fs']
  *      插件 fiber 卸载（含 HMR 重载）时自动注销。`tools` 经顶层 `inject` 保证
  *      就绪，但此处仍以 `ctx.get('tools')` 软取，使插件在「未提供 tools 服务的
  *      最小上下文」（如装载测试）下安全降级，不中断插件装载。
- *   2. 冷启动预置 skill 资产仓库（`ensureSkillAssetsRepo`），再挂载指向
- *      `<assetsDir>/skills`（即 `~/.dsh-ia/assets/skills`）的 `skill-filesystem` provider 并开启 watch 热更新
- *      （`mountSkillFilesystemProvider`）。provider 注册进插件自身 ctx（global 层），
- *      对固定会话与 workspace 会话均可见；注销器绑定 effect，插件 fiber 卸载时自动
- *      注销并关闭 watch。预置与挂载均 try/catch 降级，失败不中断插件装载。
+ *   2. 资产仓库单仓就绪（`ensureAssetsRepo`，`<assetsDir>/.git` 是唯一仓库）→
+ *      幂等落盘 5 个 SKILL.md（`ensureSkillAssetsRepo`，只补缺失、不覆盖）→
+ *      仅在仓库**尚无 HEAD** 时提交一次首次快照（`commitAssetsChanges`，首次提交
+ *      即包含 5 个 SKILL.md；已有 HEAD 则完全 no-op，不 add、不提交工作区改动，
+ *      避免把尚未走进化流程的编辑自动记成 `init:` 提交）→ 挂载指向
+ *      `<assetsDir>/skills` 的 `skill-filesystem`
+ *      provider 并开启 watch 热更新（`mountSkillFilesystemProvider`）。provider
+ *      注册进插件自身 ctx（global 层），对固定会话与 workspace 会话均可见；注销器
+ *      绑定 effect，插件 fiber 卸载时自动注销并关闭 watch。全流程 try/catch 降级，
+ *      失败不中断插件装载。
  *   2b. 固有 SKILL `task-authorship`（任务程序方法论）、`skill-authorship`（编写合规
  *      skill 的规范）、`finance-evolution`（资产进化引擎）均不进化，经 `ctx.skills.register`
  *      静态注册到插件自身 ctx（global 层）。注册失败 try/catch 降级，不中断装载。
@@ -173,15 +179,36 @@ export function apply(ctx: Context): void {
   // ---- advisor.md 人设（动态 inject systemPrompt，不改顶层 inject） ----
   applyAdvisorPrompt(ctx)
 
-  // ---- skill 资产仓库冷启动预置（幂等；资产层内独立 git 仓库，§任务-1） ----
-  // 保留随包发布的「首版种子」（src/skills/<name>/SKILL.md → dist-server/skills/），
-  // 仅当其资产层副本（<assetsDir>/skills，即 ~/.dsh-ia/assets/skills）缺失或为空时预置；
-  // 已就绪则完全 no-op。
-  // 预置失败（git 不可用 / 命令失败 / 无写权限）→ 记日志、降级不抛，不中断装载。
+  // ---- 资产仓库单仓就绪 + skill 种子落盘 + 首次快照（幂等） ----
+  // 1) `<assetsDir>/.git` 是唯一仓库（skills / strategies / programs / tasks 共用）；
+  //    缺 .git 则 init，已存在则 no-op，失败降级不抛。
+  // 2) 落 5 个 SKILL.md：保留随包发布的「首版种子」（src/skills/<name>/SKILL.md →
+  //    dist-server/skills/），只补缺失文件，已存在内容不覆盖（保护 agent 编辑）。
+  // 3) 仅首次快照（无 HEAD）提交：仓库尚无 HEAD 时 add -A 并提交一次，首次提交
+  //    天然包含 5 个 SKILL.md；已有 HEAD → 完全 no-op（不 add、不提交工作区脏改动），
+  //    由进化流程自行写 rationale 后提交，插件启动不得代为提交。
+  // 任一步失败（git 不可用 / 无写权限）→ 记日志、降级不抛，不中断装载。
+  let assetsDir: string | undefined
   try {
-    ensureSkillAssetsRepo({ logger: (message) => logSkills.info(message) })
+    const outcome = ensureAssetsRepo({ logger: (message) => logSkills.info(message) })
+    assetsDir = outcome.dir || undefined
   } catch (err: unknown) {
-    logSkills.error('[dsh-ia] skill 资产仓库预置装配失败（降级）', { error: err })
+    logSkills.error('[dsh-ia] 资产仓库就绪装配失败（降级）', { error: err })
+  }
+
+  try {
+    ensureSkillAssetsRepo({ assetsDir, logger: (message) => logSkills.info(message) })
+  } catch (err: unknown) {
+    logSkills.error('[dsh-ia] skill 种子落盘装配失败（降级）', { error: err })
+  }
+
+  try {
+    commitAssetsChanges({
+      dir: assetsDir,
+      logger: (message) => logSkills.info(message),
+    })
+  } catch (err: unknown) {
+    logSkills.error('[dsh-ia] 资产仓库首次快照提交失败（降级）', { error: err })
   }
 
   // ---- skill-filesystem provider（指向 <assetsDir>/skills + watch 热更新，§任务-2） ----

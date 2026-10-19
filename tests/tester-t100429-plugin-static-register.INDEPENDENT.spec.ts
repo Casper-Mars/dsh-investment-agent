@@ -42,6 +42,7 @@ import {
   SKILL_NAMES,
   TASK_AUTHORSHIP_SKILL_NAME,
   SKILL_AUTHORSHIP_SKILL_NAME,
+  FINANCE_EVOLUTION_SKILL_NAME,
   loadTaskAuthorshipMarkdown,
 } from '../src/skills/index.js'
 import { parseSkillFile } from '../src/skills/frontmatter.js'
@@ -474,7 +475,9 @@ describe('[AC2] 5 可进化 SKILL 经 provider（providerName=dsh-ia-skills，�
         const runtimeNames = list.filter((s) => s.source === 'runtime').map((s) => s.name).sort()
         const customNames = list.filter((s) => s.source === 'custom').map((s) => s.name).sort()
 
-        expect(runtimeNames).toEqual([TA, SKILL_AUTHORSHIP_SKILL_NAME].sort())
+        expect(runtimeNames).toEqual(
+          [TA, SKILL_AUTHORSHIP_SKILL_NAME, FINANCE_EVOLUTION_SKILL_NAME].sort(),
+        )
         expect(customNames).toEqual([...EVOLVABLE].sort())
         // 互斥（区分）。
         for (const n of runtimeNames) expect(customNames).not.toContain(n)
@@ -663,7 +666,7 @@ describe('[AC5] 注销器绑定 ctx.effect：卸载归零 + 幂等', () => {
     useFinanceHome(seedFinanceHome())
     const m = buildMockCtx({ skillsMode: 'ok' })
     srcPlugin.apply(m.ctx as never)
-    expect(m.registered).toHaveLength(2)
+    expect(m.registered).toHaveLength(3)
 
     const taEffect = m.effects.find((e) => e.label === TA_EFFECT_LABEL)
     expect(taEffect).toBeDefined()

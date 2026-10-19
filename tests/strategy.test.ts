@@ -228,12 +228,13 @@ describe('回滚场景（git revert / checkout 旧版）', () => {
 })
 
 describe('assets 外层仓库', () => {
-  it('ensureAssetsRepo 幂等：init 一次，.gitignore 排除 skills/，不产生提交', () => {
+  it('ensureAssetsRepo 幂等：init 一次，.gitignore 不排除 skills/，不产生提交', () => {
     const first = ensureAssetsRepo({ assetsDir: dir, logger: () => {} })
     expect(first.initialized).toBe(true)
     expect(first.degraded).toBe(false)
     expect(existsSync(join(dir, '.git'))).toBe(true)
-    expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toContain('skills/')
+    // 单仓：skills 是普通目录，不得被 .gitignore 排除。
+    expect(readFileSync(join(dir, '.gitignore'), 'utf8')).not.toContain('skills/')
     expect(commitCount()).toBe(0)
 
     const second = ensureAssetsRepo({ assetsDir: dir, logger: () => {} })

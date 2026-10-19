@@ -41,6 +41,7 @@ import {
   SKILL_NAMES,
   SKILL_AUTHORSHIP_SKILL_NAME,
   TASK_AUTHORSHIP_SKILL_NAME,
+  FINANCE_EVOLUTION_SKILL_NAME,
   createSkillAuthorshipRegistration,
   loadSkillAuthorshipMarkdown,
 } from '../src/skills/index.js'
@@ -48,6 +49,7 @@ import {
   ensureSkillAssetsRepo,
   resolveSkillsRepoDir,
 } from '../src/skills/repo.js'
+import { commitAssetsChanges, ensureAssetsRepo } from '../src/assets/repo.js'
 import * as srcPlugin from '../src/plugin.js'
 
 const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -58,6 +60,8 @@ const DIST_DIR = join(PROJECT_ROOT, 'dist-server')
 const SA = SKILL_AUTHORSHIP_SKILL_NAME
 /** 既有固件 skill 名（共存对照）。 */
 const TA = TASK_AUTHORSHIP_SKILL_NAME
+/** 第三个固有 SKILL（资产进化引擎）。 */
+const FE = FINANCE_EVOLUTION_SKILL_NAME
 
 const SRC_SA_MD = join(SRC_DIR, 'skills', SA, 'SKILL.md')
 const DIST_SA_MD = join(DIST_DIR, 'skills', SA, 'SKILL.md')
@@ -347,17 +351,21 @@ describe('[AC1] 静态加载；ensureSkillAssetsRepo 只落 5 可进化、不含
     console.log('[EVIDENCE AC1a] dirs=%s', dirs.join(','))
   })
 
-  it('AC1b：真实 git——被追踪文件无 skill-authorship，工作区干净，恰 1 提交', () => {
+  it('AC1b：单仓真实 git——被跟踪文件无 skill-authorship，工作区干净，恰 1 提交', () => {
     const assetsDir = mkTmp('dsh-fin-t100444-assets-git-')
+    ensureAssetsRepo({ assetsDir, logger: () => {} })
     const out = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
+    commitAssetsChanges({ dir: assetsDir, logger: () => {} })
     const repoDir = out.dir
-    expect(existsSync(join(repoDir, '.git'))).toBe(true)
+    // 唯一仓库在外层；skills 下无嵌套 .git。
+    expect(existsSync(join(assetsDir, '.git'))).toBe(true)
+    expect(existsSync(join(repoDir, '.git'))).toBe(false)
 
-    const tracked = git(['ls-files'], repoDir).trim().split('\n').filter(Boolean)
+    const tracked = git(['ls-files'], assetsDir).trim().split('\n').filter(Boolean)
     expect(tracked.some((f) => f.startsWith(`${SA}/`))).toBe(false)
     expect(tracked.filter((f) => f.endsWith('/SKILL.md'))).toHaveLength(5)
-    expect(git(['status', '--porcelain'], repoDir).trim()).toBe('')
-    const commits = git(['log', '--oneline'], repoDir).trim().split('\n').filter(Boolean)
+    expect(git(['status', '--porcelain'], assetsDir).trim()).toBe('')
+    const commits = git(['log', '--oneline'], assetsDir).trim().split('\n').filter(Boolean)
     expect(commits).toHaveLength(1)
     console.log('[EVIDENCE AC1b] tracked=%d commits=%d', tracked.length, commits.length)
   })
@@ -453,15 +461,15 @@ const SA_EFFECT_LABEL = 'dsh-ia skill-authorship skill'
 const TA_EFFECT_LABEL = 'dsh-ia task-authorship skill'
 
 describe('[AC3-runtime] apply(ctx) 三态：注册 / 降级 / 卸载', () => {
-  it('AC3a：skills 可用 → 注册恰 2 个固件 skill，契约正确，effect 标签齐备', () => {
+  it('AC3a：skills 可用 → 注册恰 3 个固件 skill，契约正确，effect 标签齐备', () => {
     useFinanceHome(mkTmp('dsh-fin-t100444-mock-ok-'))
     const m = buildMockCtx('ok')
 
     expect(() => srcPlugin.apply(m.ctx as never)).not.toThrow()
 
-    // 恰注册 2 个固件 skill（task-authorship + skill-authorship）。
-    expect(m.registered).toHaveLength(2)
-    expect([...m.store.keys()].sort()).toEqual([SA, TA].sort())
+    // 恰注册 3 个固件 skill（task-authorship + skill-authorship + finance-evolution）。
+    expect(m.registered).toHaveLength(3)
+    expect([...m.store.keys()].sort()).toEqual([SA, TA, FE].sort())
 
     const sa = m.store.get(SA)!
     expect(sa.source).toBe('runtime')

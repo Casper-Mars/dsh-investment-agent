@@ -306,8 +306,9 @@ export class StrategyRegistry {
       writeFileSync(docPath, input.text, 'utf8')
 
       this.runGit(['add', '--', rel], 'add')
-      // 首次提交顺带把外层仓库 .gitignore 纳入版本管理（避免永久 untracked）；
-      // 它记录「skills/ 是嵌套独立仓库」这一关键边界，见 src/assets/repo.ts。
+      // 首次提交顺带把资产仓库 .gitignore 纳入版本管理（避免永久 untracked）；
+      // 它只排除系统/临时文件，skills / strategies / programs / tasks 均入库，
+      // 见 src/assets/repo.ts。
       const hasGitignore = existsSync(join(this.assetsDir, '.gitignore'))
       if (hasGitignore) {
         this.runGit(['add', '--', '.gitignore'], 'add')

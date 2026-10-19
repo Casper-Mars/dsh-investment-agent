@@ -4,7 +4,8 @@
  * 分野（关键）：
  *   - **5 个「可进化 SKILL」**（{@link SKILL_NAMES}，类型 {@link SkillName}）：
  *     趋势研判 / 网格策略 / 止损纪律 / 策略创作 / 分析与决策。它们是「可进化资产」——
- *     随 `src/skills/repo.ts` 冷启动种子落盘到 `<assetsDir>/skills` 独立 git 仓库，
+ *     随 `src/skills/repo.ts` 冷启动种子落盘到 `<assetsDir>/skills`（单仓普通目录，
+ *     与 strategies / programs / tasks 共用 `<assetsDir>/.git`），
  *     并由 `src/skills/provider.ts` 挂载的 dsh 原生 `skill-filesystem` provider 发现
  *     且开启 watch 热更新（改 `SKILL.md` → 无需重启生效）。
  *   - **3 个「固有 SKILL」**（类型 {@link IntrinsicSkillName}）：

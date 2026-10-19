@@ -40,6 +40,7 @@ import {
   SKILL_NAMES,
   TASK_AUTHORSHIP_SKILL_NAME,
   SKILL_AUTHORSHIP_SKILL_NAME,
+  FINANCE_EVOLUTION_SKILL_NAME,
   loadTaskAuthorshipMarkdown,
 } from '../src/skills/index.js'
 import {
@@ -47,6 +48,7 @@ import {
   loadSkillSeeds,
   resolveSkillsRepoDir,
 } from '../src/skills/repo.js'
+import { commitAssetsChanges, ensureAssetsRepo } from '../src/assets/repo.js'
 import { parseSkillFile } from '../src/skills/frontmatter.js'
 
 const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -133,9 +135,13 @@ describe('[AC1] 冷启动只预置 5 个可进化 SKILL，无 task-authorship', 
     'AC1b：真实数据目录冷启动预置——产物目录集合恰 5 可进化、递归无 TA、git 仅 1 提交',
     () => {
       const assetsDir = mkTmp('dsh-fin-t100433-cold-')
+      const assets = ensureAssetsRepo({ assetsDir, logger: () => {} })
+      expect(assets.degraded).toBe(false)
       const out = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
       expect(out.provisioned).toBe(true)
       expect(out.degraded).toBe(false)
+      // 单仓：首次提交包含 5 个 SKILL.md。
+      expect(commitAssetsChanges({ dir: assetsDir, logger: () => {} }).committed).toBe(true)
 
       const repoDir = out.dir
       expect(repoDir).toBe(resolveSkillsRepoDir(assetsDir))
@@ -161,14 +167,15 @@ describe('[AC1] 冷启动只预置 5 个可进化 SKILL，无 task-authorship', 
         expect(parseSkillFile(md).frontmatter.name).toBe(dirName)
       }
 
-      // 真实 git：恰 1 提交，被追踪恰 5 个 SKILL.md 且无 TA，工作区干净。
-      expect(existsSync(join(repoDir, '.git'))).toBe(true)
-      const commits = git(['log', '--oneline'], repoDir).trim().split('\n').filter(Boolean)
+      // 单仓真实 git：恰 1 提交，被追踪恰 5 个 SKILL.md 且无 TA，工作区干净。
+      expect(existsSync(join(assetsDir, '.git'))).toBe(true)
+      expect(existsSync(join(repoDir, '.git'))).toBe(false)
+      const commits = git(['log', '--oneline'], assetsDir).trim().split('\n').filter(Boolean)
       expect(commits).toHaveLength(1)
-      const tracked = git(['ls-files'], repoDir).trim().split('\n').filter(Boolean)
+      const tracked = git(['ls-files'], assetsDir).trim().split('\n').filter(Boolean)
       expect(tracked.filter((f) => f.endsWith('/SKILL.md'))).toHaveLength(5)
       expect(tracked.some((f) => f.startsWith(`${TA}/`))).toBe(false)
-      expect(git(['status', '--porcelain'], repoDir).trim()).toBe('')
+      expect(git(['status', '--porcelain'], assetsDir).trim()).toBe('')
 
       console.log(
         `[EVIDENCE AC1b] dirs=${subDirs.join(',')} treeFiles=${tree.length} skillMd=${skillFiles.length} commits=${commits.length} hasTA=false`,
@@ -181,15 +188,19 @@ describe('[AC1] 冷启动只预置 5 个可进化 SKILL，无 task-authorship', 
     'AC1c：幂等——二次预置 no-op，既不产生第二个 commit，也不会补回 TA',
     () => {
       const assetsDir = mkTmp('dsh-fin-t100433-idem-')
+      ensureAssetsRepo({ assetsDir, logger: () => {} })
       const first = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
       expect(first.provisioned).toBe(true)
+      expect(commitAssetsChanges({ dir: assetsDir, logger: () => {} }).committed).toBe(true)
 
       const second = ensureSkillAssetsRepo({ assetsDir, logger: () => {} })
       expect(second.provisioned).toBe(false)
       expect(second.degraded).toBe(false)
+      // 二次启动无变更：no-op，不产生新 commit。
+      expect(commitAssetsChanges({ dir: assetsDir, logger: () => {} }).committed).toBe(false)
 
       const repoDir = first.dir
-      const commits = git(['log', '--oneline'], repoDir).trim().split('\n').filter(Boolean)
+      const commits = git(['log', '--oneline'], assetsDir).trim().split('\n').filter(Boolean)
       expect(commits).toHaveLength(1)
       const subDirs = readdirSync(repoDir)
         .filter((e) => e !== '.git' && statSync(join(repoDir, e)).isDirectory())
@@ -218,14 +229,19 @@ describe('[AC1] 冷启动只预置 5 个可进化 SKILL，无 task-authorship', 
  * ================================================================== */
 
 describe('[AC2] dist-server 仍保留 task-authorship（产物级）', () => {
-  it('AC2a：dist-server/skills 含 7 个 SKILL.md（5 可进化 + 2 固有），固有 SKILL 与 src 逐字一致', () => {
+  it('AC2a：dist-server/skills 含 8 个 SKILL.md（5 可进化 + 3 固有），固有 SKILL 与 src 逐字一致', () => {
     const distSkillsDir = join(DIST_DIR, 'skills')
     expect(existsSync(distSkillsDir), '需先 pnpm build 产出 dist-server').toBe(true)
 
     const mdFiles = walkFiles(distSkillsDir).filter((p) => p.endsWith('/SKILL.md'))
-    // 5 可进化 + 2 固有 = 7 份随包资源。
+    // 5 可进化 + 3 固有 = 8 份随包资源。
     expect(mdFiles.map((p) => p.split('/')[0]).sort()).toEqual(
-      [...EVOLVABLE, TA, SKILL_AUTHORSHIP_SKILL_NAME].sort(),
+      [
+        ...EVOLVABLE,
+        TA,
+        SKILL_AUTHORSHIP_SKILL_NAME,
+        FINANCE_EVOLUTION_SKILL_NAME,
+      ].sort(),
     )
 
     const distTA = join(distSkillsDir, TA, 'SKILL.md')
