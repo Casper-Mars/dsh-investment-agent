@@ -48,7 +48,7 @@
 > 运行时注册：5 个可进化 SKILL 不在本模块静态注册，而由 `provider.ts` 挂载的
 > `skill-filesystem` provider 从 `<assetsDir>/skills` 发现；改 `SKILL.md` 经 chokidar
 > watch → invalidate → 下次组装 prompt 生效（无需重启）。`index.ts` 的静态读取仅用于
-> `repo.ts` 的冷启动种子预置。固有 SKILL `task-authorship` / `skill-authorship` 则由
+> `repo.ts` 的冷启动种子预置。固有 SKILL `task-authorship` / `skill-authorship` / `finance-evolution` 则由
 > `plugin.ts` 静态注册。
 
 ## SKILL.md 格式（符合 dsh skill-filesystem 发现规范）
@@ -57,7 +57,7 @@
 - YAML frontmatter：**必填** `name` / `description`，**可选** `whenToUse`。
 - 注册：
   - 可进化 SKILL —— 由 `skill-filesystem` provider 从资产层目录 `<assetsDir>/skills` 发现（目录 bundle，`source='custom'`，`invocation` 双开）；
-  - 固有 SKILL（task-authorship / skill-authorship）—— 由 `plugin.ts` 静态注册（`source='runtime'`，`invocation` 双开）。
+  - 固有 SKILL（task-authorship / skill-authorship / finance-evolution）—— 由 `plugin.ts` 静态注册（`source='runtime'`，`invocation` 双开）。
 
 ## 内容红线
 

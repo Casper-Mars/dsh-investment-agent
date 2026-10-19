@@ -13,9 +13,9 @@
 - **投资专家人设**：以 `advisor.md` 注入 system-prompt，定义角色、原则、工作流、自我进化（流程见 `finance-evolution` skill）与合规边界。
 - **15 个金融工具**：台账（4）+ 策略（2）+ 预判（3）+ 复盘（5）+ 资产提交（1），经 `defineTool` 注册。
 - **7 个定时任务工具**：`task_create` / `task_list` / `task_get` / `task_update` / `task_delete` / `task_enable` / `task_disable`。
-- **7 个 SKILL**：5 个「可进化 SKILL」（方法论，随复盘迭代）+ 2 个「固有 SKILL」（固件约束，不进化）。
+- **8 个 SKILL**：5 个「可进化 SKILL」（方法论，随复盘迭代）+ 3 个「固有 SKILL」（固件约束，不进化：`task-authorship` / `skill-authorship` / `finance-evolution`）。
 - **定时任务（感知）层**：独立的 loader → runner（独立 Node 进程）→ waker（定点唤醒投递）编排，支持 agent 动态注册任意 cron。
-- **skill 可进化资产**：可进化 SKILL 落运行时数据目录的独立 git 仓库，`chokidar` watch 热更新，改 `SKILL.md` 无需重启。
+- **skill 可进化资产**：可进化 SKILL 落 `<assetsDir>/skills`，与策略等资产共用 assets 单仓，`chokidar` watch 热更新，改 `SKILL.md` 无需重启。
 - **固定会话 + 开场 notice**：冷启动自动确保定点会话并投递引导性开场消息。
 - **统一日志 + 文件落地**：分级日志门面 + JSONL 文件 exporter + 字段级去敏 + trace 上下文。
 
@@ -74,7 +74,7 @@ dsh plugin --profile <name> add .
 ~/.dsh-ia/
 ├── assets/                            # 资产层（可共享、进 git；本身是一个 git 仓库）
 │   ├── strategies/<symbol>.md         # 策略文档（纯正文；版本 = git 短 SHA）
-│   └── skills/                        # 可进化 SKILL（独立 git 仓库，main=当前版本）
+│   └── skills/                        # 可进化 SKILL（assets 单仓）
 ├── data/                              # dataRoot（用户私有运行时数据）
 │   ├── ledger/<symbol>/…              # 台账（持仓 / 成本 / 流水）
 │   └── tasks/                         # 定时任务清单
@@ -85,7 +85,7 @@ dsh plugin --profile <name> add .
 
 **日志策略**：按天切割（`<YYYY-MM-DD>.jsonl`，UTC 日期）；单文件超过 **500 MB** 自动滚动为 `-1`/`-2`… 后缀；默认保留 **30 天**（`DSH_IA_LOG_RETENTION_DAYS` 可覆盖，`DSH_IA_LOG_MAX_SIZE` 可覆盖单文件上限）。过期日志在 exporter 创建时清理一次，之后每天（UTC）首次写盘前自动清理；日志目录权限 `0o700`、文件 `0o600`。
 
-`assets/` 与 `data/` 及子目录均为**运行时动态创建**（非项目固有目录）。`assets/` 是外层 git 仓库（策略等资产共用，`.gitignore` 排除 `skills/`）；其中 `assets/skills/` 是嵌套的独立 git 仓库，由插件冷启动幂等预置。
+`assets/` 与 `data/` 及子目录均为**运行时动态创建**（非项目固有目录）。`assets/` 是唯一 git 仓库（策略、skills 等资产共同纳入版本管理，无嵌套仓）；`assets/skills/` 为普通目录，由插件冷启动幂等预置。
 
 ## 开发
 

@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`finance-evolution` 固件 skill**：新增资产进化的唯一权威实现（固件约束，不进化）。
+  - 四类触发：指标异常、同一失败第二次、能力缺陷可复现、某个做法明显有效。
+  - 资产范围：`skills/`、`strategies/`、`programs/`、`tasks/`；固件（固有 SKILL 与引擎）不改。
+  - 修改记录 = git：单仓、append-only、固定身份、只记操作不判结果。
+
 ### Changed
 
 - **`cum_return` 收益口径修正（BREAKING：历史值不可比）**：累计收益率口径由
@@ -61,7 +68,7 @@
 - **7 个 SKILL**：
   - 5 个「可进化 SKILL」（方法论，随复盘迭代）：`trend-analysis`、`grid-strategy`、
     `stop-rule`、`strategy-authorship`、`analysis-decision`；
-  - 2 个「固有 SKILL」（固件约束，不进化）：`task-authorship`、`skill-authorship`。
+  - 固有 SKILL（固件约束，不进化）：`task-authorship`、`skill-authorship`。
 - **skill 可进化资产**：可进化 SKILL 落运行时数据目录的独立 git 仓库，冷启动幂等预置；
   经 `chokidar` watch 热更新，改 `SKILL.md` 无需重启。
 - **固定会话 + 开场 notice**：冷启动自动确保定点会话（检查 → 恢复 → 新建）并投递引导性开场消息。
