@@ -8,3 +8,6 @@ dist-server/
 
 # t100474 e2e 运行产物（每次运行重新生成，不入库）
 tests/tester-t100474-e2e-firmware-skill.summary.json
+
+# wiki 机器索引缓存（index.md 与 reports/lint.md 入库）
+wiki/.index/

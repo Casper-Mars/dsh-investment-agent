@@ -60,6 +60,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "recompute:cum-return": "node scripts/recompute-cum-return.mjs",
     "test": "vitest run --passWithNoTests",
+    "wiki": "node scripts/wiki.mjs",
+    "wiki:check": "node scripts/wiki.mjs --check",
     "clean": "rm -rf dist dist-server"
   },
   "peerDependencies": {
