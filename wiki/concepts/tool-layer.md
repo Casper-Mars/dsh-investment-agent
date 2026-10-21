@@ -14,6 +14,14 @@
 
 定时任务工具见 [[concepts/scheduler|定时任务层]]：`task_create` / `task_list` / `task_get` / `task_update` / `task_delete` / `task_enable` / `task_disable`。
 
+### 台账的结算规则（T+1）
+
+- `ledger_trade` 卖出前校验**当日买入量**：可卖量 = 持仓 − 当日买入量；违规直接 throw（registry 归一为 `isError`），**零写入**。
+- 结算规则按标的存于 `symbols.json` 的 `settlement`（`T+1` / `T+0`），`ledger_init` 的可选参数 `settlement` 声明，缺省 `T+1`（股票 ETF 亦保守默认 T+1）。
+- 旧数据缺字段时 `getSymbol()` 归一化为 `T+1` 且**读时不回写**；存量 T+0 品种需人工改 `symbols.json`。
+- 日界显式取 `Asia/Shanghai`（`src/domain/settlement.ts` 纯函数，不依赖宿主 TZ）；`reason='init'` 的建仓流水不计入当日买入。
+- `ledger_query` 输出 `settlement` / `sellable_qty`，`ledger_list` 一并暴露 `settlement`。工具总数不变（15 + 7）。
+
 ## 三条约定的契约
 
 1. **统一上下文**：`createToolContext({ dataRoot })` 在构造时实例化 Ledger / Predicts / Reviews / StrategyRegistry 各一次，15 个工具闭包共享同一数据源。
@@ -36,3 +44,5 @@
 - `src/tools/index.ts`
 - `src/tools/context.ts`
 - `src/tools/error.ts`
+- `src/domain/settlement.ts`
+- `src/domain/ledger.ts`

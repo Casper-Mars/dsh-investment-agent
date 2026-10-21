@@ -507,6 +507,8 @@ describe('5. 旧功能全量回归（工具层）', () => {
     const buy = await call(tools, 'ledger_trade', { symbol: SYM, side: 'buy', qty: 500, price: 3 })
     expect(valueOf(buy)).toMatchObject({ ok: true, new_qty: 1500, avg_cost: 2.3333 })
 
+    // 卖出跨到下一交易日（A 股 T+1，Issue #6）：仿真时钟推进 1 天。
+    vi.setSystemTime(new Date('2026-10-14T10:00:00'))
     const sell = await call(tools, 'ledger_trade', { symbol: SYM, side: 'sell', qty: 500, price: 3.5 })
     expect(valueOf(sell)).toMatchObject({ ok: true, new_qty: 1000 })
 

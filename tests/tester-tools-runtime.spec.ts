@@ -146,6 +146,7 @@ const SCHEMA_FIELDS: Record<string, string[]> = {
   ledger_list: ['symbols'],
   ledger_query: [
     'symbol', 'type', 'name', 'qty', 'avg_cost', 'cash', 'realized_pnl', 'float_pnl',
+    'settlement', 'sellable_qty',
   ],
   ledger_trade: ['ok', 'trade_id', 'new_qty', 'avg_cost'],
   strategy_get: ['symbol', 'text', 'version', 'updated_at'],
@@ -376,6 +377,7 @@ describe('验收点 2：lossless JSON + output.schema 严格校验', () => {
     const good = {
       symbol: '588000', type: 'etf', name: null, qty: 1000, avg_cost: 1.95,
       cash: 100000, realized_pnl: 0, float_pnl: 0,
+      settlement: 'T+1', sellable_qty: 1000,
     }
     expect(validateJsonSchemaValue(def.output.schema, good)).toEqual([])
 

@@ -19,7 +19,9 @@
  */
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { AssetType, PositionSnapshot, Side, SymbolSnapshot } from '../domain/ledger.js'
+import type { SettlementRule } from '../domain/types.js'
 import { isTradingTime } from '../domain/trading-calendar.js'
+import { INIT_TRADE_REASON, isReservedTradeReason } from '../domain/settlement.js'
 import type { ToolContext } from './context.js'
 import type { LedgerPosition, LedgerSymbol } from './types.js'
 import { assertNotAborted, throwIfFailed, throwToolError } from './error.js'
@@ -42,6 +44,8 @@ function toLedgerPosition(s: PositionSnapshot): LedgerPosition {
     cash: s.cash,
     realized_pnl: s.realizedPnl,
     float_pnl: s.floatPnl,
+    settlement: s.settlement,
+    sellable_qty: s.sellableQty,
   }
 }
 
@@ -53,6 +57,7 @@ function toLedgerSymbol(s: SymbolSnapshot): LedgerSymbol {
     name: s.name ?? null,
     qty: s.qty,
     avg_cost: s.avgCost,
+    settlement: s.settlement,
   }
 }
 
@@ -62,7 +67,8 @@ export function createLedgerInitTool(ctx: ToolContext): ToolDefinition {
     name: 'ledger_init',
     description:
       '新增一个标的并建立初始持仓、成本与资金账户。symbol 重复将报错。' +
-      '初始 qty 必须为 100 整数倍（份/股）。写操作，按 symbol 隔离。',
+      '初始 qty 必须为 100 整数倍（份/股）。写操作，按 symbol 隔离。' +
+      'settlement 为结算规则：默认 T+1（当日买入当日不可卖），T+0 品种需显式声明。',
     parameters: {
       symbol: { type: 'string', required: true, description: '标的代码（如 588000 / 000001）' },
       type: {
@@ -75,6 +81,12 @@ export function createLedgerInitTool(ctx: ToolContext): ToolDefinition {
       init_qty: { type: 'number', required: true, description: '初始持仓数量（100 整数倍）' },
       init_cost: { type: 'number', required: true, description: '初始成本（每股/份）' },
       init_cash: { type: 'number', required: true, description: '初始资金' },
+      settlement: {
+        type: 'string',
+        enum: ['T+1', 'T+0'],
+        description:
+          '结算规则（可选，默认 T+1）：T+1 当日买入不可当日卖出；T+0 允许当日回转（债券/货币/跨境等品种）',
+      },
     },
     output: {
       schema: ledgerInitResultSchema,
@@ -91,6 +103,7 @@ export function createLedgerInitTool(ctx: ToolContext): ToolDefinition {
           qty: args.init_qty,
           cost: args.init_cost,
           cash: args.init_cash,
+          settlement: args.settlement as SettlementRule | undefined,
         })
         return { ok: true as const, symbol: args.symbol }
       } catch (err) {
@@ -133,7 +146,8 @@ export function createLedgerQueryTool(ctx: ToolContext): ToolDefinition {
   return defineTool({
     name: 'ledger_query',
     description:
-      '读取单个标的的完整台账快照（持仓 / 成本 / 现金 / 已实现盈亏 / 浮动盈亏）。只读操作。',
+      '读取单个标的的完整台账快照（持仓 / 成本 / 现金 / 已实现盈亏 / 浮动盈亏 / ' +
+      '结算规则 settlement / 当前可卖数量 sellable_qty）。只读操作。' + '卖出前可用 sellable_qty 判断今日可卖量。',
     parameters: {
       symbol: { type: 'string', required: true, description: '标的代码' },
       price: {
@@ -150,7 +164,8 @@ export function createLedgerQueryTool(ctx: ToolContext): ToolDefinition {
           text:
             `${value.symbol} [${value.type}] ${value.name ?? ''}\n` +
             `持仓：${value.qty}  平均成本：${value.avg_cost}\n` +
-            `现金：${value.cash}  已实现盈亏：${value.realized_pnl}  浮动盈亏：${value.float_pnl}`,
+            `现金：${value.cash}  已实现盈亏：${value.realized_pnl}  浮动盈亏：${value.float_pnl}\n` +
+            `结算：${value.settlement}  可卖：${value.sellable_qty}`,
         },
       ],
     },
@@ -167,7 +182,9 @@ export function createLedgerTradeTool(ctx: ToolContext): ToolDefinition {
     name: 'ledger_trade',
     description:
       '对指定标的模拟成交（买入/卖出），写交易流水并重算加权平均成本。' +
-      'qty 必须为 100 整数倍；卖出数量超过当前持仓将报错。写操作，按 symbol 隔离。' +
+      'qty 必须为 100 整数倍；卖出数量超过当前持仓将报错。' +
+      'A 股 T+1：当日买入数量当日不可卖出，违规将被拒绝（T+0 标的除外）；' +
+      '可用 ledger_query 的 sellable_qty 查看当前可卖量。写操作，按 symbol 隔离。' +
       '仅限连续竞价时段（9:30–11:30 / 13:00–15:00）可下单，其余时段拒绝。',
     parameters: {
       symbol: { type: 'string', required: true, description: '标的代码' },
@@ -179,7 +196,12 @@ export function createLedgerTradeTool(ctx: ToolContext): ToolDefinition {
       },
       qty: { type: 'number', required: true, description: '成交数量（100 整数倍）' },
       price: { type: 'number', required: true, description: '成交价格' },
-      reason: { type: 'string', description: '交易理由（可选）' },
+      reason: {
+        type: 'string',
+        description:
+          '交易理由（可选，自由文本）。注意：`init` 为系统建仓保留标记，' +
+          'ledger_trade 传该值将被拒绝（请改用其他理由）',
+      },
     },
     output: {
       schema: ledgerTradeResultSchema,
@@ -195,6 +217,14 @@ export function createLedgerTradeTool(ctx: ToolContext): ToolDefinition {
     },
     async execute(args, exec) {
       assertNotAborted(exec.signal)
+      // 工具层独立拦截保留值（不依赖 domain 层文案）：`init` 是建仓流水专用标记，
+      // 若透传到 Ledger.trade 会因“当日买入不计入冻结量”而绕过 T+1。
+      if (isReservedTradeReason(args.reason)) {
+        throw new Error(
+          `reason「${INIT_TRADE_REASON}」为建仓保留标记，不可由 ledger_trade 传入；` +
+            '请改用其他交易理由（如「调仓」「止盈」），或使用 ledger_init 建仓',
+        )
+      }
       if (!isTradingTime(new Date())) {
         throw new Error('非连续竞价时段（9:30–11:30 / 13:00–15:00），拒绝下单')
       }

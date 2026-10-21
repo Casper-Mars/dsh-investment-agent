@@ -71,10 +71,15 @@ function writeStaleMetrics(symbol: string, cumReturn: number): void {
  *   新口径 = (59949 + 0 − 61114)/61114 = −0.0191（−1.9%）
  */
 function seedIssue3Ledger(): Ledger {
-  const l = new Ledger(dir)
+  // 该重建序列是「多日」账本：用可推进时钟跨日，避免被 A 股 T+1 拦截（Issue #6）。
+  let clock = Date.parse('2026-10-13T10:00:00+08:00')
+  const DAY = 24 * 60 * 60 * 1000
+  const l = new Ledger(dir, () => clock)
   l.init('002156', { type: 'stock', name: 'Iss3', qty: 200, cost: 55.57, cash: 50000 })
   l.trade('002156', { side: 'sell', qty: 100, price: 53.05 })
+  clock += DAY
   l.trade('002156', { side: 'buy', qty: 100, price: 53.08 })
+  clock += DAY
   l.trade('002156', { side: 'sell', qty: 200, price: 49.76 })
   return l
 }

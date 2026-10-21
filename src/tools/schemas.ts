@@ -71,6 +71,12 @@ export const symbolSnapshotSchema = {
     },
     qty: { type: 'number', required: true, description: '当前持仓数量' },
     avg_cost: { type: 'number', required: true, description: '加权平均成本（4 位小数）' },
+    settlement: {
+      type: 'string',
+      enum: ['T+1', 'T+0'],
+      required: true,
+      description: '结算规则（T+1 当日买入不可卖；T+0 可当日回转）',
+    },
   },
 } as const
 
@@ -109,6 +115,17 @@ export const ledgerQueryResultSchema = {
       required: true,
       description:
         '浮动盈亏 =(现价−平均成本)×持仓数量，保留 4 位小数；未提供现价时为 0',
+    },
+    settlement: {
+      type: 'string',
+      enum: ['T+1', 'T+0'],
+      required: true,
+      description: '结算规则（旧数据缺字段时归一化为 T+1）',
+    },
+    sellable_qty: {
+      type: 'number',
+      required: true,
+      description: '当前可卖数量（T+1 = 持仓 − 当日买入量；T+0 = 持仓）；未卖出时为持仓数量',
     },
   },
 } as const

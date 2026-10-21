@@ -285,10 +285,16 @@ describe('reviews.review_metrics cum_return 接线（验收口径 t100357 AC2）
     // 期末 qty=0、期末现金 59949、期初资金 = 50000 + 200×55.57 = 61114。
     // 旧口径（分子缺期未现金）会算成 (0 - 61114)/61114 = -1.0191（~−101.91%）；
     // 新口径：(59949 + 0 - 61114)/61114 = -1165/61114 ≈ -0.0191（−1.91%）。
-    const ledger = new Ledger(dir)
+    //
+    // 该重建序列是「多日」账本：用可推进时钟跨日，避免被 A 股 T+1 拦截（Issue #6）。
+    let clock = Date.parse('2026-10-13T10:00:00+08:00')
+    const DAY = 24 * 60 * 60 * 1000
+    const ledger = new Ledger(dir, () => clock)
     ledger.init('002156', { type: 'stock', name: 'T', qty: 200, cost: 55.57, cash: 50000 })
     ledger.trade('002156', { side: 'sell', qty: 100, price: 53.05 })
+    clock += DAY
     ledger.trade('002156', { side: 'buy', qty: 100, price: 53.08 })
+    clock += DAY
     ledger.trade('002156', { side: 'sell', qty: 200, price: 49.76 })
     const wired = new Reviews(dir, ledger)
     const m = wired.review_metrics('002156')

@@ -98,6 +98,7 @@ describe('[AC1/AC8] 台账落点 data/ledger、结构不变、8 表读写往返'
     name: '科创50ETF',
     type: 'etf',
     initPrice: 1.9523,
+    settlement: 'T+1',
   }
   const positionsRec = { symbol, qty: 1000, avgCost: 1.9523 }
   const accountsRec = { symbol, cash: 12345.67, realizedPnl: -12.5, floatPnl: 88.8 }

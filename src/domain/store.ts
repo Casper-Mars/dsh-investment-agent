@@ -41,6 +41,7 @@ import { randomUUID } from 'node:crypto'
 import type {
   AssetType,
   PositionSnapshot,
+  SettlementRule,
   SymbolSnapshot,
   Thresholds,
   Trade,
@@ -64,6 +65,8 @@ export interface SymbolRecord {
   name?: string
   type: AssetType
   initPrice: number
+  /** 结算规则；旧记录可能缺字段，读取时由 {@link LedgerStore.getSymbol} 归一化为 T+1。 */
+  settlement: SettlementRule
 }
 
 /** 持仓记录（positions 表）。 */
@@ -175,8 +178,17 @@ export class LedgerStore {
   constructor(private readonly store: JsonStore) {}
 
   // ---- symbols ----
+  /**
+   * 读标的元数据。
+   *
+   * 旧 `symbols.json` 无 `settlement` 字段（Issue #6 之前的存量数据），读取时
+   * 归一化为 `'T+1'`。**读时不回写**：避免只读操作产生副作用；字段会在下一次
+   * `ledger_init` 时自然落盘（存量标的不重复 init，故保持只读兼容）。
+   */
   getSymbol(symbol: string): SymbolRecord | undefined {
-    return this.store.readTable<SymbolRecord>(symbol, 'symbols')
+    const rec = this.store.readTable<SymbolRecord>(symbol, 'symbols')
+    if (!rec) return undefined
+    return { ...rec, settlement: rec.settlement ?? 'T+1' }
   }
 
   saveSymbol(rec: SymbolRecord): void {
@@ -245,4 +257,11 @@ export function newTradeId(): string {
 }
 
 // Re-export common domain types for downstream convenience.
-export type { AssetType, PositionSnapshot, SymbolSnapshot, Thresholds, Trade }
+export type {
+  AssetType,
+  PositionSnapshot,
+  SettlementRule,
+  SymbolSnapshot,
+  Thresholds,
+  Trade,
+}

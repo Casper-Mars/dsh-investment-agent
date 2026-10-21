@@ -50,10 +50,15 @@ const r4 = (v: number): number => Math.round((v + Number.EPSILON) * 10000) / 100
 
 /** 用 Ledger 公共 API 重建 Issue #3 台账，返回 ledger 实例。 */
 function buildIssue3Ledger(dataRoot: string): Ledger {
-  const l = new Ledger(dataRoot)
+  // 该重建序列是「多日」账本：用可推进时钟跨日，避免被 A 股 T+1 拦截（Issue #6）。
+  let clock = Date.parse('2026-10-13T10:00:00+08:00')
+  const DAY = 24 * 60 * 60 * 1000
+  const l = new Ledger(dataRoot, () => clock)
   l.init('002156', { type: 'stock', name: 'Iss3', qty: 200, cost: 55.57, cash: 50000 })
   l.trade('002156', { side: 'sell', qty: 100, price: 53.05 })
+  clock += DAY
   l.trade('002156', { side: 'buy', qty: 100, price: 53.08 })
+  clock += DAY
   l.trade('002156', { side: 'sell', qty: 200, price: 49.76 })
   return l
 }

@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`ledger_trade` 增加 A 股 T+1 校验（Issue #6）**：此前只校验「100 整数倍」与「卖出不超持仓」，
+  当日买入可当日卖出，会把现实中不存在的交易记成真账。现在卖出前按**当日累计买入量**校验：
+  - 可卖量 = 持仓 − 当日买入量（`reason='init'` 的期初建仓流水不计入当日买入）；跨自然日
+    （显式 `Asia/Shanghai` 时区）自动恢复，无需持久化冻结数量；
+  - **拒绝路径零写入**：不写 `trades.json`，不改 `qty` / `cash` / `realizedPnl`；
+  - 错误文案包含当日买入量、可卖量、持仓量，单位按标的分「股 / 份」，可直接转述给用户。
+- **结算规则按标的可配置**：`symbols.json` 新增 `settlement`（`T+1` / `T+0`），`ledger_init` 增加
+  可选参数 `settlement`（默认 `T+1`，ETF 同样保守默认 T+1，T+0 品种显式声明）。旧数据无该字段时
+  读取按 `T+1` 兜底、**不回写**，无需迁移脚本。
+- **`ledger_query` 输出扩展**：新增 `settlement` 与 `sellable_qty`（`ledger_list` 同时暴露 `settlement`），
+  让 Agent 在下单前就能看到当前可卖量。工具总数不变（15 个金融工具 + 7 个 `task_*`）。
+- **已知取舍**：存量 T+0 标的（旧 `symbols.json` 无 `settlement`）会按 T+1 处理，需人工编辑该
+  `symbols.json` 加入 `"settlement": "T+0"`；历史同日买卖的错账本次**不修复**，只拦新增违规。
+
 ### Added
 
 - **`finance-evolution` 固件 skill**：新增资产进化的唯一权威实现（固件约束，不进化）。

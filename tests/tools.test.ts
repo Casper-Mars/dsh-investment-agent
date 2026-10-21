@@ -130,6 +130,7 @@ describe('验收点 2+3：ledger 域 —— 返回形态 + schema 对齐', () =>
     expect(v.symbols).toHaveLength(1)
     expect(v.symbols[0]).toEqual({
       symbol: '588000', type: 'etf', name: '科创50ETF', qty: 1000, avg_cost: 1.95,
+      settlement: 'T+1',
     })
     expectMatchesOutputSchema('ledger_list', v)
   })
@@ -141,6 +142,7 @@ describe('验收点 2+3：ledger 域 —— 返回形态 + schema 对齐', () =>
     expect(v).toEqual({
       symbol: '588000', type: 'etf', name: '科创50ETF', qty: 1000, avg_cost: 1.95,
       cash: 100000, realized_pnl: 0, float_pnl: 0,
+      settlement: 'T+1', sellable_qty: 1000,
     })
     expectMatchesOutputSchema('ledger_query', v)
   })
@@ -455,5 +457,97 @@ describe('验收点 5：exec.signal 取消时不产生半写', () => {
     // 未产生半写：list 仍为空
     const list = await run('ledger_list')
     expect(list.symbols).toEqual([])
+  })
+})
+/* -------------------------------------------------------------------------- *
+ * Issue #6：工具层 T+1（ledger_init settlement / ledger_trade 拦截 / query 输出）
+ * -------------------------------------------------------------------------- */
+
+describe('ledger 域 T+1（Issue #6）', () => {
+  it('ledger_init 不传 settlement 时，etf / stock 均默认 T+1', async () => {
+    await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 100, init_cost: 2, init_cash: 100000 })
+    await run('ledger_init', { symbol: '000001', type: 'stock', init_qty: 100, init_cost: 10, init_cash: 100000 })
+    expect((await run('ledger_query', { symbol: '588000' })).settlement).toBe('T+1')
+    expect((await run('ledger_query', { symbol: '000001' })).settlement).toBe('T+1')
+  })
+
+  it('ledger_init 显式 settlement=T+0 生效，允许当日回转', async () => {
+    await run('ledger_init', {
+      symbol: '511990', type: 'etf', init_qty: 100, init_cost: 100, init_cash: 100000,
+      settlement: 'T+0',
+    })
+    const q0 = await run('ledger_query', { symbol: '511990' })
+    expect(q0.settlement).toBe('T+0')
+    expect(q0.sellable_qty).toBe(100)
+
+    const buy = await run('ledger_trade', { symbol: '511990', side: 'buy', qty: 100, price: 100 })
+    expect(buy.ok).toBe(true)
+    // T+0：当日买入的 100 也可卖，全部持仓 200 均可卖。
+    const q1 = await run('ledger_query', { symbol: '511990' })
+    expect(q1.sellable_qty).toBe(200)
+
+    const sell = await run('ledger_trade', { symbol: '511990', side: 'sell', qty: 200, price: 100.1 })
+    expect(sell.ok).toBe(true)
+    expect(sell.new_qty).toBe(0)
+  })
+
+  it('ledger_trade 当日买入后卖出 → 抛错（registry 会归一为 isError）', async () => {
+    await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 200, init_cost: 2, init_cash: 100000 })
+    await run('ledger_trade', { symbol: '588000', side: 'buy', qty: 100, price: 2.2 })
+
+    await expect(
+      run('ledger_trade', { symbol: '588000', side: 'sell', qty: 300, price: 2.5 }),
+    ).rejects.toThrow(/T\+1 限制：当日买入 100 份不可卖出，当前可卖 200 份（持仓 300 份）/)
+
+    // 零写入。
+    const q = await run('ledger_query', { symbol: '588000' })
+    expect(q.qty).toBe(300)
+    expect(q.sellable_qty).toBe(200)
+  })
+
+  it('ledger_query 返回 settlement 与 sellable_qty，且过 schema', async () => {
+    await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 200, init_cost: 2, init_cash: 100000 })
+    await run('ledger_trade', { symbol: '588000', side: 'buy', qty: 100, price: 2.2 })
+    const v = await run('ledger_query', { symbol: '588000' })
+    expect(v.settlement).toBe('T+1')
+    expect(v.sellable_qty).toBe(200)
+    expect(v.qty).toBe(300)
+    expectMatchesOutputSchema('ledger_query', v)
+  })
+})
+
+/* -------------------------------------------------------------------------- *
+ * F1 回归（Issue #6 复验）：ledger_trade 的 reason='init' 必须被工具层拦截。
+ * -------------------------------------------------------------------------- */
+describe('F1 回归：ledger_trade 拒绝保留 reason=init', () => {
+  const rawFiles = (symbol: string): Record<string, string> => ({
+    positions: readFileSync(join(dir, 'ledger', symbol, 'positions.json'), 'utf8'),
+    accounts: readFileSync(join(dir, 'ledger', symbol, 'accounts.json'), 'utf8'),
+    trades: readFileSync(join(dir, 'ledger', symbol, 'trades.json'), 'utf8'),
+  })
+
+  it('F1-1：当日买入后传 reason=init 卖出 → 抛可读错误，三表零写入', async () => {
+    await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 100, init_cost: 2, init_cash: 100000 })
+    await run('ledger_trade', { symbol: '588000', side: 'sell', qty: 100, price: 2.1 })
+    await run('ledger_trade', { symbol: '588000', side: 'buy', qty: 100, price: 2.2 })
+    expect((await run('ledger_query', { symbol: '588000' })).sellable_qty).toBe(0)
+
+    const before = rawFiles('588000')
+    await expect(
+      run('ledger_trade', { symbol: '588000', side: 'sell', qty: 100, price: 2.3, reason: 'init' }),
+    ).rejects.toThrow(/保留标记/)
+
+    expect(rawFiles('588000')).toEqual(before)
+    expect((await run('ledger_query', { symbol: '588000' })).qty).toBe(100)
+  })
+
+  it('F1-2：普通 reason（调仓）买入仍被 T+1 冻结；不传 reason 的卖出仍报 T+1', async () => {
+    await run('ledger_init', { symbol: '588000', type: 'etf', init_qty: 1000, init_cost: 2, init_cash: 100000 })
+    await run('ledger_trade', { symbol: '588000', side: 'buy', qty: 100, price: 2.2, reason: '调仓' })
+
+    expect((await run('ledger_query', { symbol: '588000' })).sellable_qty).toBe(1000)
+    await expect(
+      run('ledger_trade', { symbol: '588000', side: 'sell', qty: 1100, price: 2.5 }),
+    ).rejects.toThrow(/T\+1 限制：当日买入 100 份不可卖出/)
   })
 })

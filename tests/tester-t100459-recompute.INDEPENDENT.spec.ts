@@ -370,10 +370,15 @@ describe('AC3 CHANGELOG 留痕：口径变更声明可检索', () => {
 describe('AC5 防漂移：脚本重算结果 === cumReturnOnCapital(ledger.cumReturnState())', () => {
   it('已清仓（Issue#3）：经真实 Ledger 建账 → CLI --write 产物 vs domain 计算', () => {
     // 用真实 domain.Ledger 建账（不手写 JSON），保证与运行期同一事实来源
-    const l = new Ledger(root)
+    // 多日序列：用可推进时钟跨日，避免被 A 股 T+1 拦截（Issue #6）。
+    let clock = Date.parse('2026-10-13T10:00:00+08:00')
+    const DAY = 24 * 60 * 60 * 1000
+    const l = new Ledger(root, () => clock)
     l.init('002156', { type: 'stock', name: 'Iss3', qty: 200, cost: 55.57, cash: 50000 })
     l.trade('002156', { side: 'sell', qty: 100, price: 53.05 })
+    clock += DAY
     l.trade('002156', { side: 'buy', qty: 100, price: 53.08 })
+    clock += DAY
     l.trade('002156', { side: 'sell', qty: 200, price: 49.76 })
     // 写一份旧口径 metrics 供脚本处理
     writeFileSync(

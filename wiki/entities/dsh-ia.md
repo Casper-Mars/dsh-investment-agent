@@ -44,6 +44,7 @@
 ## 关键边界
 
 - **不碰真实交易**：不做下单、不代客理财、不承诺收益；台账是 Agent 自己的模拟账户。
+- **结算约束**：台账默认按 A 股 **T+1** 结算（当日买入当日不可卖），违规卖出被 `ledger_trade` 在写库前拦截且零写入；`T+0` 品种需在 `ledger_init` 时显式声明 `settlement`（存量标的改 `symbols.json`）。日界按 `Asia/Shanghai` 计算。工具总数不变：15 个金融工具 + 7 个 `task_*`。
 - **资产 vs 数据**：`assets/` 可共享、进 git；`data/` 含成本与盈亏，私有、不进 git。
 - **引擎不可自进化**：`finance-evolution` 是固件；可进化的只有策略、skill、任务程序。见 [[decisions/0002-engine-vs-assets|引擎 vs 资产]]。
 

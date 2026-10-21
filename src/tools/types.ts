@@ -12,6 +12,9 @@ export type AssetType = 'etf' | 'stock'
 /** 交易方向。 */
 export type Side = 'buy' | 'sell'
 
+/** 结算规则。 */
+export type SettlementRule = 'T+0' | 'T+1'
+
 /** 标的信息对象（symbols 表 + 持仓快照）。 */
 export interface LedgerSymbol {
   symbol: string
@@ -19,6 +22,7 @@ export interface LedgerSymbol {
   name: string | null
   qty: number
   avg_cost: number
+  settlement: SettlementRule
 }
 
 /** 完整持仓快照（ledger_query / ledger_list 复用）。 */
@@ -31,6 +35,9 @@ export interface LedgerPosition {
   cash: number
   realized_pnl: number
   float_pnl: number
+  settlement: SettlementRule
+  /** 当前可卖数量（T+1 已扣除当日买入量）。 */
+  sellable_qty: number
 }
 
 /** ledger_list 返回。 */

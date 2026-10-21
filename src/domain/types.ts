@@ -13,6 +13,19 @@ export type AssetType = 'etf' | 'stock'
 export type Side = 'buy' | 'sell'
 
 /**
+ * 结算规则（按标的配置）。
+ *
+ * - `T+1`：A 股股票 / 股票 ETF 默认规则，当日买入的数量当日不可卖出；
+ * - `T+0`：债券 / 货币 / 跨境等允许当日回转的品种，显式配置。
+ *
+ * 未显式配置时的兜底恒为 `T+1`（保守默认，见 `settlement.ts`）。
+ */
+export type SettlementRule = 'T+0' | 'T+1'
+
+/** 结算规则默认值：保守取 T+1。 */
+export const DEFAULT_SETTLEMENT: SettlementRule = 'T+1'
+
+/**
  * 交易单位约束：ETF 与 A 股均按「手」交易，最小单位为 100 整数倍。
  * 详细设计 §5.1 明确「qty 单位为份(etf)/股(stock)，均为 100 整数倍」。
  */
@@ -31,6 +44,8 @@ export interface SymbolSnapshot {
   name?: string
   qty: number
   avgCost: number
+  /** 结算规则（旧数据缺字段时归一化为 T+1）。 */
+  settlement: SettlementRule
 }
 
 /** 完整持仓快照：含 cash / realized_pnl / float_pnl。 */
@@ -42,6 +57,10 @@ export interface PositionSnapshot {
   avgCost: number
   cash: number
   realizedPnl: number
+  /** 结算规则（旧数据缺字段时归一化为 T+1）。 */
+  settlement: SettlementRule
+  /** 按「当前时刻」计算的可卖数量（T+1 下 = 持仓 − 当日买入量）。 */
+  sellableQty: number
   /**
    * 浮动盈亏 =(现价−平均成本)×持仓数量，保留 4 位小数。
    * 由 Ledger.query 传入现价时即时计算；未提供现价时为 0。
